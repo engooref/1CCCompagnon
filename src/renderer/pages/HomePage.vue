@@ -1,0 +1,499 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue'
+import { RouterLink } from 'vue-router'
+import { useAppStore } from '../stores/app'
+import { useGameLog } from '../composables/useGameLog'
+import { usePinnedTransport } from '../composables/usePinnedTransport'
+import { http } from '../services/http'
+import { createOverlayUrls } from '../config/api'
+import type { TransportOrder } from '../../shared/deliveries'
+
+// ─── Stores & composables ─────────────────────────────────────────────────────
+
+const app = useAppStore()
+const { running, state, start, activityLabel } = useGameLog()
+const { pinnedId, isPinned } = usePinnedTransport()
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+const profile = computed(() => app.profile)
+const rh      = computed(() => app.profile?.rh ?? null)
+
+const xpPercent = computed(() => {
+  const r = rh.value
+  if (!r || !r.nextLevelXp || r.nextLevelXp <= 0) return 0
+  return Math.min(100, Math.round((r.totalXp / r.nextLevelXp) * 100))
+})
+
+const rhStatusColor = computed(() => {
+  const s = rh.value?.status?.toLowerCase() ?? ''
+  if (s === 'actif') return 'text-emerald-300 border-emerald-400/30 bg-emerald-400/10'
+  if (s === 'inactif') return 'text-rose-300 border-rose-400/30 bg-rose-400/10'
+  return 'text-amber-300 border-amber-400/30 bg-amber-400/10'
+})
+
+// ─── Connection ───────────────────────────────────────────────────────────────
+
+const connDotClass = computed(() => {
+  if (app.status.connected) return 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+  if (app.status.level === 'loading') return 'bg-amber-400 animate-pulse'
+  return 'bg-rose-400'
+})
+
+const connTextClass = computed(() => {
+  if (app.status.connected) return 'text-emerald-300'
+  if (app.status.level === 'loading') return 'text-amber-300'
+  return 'text-rose-300'
+})
+
+const connLabel = computed(() => {
+  if (app.status.connected) return 'Connecté'
+  if (app.status.level === 'loading') return 'Connexion…'
+  return 'Déconnecté'
+})
+
+// ─── Transport orders ─────────────────────────────────────────────────────────
+
+const orders      = ref<TransportOrder[]>([])
+const loadingOrds = ref(false)
+
+const urls = computed(() => app.settings ? createOverlayUrls(app.settings) : null)
+
+function orderProgress(order: TransportOrder): number {
+  const lines = order.itinerary?.lines ?? []
+  if (!lines.length) return 0
+  return Math.round((lines.filter(l => l.completed).length / lines.length) * 100)
+}
+
+async function fetchOrders() {
+  const url = urls.value?.transports
+  if (!url || !app.bearerToken) return
+  loadingOrds.value = true
+  try {
+    const { data } = await http.get(url, { headers: { Authorization: `Bearer ${app.bearerToken}` } })
+    const raw = data?.data ?? data
+    orders.value = (Array.isArray(raw) ? raw : [raw].filter(Boolean)) as TransportOrder[]
+    app.transports = orders.value
+    app.transportsLoaded = true
+  } catch {
+    orders.value = []
+    app.transports = []
+    app.transportsLoaded = true
+  } finally {
+    loadingOrds.value = false
+  }
+}
+
+// ─── Game log ─────────────────────────────────────────────────────────────────
+
+const gameFolder = computed(() => app.settings?.gameFolder ?? '')
+
+const activityClass = computed(() => {
+  switch (state.value?.activity) {
+    case 'hangar':  return 'text-amber-300'
+    case 'space':   return 'text-cyan-300'
+    case 'quantum': return 'text-violet-300'
+    default:        return 'text-slate-500'
+  }
+})
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+const activeOrdersCount = computed(() => orders.value.filter(o => {
+  const lines = o.itinerary?.lines ?? []
+  return lines.length > 0 && lines.some(l => !l.completed)
+}).length)
+
+const pinnedOrder = computed(() =>
+  pinnedId.value != null ? orders.value.find(o => o.id === pinnedId.value) ?? null : null
+)
+
+const recentOrders = computed(() => orders.value.slice(0, 3))
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+onMounted(() => {
+  if (app.status.authReady) fetchOrders()
+  if (gameFolder.value) start(gameFolder.value)
+})
+
+watch(() => app.status.authReady, (v) => {
+  if (v) fetchOrders()
+})
+</script>
+
+<template>
+  <section class="h-full flex flex-col gap-4 min-h-0 overflow-y-auto">
+
+    <!-- ── Non connecté ──────────────────────────────────────────────────── -->
+    <div
+      v-if="!app.status.authReady"
+      class="rounded-lg border border-amber-400/20 bg-amber-400/5 p-4 flex items-center gap-3"
+    >
+      <svg class="w-5 h-5 text-amber-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      </svg>
+      <p class="text-sm text-amber-200">
+        Connecte-toi via la barre du bas pour accéder aux données du dashboard.
+      </p>
+    </div>
+
+    <!-- ── Profil + connexion ─────────────────────────────────────────────── -->
+    <div class="shrink-0 rounded-lg border border-cyan-400/20 bg-black/20 p-4 flex items-center gap-4">
+      <!-- Avatar -->
+      <img
+        v-if="profile?.avatar"
+        :src="profile.avatar"
+        alt="Avatar"
+        class="h-14 w-14 rounded-full border-2 border-cyan-400/40 object-cover shadow-lg shrink-0"
+      />
+      <div
+        v-else
+        class="h-14 w-14 rounded-full border-2 border-cyan-400/20 bg-slate-800 flex items-center justify-center text-2xl text-slate-500 shrink-0"
+      >?</div>
+
+      <!-- Infos -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-base font-bold text-slate-100 truncate">
+            {{ profile?.username ?? 'Non connecté' }}
+          </p>
+          <span
+            v-if="rh?.status"
+            class="inline-block rounded border px-2 py-0.5 text-[10px] font-semibold"
+            :class="rhStatusColor"
+          >{{ rh.status }}</span>
+        </div>
+        <p v-if="rh?.grade?.name" class="text-xs text-slate-400 mt-0.5">
+          {{ rh.grade.name }}
+          <span v-if="rh.level" class="text-slate-600"> · Niv. {{ rh.level }}</span>
+        </p>
+
+        <!-- Barre XP compacte -->
+        <div v-if="rh?.nextLevelXp" class="mt-2">
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+            <div
+              class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500 shadow-[0_0_6px_rgba(34,211,238,0.4)]"
+              :style="{ width: xpPercent + '%' }"
+            />
+          </div>
+          <p class="mt-0.5 text-[10px] text-slate-600 text-right">
+            {{ rh.totalXp.toLocaleString('fr-FR') }} / {{ rh.nextLevelXp.toLocaleString('fr-FR') }} XP
+            <span class="text-cyan-400/70">({{ xpPercent }}%)</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Statut connexion -->
+      <div class="shrink-0 flex flex-col items-end gap-1">
+        <div class="flex items-center gap-1.5">
+          <span class="h-2 w-2 rounded-full shrink-0" :class="connDotClass"/>
+          <span class="text-xs font-semibold" :class="connTextClass">{{ connLabel }}</span>
+        </div>
+        <span v-if="app.status.latencyMs" class="text-[10px] text-slate-600 font-mono">{{ app.status.latencyMs }} ms</span>
+        <span v-if="app.status.checkedAt" class="text-[10px] text-slate-700">
+          {{ new Date(app.status.checkedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }}
+        </span>
+      </div>
+    </div>
+
+    <!-- ── Stats row ──────────────────────────────────────────────────────── -->
+    <div class="shrink-0 grid grid-cols-3 gap-3">
+
+      <!-- Transports actifs -->
+      <div class="rounded-lg border border-cyan-400/15 bg-black/20 p-3 flex items-center gap-3">
+        <div class="h-8 w-8 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <p class="text-lg font-bold text-slate-100 leading-none">
+            <span v-if="loadingOrds" class="text-slate-600 text-sm">…</span>
+            <span v-else>{{ activeOrdersCount }}</span>
+          </p>
+          <p class="text-[10px] text-slate-500 mt-0.5 truncate">Ordres actifs</p>
+        </div>
+      </div>
+
+      <!-- Journal jeu -->
+      <div class="rounded-lg border border-violet-400/15 bg-black/20 p-3 flex items-center gap-3">
+        <div class="h-8 w-8 rounded-md bg-violet-400/10 border border-violet-400/20 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 text-violet-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span v-if="running" class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"/>
+            <p class="text-[11px] font-semibold" :class="running ? 'text-emerald-300' : 'text-slate-500'">
+              {{ running ? 'EN DIRECT' : 'Inactif' }}
+            </p>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-0.5 truncate">Journal de jeu</p>
+        </div>
+      </div>
+
+      <!-- Ordre épinglé -->
+      <div class="rounded-lg border border-amber-400/15 bg-black/20 p-3 flex items-center gap-3">
+        <div class="h-8 w-8 rounded-md bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <p class="text-[11px] font-semibold text-slate-200 truncate leading-tight">
+            {{ pinnedOrder?.name ?? (pinnedId != null ? `#${pinnedId}` : '—') }}
+          </p>
+          <p class="text-[10px] text-slate-500 mt-0.5">Overlay épinglé</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Main grid ──────────────────────────────────────────────────────── -->
+    <div class="flex-1 min-h-0 grid grid-cols-2 gap-4">
+
+      <!-- ── Transports récents ──────────────────────────────────────────── -->
+      <div class="flex flex-col gap-3 min-h-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="h-6 w-6 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center shrink-0">
+              <svg class="w-3.5 h-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
+              </svg>
+            </div>
+            <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Transports</span>
+            <span v-if="orders.length" class="text-xs text-slate-600">({{ orders.length }})</span>
+          </div>
+          <RouterLink
+            to="/transport"
+            class="text-[11px] text-cyan-400/60 hover:text-cyan-300 transition flex items-center gap-1"
+          >
+            Voir tous
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </RouterLink>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="loadingOrds" class="rounded-lg border border-cyan-400/10 bg-black/20 p-4 text-xs text-slate-600 text-center">
+          Chargement…
+        </div>
+
+        <!-- Non connecté -->
+        <div
+          v-else-if="!app.status.authReady"
+          class="rounded-lg border border-dashed border-slate-800 p-4 text-xs text-slate-600 text-center"
+        >
+          Connexion requise
+        </div>
+
+        <!-- Aucun ordre -->
+        <div
+          v-else-if="!orders.length"
+          class="rounded-lg border border-dashed border-cyan-400/10 bg-black/10 p-4 text-xs text-slate-600 text-center"
+        >
+          Aucun ordre de transport
+        </div>
+
+        <!-- Liste compacte -->
+        <div v-else class="space-y-2 overflow-y-auto">
+          <RouterLink
+            v-for="order in recentOrders"
+            :key="order.id"
+            :to="`/transport/${order.id}`"
+            class="group block rounded-lg border border-cyan-400/15 bg-black/20 p-3 hover:border-cyan-400/35 hover:bg-black/30 transition-colors"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                  <p class="text-xs font-bold truncate text-slate-100 group-hover:text-cyan-200 transition-colors">
+                    {{ order.name ?? `Ordre #${order.id}` }}
+                  </p>
+                  <span
+                    v-if="isPinned(order.id)"
+                    class="shrink-0 inline-flex items-center gap-0.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300"
+                  >
+                    <svg class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                    </svg>
+                    Overlay
+                  </span>
+                  <span
+                    v-if="order.itinerary?.obsolete"
+                    class="shrink-0 inline-flex items-center rounded-full border border-rose-400/30 bg-rose-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-300"
+                  >Obsolète</span>
+                </div>
+                <p v-if="order.originName" class="text-[10px] text-slate-600 truncate">
+                  {{ order.originName }}
+                </p>
+                <!-- Progress -->
+                <div v-if="order.itinerary?.lines?.length" class="mt-1.5">
+                  <div class="h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500"
+                      :style="{ width: orderProgress(order) + '%' }"
+                    />
+                  </div>
+                  <div class="flex items-center justify-between mt-0.5 text-[9px] text-slate-600">
+                    <span>{{ order.itinerary.lines.filter(l => l.completed).length }}/{{ order.itinerary.lines.length }} étapes</span>
+                    <span>{{ orderProgress(order) }}%</span>
+                  </div>
+                </div>
+              </div>
+              <svg class="mt-0.5 shrink-0 w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </div>
+          </RouterLink>
+        </div>
+
+        <!-- Navigation rapide vers transport-new -->
+        <RouterLink
+          v-if="app.status.authReady"
+          to="/transport/new"
+          class="shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-emerald-400/20 bg-emerald-400/5 py-2 text-xs font-medium text-emerald-300/60 hover:border-emerald-400/35 hover:text-emerald-300 transition"
+        >
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Nouvel ordre
+        </RouterLink>
+      </div>
+
+      <!-- ── État du jeu ──────────────────────────────────────────────────── -->
+      <div class="flex flex-col gap-3 min-h-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="h-6 w-6 rounded-md bg-violet-400/10 border border-violet-400/20 flex items-center justify-center shrink-0">
+              <svg class="w-3.5 h-3.5 text-violet-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+              </svg>
+            </div>
+            <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Journal de jeu</span>
+          </div>
+          <RouterLink
+            to="/gamelog"
+            class="text-[11px] text-violet-400/60 hover:text-violet-300 transition flex items-center gap-1"
+          >
+            Ouvrir
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </RouterLink>
+        </div>
+
+        <!-- Pas de dossier configuré -->
+        <div
+          v-if="!gameFolder"
+          class="flex-1 flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-800 p-4 gap-2"
+        >
+          <svg class="w-8 h-8 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+          </svg>
+          <p class="text-xs text-slate-600 text-center">Dossier du jeu non configuré</p>
+          <RouterLink
+            to="/settings"
+            class="text-[11px] text-cyan-400/60 hover:text-cyan-300 transition underline underline-offset-2"
+          >
+            Configurer dans Paramètres
+          </RouterLink>
+        </div>
+
+        <template v-else>
+          <!-- Badge EN DIRECT -->
+          <div class="flex items-center gap-2">
+            <span
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+              :class="running
+                ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                : 'border-slate-700 bg-slate-800/60 text-slate-500'"
+            >
+              <span v-if="running" class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"/>
+              {{ running ? 'EN DIRECT' : 'Parser arrêté' }}
+            </span>
+          </div>
+
+          <!-- State card -->
+          <div class="rounded-lg border border-slate-800 bg-black/20 p-3">
+            <div v-if="!state || !state.player" class="text-xs text-slate-600 italic">
+              {{ running ? 'En attente de données…' : 'Démarrez le journal pour voir l\'état.' }}
+            </div>
+            <div v-else class="space-y-2 text-xs">
+              <div v-if="state.player" class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Joueur</span>
+                <span class="font-semibold text-cyan-200 truncate">{{ state.player }}</span>
+              </div>
+              <div v-if="state.ship" class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Vaisseau</span>
+                <span class="font-semibold text-slate-200 truncate">{{ state.ship }}</span>
+              </div>
+              <div v-if="state.location" class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Position</span>
+                <span class="font-semibold text-slate-200 truncate">{{ state.location }}</span>
+              </div>
+              <div v-if="state.destination" class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Destination</span>
+                <span class="font-semibold text-violet-300 truncate">{{ state.destination }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Activité</span>
+                <span class="font-semibold" :class="activityClass">{{ activityLabel(state.activity ?? 'unknown') }}</span>
+              </div>
+              <div v-if="state.zone" class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Zone</span>
+                <span class="font-semibold text-amber-300 truncate">{{ state.zone }}</span>
+              </div>
+              <div v-if="state.shard" class="flex items-center gap-2">
+                <span class="text-slate-600 w-20 shrink-0">Serveur</span>
+                <span class="text-slate-500 font-mono truncate text-[10px]">{{ state.shard }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lien vers gamelog complet -->
+          <RouterLink
+            to="/gamelog"
+            class="shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-violet-400/15 bg-violet-400/5 py-2 text-xs font-medium text-violet-300/60 hover:border-violet-400/30 hover:text-violet-300 transition"
+          >
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h8"/>
+            </svg>
+            Voir les événements
+          </RouterLink>
+        </template>
+      </div>
+
+    </div>
+
+    <!-- ── Raccourcis de navigation ────────────────────────────────────────── -->
+    <div class="shrink-0 grid grid-cols-4 gap-2">
+      <RouterLink
+        v-for="nav in [
+          { to: '/transport', label: 'Transport', color: 'cyan', icon: 'M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8' },
+          { to: '/maps',      label: 'Cartes',    color: 'emerald', icon: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 13l4.553 2.276A1 1 0 0021 21.382V10.618a1 1 0 00-.553-.894L15 7m0 13V7m0 0L9 7' },
+          { to: '/profils',   label: 'Profil',    color: 'rose', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+          { to: '/settings',  label: 'Paramètres',color: 'slate', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+        ]"
+        :key="nav.to"
+        :to="nav.to"
+        class="flex flex-col items-center gap-1.5 rounded-lg border border-transparent bg-slate-800/40 py-3 px-2 text-slate-500 hover:text-slate-200 hover:bg-slate-800/70 hover:border-slate-700 transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" :d="nav.icon"/>
+        </svg>
+        <span class="text-[10px] font-medium">{{ nav.label }}</span>
+      </RouterLink>
+    </div>
+
+  </section>
+</template>
