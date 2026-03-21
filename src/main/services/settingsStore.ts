@@ -2,31 +2,31 @@ import ElectronStore from 'electron-store'
 import type { AppSettings } from '@shared/general'
 
 const defaults: AppSettings = {
-  siteUrl: 'https://www.preprod.1ercorpscolonial.fr',
+  siteUrl: 'https://www.preprod.1ercorpscolonial.fr/compagnon',
   urls: {
-    auth: '/overlay/auth',
+    auth: '/auth',
     transports: {
-      index:       '/overlay/transport',
-      show:        '/overlay/transport/{id}',
-      progress:    '/overlay/transport/legs/{id}/progress',
-      generate:    '/overlay/transport/{id}/generate',
-      mercureInfo: '/overlay/transport/mercure-info',
-      opportunities: '/overlay/transport/market-opportunities',
+      index:       '/transport',
+      show:        '/transport/{id}',
+      progress:    '/transport/legs/{id}/progress',
+      generate:    '/transport/{id}/generate',
+      mercureInfo: '/transport/mercure-info',
+      opportunities: '/transport/market-opportunities',
     },
     starmap: {
-      poiSearch: '/overlay/reference/pois',
+      poiSearch: '/reference/pois',
     },
     market: {
-      shipModels:  '/overlay/reference/ships',
-      commodities: '/overlay/reference/commodities',
+      shipModels:  '/reference/ships',
+      commodities: '/reference/commodities',
     },
     maps: {
-      index:      '/overlay/map',
-      show:       '/overlay/map/{id}',
-      features:   '/overlay/map/{id}/features',
-      mercureInfo: '/overlay/map/{id}/mercure-info',
+      index:      '/map',
+      show:       '/map/{id}',
+      features:   '/map/{id}/features',
+      mercureInfo: '/map/{id}/mercure-info',
     },
-    updateUrl: '/overlay/update',
+    updateUrl: '/update',
   },
   
   rememberConnection: true,
@@ -57,14 +57,8 @@ export function getSettings(): AppSettings {
   return {
     ...defaults,
     ...(saved ?? {}),
-    urls: {
-      ...defaults.urls,
-      ...(saved?.urls ?? {}),
-      maps: {
-        ...(defaults.urls.maps as object),
-        ...((saved?.urls?.maps as object | undefined) ?? {}),
-      },
-    },
+    siteUrl: defaults.siteUrl,
+    urls: defaults.urls,
     overlayLayout: {
       ...(defaults.overlayLayout ?? {}),
       ...(saved?.overlayLayout ?? {})
@@ -77,10 +71,8 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
   const next: AppSettings = {
     ...current,
     ...partial,
-    urls: {
-      ...current.urls,
-      ...(partial.urls ?? {})
-    },
+    siteUrl: defaults.siteUrl,
+    urls: defaults.urls,
     overlayLayout: 'overlayLayout' in partial
       ? (partial.overlayLayout ?? {})
       : (current.overlayLayout ?? {}),

@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted } from 'vue'
 import { useAppStore } from '../stores/app'
+import { changelog } from '../data/changelog'
 
 const app = useAppStore()
 const busy = ref(false)
 const version = ref<string | null>(null)
-const showUpdates = ref(false)
-const checkingUpdate = ref(false)
-const updateInfo = ref<any>(null)
-const autoUpdateEnabled = ref(false)
-const selectedAssetUrl = ref<string | null>(null)
 
-// ── Login popover ─────────────────────────────────────────────────────────────
+// ── Native updater state ────────────────────────────────────────────────────
+const nativeUpdateAvailable = ref<any>(null)
+const nativeChecking = ref(false)
+const nativeNoUpdate = ref(false)
+const nativeDownloading = ref(false)
+const nativeDownloadProgress = ref(0)
+const nativeDownloaded = ref(false)
+const showUpdateBanner = ref(false)
+const updatePostponed = ref(false)
+
+// ── Changelog modal ─────────────────────────────────────────────────────────
+const showChangelog = ref(false)
+
+// ── Login popover ───────────────────────────────────────────────────────────
 const showPanel  = ref(false)
 const apiKeyInput = ref('')
 const loginError  = ref<string | null>(null)
@@ -35,66 +44,68 @@ function closePanel() {
   loginError.value = null
 }
 
-function closeUpdates() { showUpdates.value = false; updateInfo.value = null }
-
-async function openUpdates() {
-  checkingUpdate.value = true
-  showUpdates.value = true
+// ── Native updater actions ──────────────────────────────────────────────────
+async function acceptUpdate() {
+  showUpdateBanner.value = false
+  nativeDownloading.value = true
+  nativeDownloadProgress.value = 0
   try {
-    const v = await (window as any).oneCC.getAppVersion()
-    version.value = v
-    const res = await (window as any).oneCC.checkForUpdates()
-    updateInfo.value = res
-    // If manifest contains assets array, try to pick a platform asset
-    if (!updateInfo.value.url && Array.isArray(res?.assets) && res.assets.length) {
-      const ua = navigator.userAgent || ''
-      const isWin = /windows|win32/i.test(ua)
-      const isMac = /macintosh|mac os x/i.test(ua)
-      const isLinux = /linux/i.test(ua)
-      function pick(list: string[]) {
-        const l = list.map(String)
-        if (isWin) {
-          return l.find(u => /\.exe$|nsis|win/i.test(u)) || l[0]
-        }
-        if (isMac) {
-          return l.find(u => /\.dmg$|mac|darwin/i.test(u)) || l[0]
-        }
-        if (isLinux) {
-          return l.find(u => /\.AppImage$|linux|AppImage/i.test(u)) || l[0]
-        }
-        return l[0]
-      }
-      selectedAssetUrl.value = pick(res.assets)
-      if (selectedAssetUrl.value) updateInfo.value.url = selectedAssetUrl.value
-    }
-  } catch (e: any) {
-    updateInfo.value = { available: false }
-  } finally {
-    checkingUpdate.value = false
-  }
-}
-
-async function doInstall() {
-  if (!updateInfo.value?.url) return
-  // Prefer native installer if available
-  try {
-    // fallback: open external URL
-    await (window as any).oneCC.installUpdate(updateInfo.value.url)
+    await (window as any).oneCC.nativeDownloadUpdate()
   } catch {
-    // noop
+    nativeDownloading.value = false
   }
 }
 
-function onUpdateAvailable(payload: any) {
-  updateInfo.value = payload
-  showUpdates.value = true
+function postponeUpdate() {
+  showUpdateBanner.value = false
+  updatePostponed.value = true
+}
+
+async function installNow() {
+  try {
+    await (window as any).oneCC.nativeInstallUpdate()
+  } catch {}
+}
+
+function handleNativeUpdateEvent(event: any) {
+  const { type, info, progress } = event
+  if (type === 'checking') {
+    nativeChecking.value = true
+    nativeNoUpdate.value = false
+  } else if (type === 'update-available') {
+    nativeChecking.value = false
+    nativeNoUpdate.value = false
+    nativeUpdateAvailable.value = info
+    showUpdateBanner.value = true
+    updatePostponed.value = false
+    nativeDownloaded.value = false
+    nativeDownloading.value = false
+  } else if (type === 'update-not-available') {
+    nativeChecking.value = false
+    nativeNoUpdate.value = true
+    setTimeout(() => { nativeNoUpdate.value = false }, 4000)
+  } else if (type === 'error') {
+    nativeChecking.value = false
+  } else if (type === 'progress') {
+    nativeDownloading.value = true
+    nativeDownloadProgress.value = Math.round(progress?.percent ?? 0)
+  } else if (type === 'downloaded') {
+    nativeDownloading.value = false
+    nativeDownloaded.value = true
+    showUpdateBanner.value = true
+    updatePostponed.value = false
+  }
 }
 
 onMounted(async () => {
   try {
     version.value = await (window as any).oneCC.getAppVersion()
   } catch {}
-  ;(window as any).oneCC.onUpdateAvailable(onUpdateAvailable)
+  ;(window as any).oneCC.onUpdateAvailable((payload: any) => {
+    nativeUpdateAvailable.value = payload
+    showUpdateBanner.value = true
+  })
+  ;(window as any).oneCC.onNativeAutoUpdateEvent(handleNativeUpdateEvent)
 })
 
 async function submitLogin() {
@@ -117,7 +128,7 @@ async function disconnect() {
   try { await app.clearApiKey() } finally { busy.value = false }
 }
 
-// ── Status display ────────────────────────────────────────────────────────────
+// ── Status display ─────────────────────────────────────────────────────────
 const dotClass = computed(() => {
   if (app.status.connected) return 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)]'
   if (app.status.level === 'loading') return 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.4)] animate-pulse'
@@ -135,12 +146,166 @@ const statusColor = computed(() => {
   if (app.status.level === 'loading') return 'text-amber-300'
   return 'text-rose-300'
 })
+
+const hasUpdateBadge = computed(() =>
+  (nativeUpdateAvailable.value || nativeDownloaded.value) && !showUpdateBanner.value
+)
+
+const changeTypeLabel: Record<string, string> = {
+  feature:     'Nouveau',
+  fix:         'Correctif',
+  improvement: 'Amélioration',
+  breaking:    'Rupture',
+}
+const changeTypeClass: Record<string, string> = {
+  feature:     'bg-cyan-400/15 text-cyan-300 border-cyan-400/30',
+  fix:         'bg-rose-400/15 text-rose-300 border-rose-400/30',
+  improvement: 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30',
+  breaking:    'bg-amber-400/15 text-amber-300 border-amber-400/30',
+}
 </script>
 
 <template>
+  <!-- ── Indicateur "recherche de mise à jour" ────────────────────────────── -->
+  <Transition name="slide-up">
+    <div
+      v-if="nativeChecking || nativeNoUpdate"
+      class="shrink-0 border-t border-cyan-400/15 bg-slate-900/60 px-5 py-2 flex items-center gap-2"
+    >
+      <svg v-if="nativeChecking" class="w-3 h-3 animate-spin text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      <svg v-else class="w-3 h-3 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+      </svg>
+      <span class="text-[11px]" :class="nativeChecking ? 'text-cyan-300' : 'text-emerald-300'">
+        {{ nativeChecking ? 'Recherche de mises à jour…' : 'Application à jour.' }}
+      </span>
+    </div>
+  </Transition>
+
+  <!-- ── Bannière mise à jour ──────────────────────────────────────────────── -->
+  <Transition name="slide-up">
+    <div
+      v-if="showUpdateBanner"
+      class="shrink-0 border-t border-amber-400/30 bg-amber-400/10 px-5 py-3"
+    >
+      <div v-if="nativeDownloading" class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-amber-200">Téléchargement de la mise à jour…</span>
+          <span class="text-xs font-mono text-amber-300">{{ nativeDownloadProgress }}%</span>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-slate-700">
+          <div class="h-1.5 rounded-full bg-amber-400 transition-all duration-300" :style="{ width: nativeDownloadProgress + '%' }"/>
+        </div>
+      </div>
+
+      <div v-else-if="nativeDownloaded" class="flex items-center gap-3">
+        <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span class="flex-1 text-xs font-semibold text-emerald-200">
+          Mise à jour <span class="font-mono">{{ nativeUpdateAvailable?.version }}</span> prête — l'app redémarrera automatiquement.
+        </span>
+        <button @click="installNow" class="rounded-md bg-emerald-500 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-400 transition">
+          Installer maintenant
+        </button>
+        <button @click="showUpdateBanner = false" class="text-slate-500 hover:text-slate-300 transition text-lg leading-none">✕</button>
+      </div>
+
+      <div v-else class="flex items-center gap-3">
+        <svg class="w-4 h-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        <span class="flex-1 text-xs font-semibold text-amber-100">
+          Nouvelle version disponible :
+          <span class="font-mono text-amber-300">{{ nativeUpdateAvailable?.version }}</span>
+          — Télécharger maintenant ?
+        </span>
+        <button @click="acceptUpdate" class="rounded-md bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-400 transition">Oui</button>
+        <button @click="postponeUpdate" class="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 hover:text-slate-100 transition">Plus tard</button>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- ── Modal Changelog ───────────────────────────────────────────────────── -->
+  <Transition name="fade">
+    <div
+      v-if="showChangelog"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      @click.self="showChangelog = false"
+    >
+      <div class="w-[520px] max-h-[80vh] flex flex-col rounded-2xl border border-cyan-400/20 bg-[#070b12] shadow-2xl shadow-black/80">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-cyan-400/15">
+          <div>
+            <h2 class="text-sm font-bold tracking-widest text-slate-100 uppercase">Notes de version</h2>
+            <p class="text-[11px] text-slate-500 mt-0.5">1CC Compagnon · v{{ version ?? '—' }}</p>
+          </div>
+          <button @click="showChangelog = false" class="text-slate-600 hover:text-slate-300 transition">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Bandeau mise à jour dispo -->
+        <div v-if="nativeUpdateAvailable && !nativeDownloaded" class="mx-4 mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3 flex items-center gap-3">
+          <svg class="w-4 h-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          <span class="flex-1 text-xs text-amber-100">
+            Version <span class="font-mono font-semibold text-amber-300">{{ nativeUpdateAvailable.version }}</span> disponible
+          </span>
+          <button @click="showChangelog = false; acceptUpdate()" class="rounded-md bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-400 transition">
+            Télécharger
+          </button>
+        </div>
+
+        <div v-if="nativeDownloaded" class="mx-4 mt-4 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 flex items-center gap-3">
+          <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span class="flex-1 text-xs text-emerald-100">Mise à jour téléchargée, prête à installer.</span>
+          <button @click="installNow" class="rounded-md bg-emerald-500 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-400 transition">
+            Installer
+          </button>
+        </div>
+
+        <!-- Liste des versions -->
+        <div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+          <div v-for="entry in changelog" :key="entry.version">
+            <div class="flex items-baseline gap-3 mb-3">
+              <span
+                class="font-mono text-sm font-bold"
+                :class="entry.version === version ? 'text-cyan-300' : 'text-slate-400'"
+              >v{{ entry.version }}</span>
+              <span
+                v-if="entry.version === version"
+                class="rounded-full bg-cyan-400/15 border border-cyan-400/30 px-2 py-0.5 text-[10px] font-semibold text-cyan-300"
+              >version actuelle</span>
+              <span class="text-[11px] text-slate-600 ml-auto">{{ entry.date }}</span>
+            </div>
+            <ul class="space-y-1.5">
+              <li v-for="(change, i) in entry.changes" :key="i" class="flex items-start gap-2">
+                <span
+                  class="mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold"
+                  :class="changeTypeClass[change.type]"
+                >{{ changeTypeLabel[change.type] }}</span>
+                <span class="text-xs text-slate-300 leading-relaxed">{{ change.text }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <footer class="relative shrink-0 border-t border-cyan-400/20 px-5 py-2 flex items-center gap-3">
 
-    <!-- ── Popover connexion ───────────────────────────────────────────────── -->
+    <!-- ── Popover connexion ─────────────────────────────────────────────── -->
     <Transition name="slide-up">
       <div
         v-if="showPanel"
@@ -191,7 +356,7 @@ const statusColor = computed(() => {
       </div>
     </Transition>
 
-    <!-- ── Statut ─────────────────────────────────────────────────────────── -->
+    <!-- ── Statut ──────────────────────────────────────────────────────────── -->
     <span class="h-2 w-2 rounded-full shrink-0" :class="dotClass"/>
     <span class="text-xs font-semibold" :class="statusColor">{{ statusText }}</span>
 
@@ -202,37 +367,22 @@ const statusColor = computed(() => {
     </template>
 
     <div class="ml-auto flex items-center gap-2">
-      <span v-if="app.status.latencyMs" class="text-[11px] text-slate-600">{{ app.status.latencyMs }} ms</span>
-      
-      <!-- Version / Updates -->
-      <div class="relative">
-        <button @click="openUpdates" class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-2 py-1 text-[11px] font-semibold text-slate-400 hover:border-cyan-400/30 hover:text-cyan-200 transition">
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/></svg>
-          <span class="text-[11px] text-slate-400">{{ version ?? '—' }}</span>
-        </button>
+      <span v-if="app.status.latencyMs" class="text-[11px] text-slate-500">{{ app.status.latencyMs }} ms</span>
 
-        <Transition name="slide-up">
-          <div v-if="showUpdates" class="absolute bottom-full right-0 mb-2 w-80 rounded-xl border border-cyan-400/20 bg-[#0a1120] shadow-2xl shadow-black/60 p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Mises à jour</p>
-              <button @click="closeUpdates" class="text-slate-600 hover:text-slate-300 transition">✕</button>
-            </div>
-            <div class="text-sm text-slate-300">
-              <p>Version actuelle : <span class="font-mono text-slate-400">{{ version ?? '?' }}</span></p>
-              <div v-if="checkingUpdate" class="mt-2 text-slate-500">Vérification…</div>
-              <div v-else-if="updateInfo && updateInfo.available" class="mt-2">
-                <p class="font-semibold text-emerald-300">Nouvelle version disponible : {{ updateInfo.latest }}</p>
-                <p class="text-[12px] text-slate-400 mt-1 truncate">{{ updateInfo.notes }}</p>
-                <div class="mt-3 flex gap-2">
-                  <button @click="doInstall" class="flex-1 rounded bg-emerald-500 px-3 py-1 text-xs font-semibold">Installer</button>
-                  <button @click="openUpdates" class="rounded border px-3 py-1 text-xs">Plus d'infos</button>
-                </div>
-              </div>
-              <div v-else class="mt-2 text-slate-500">Aucune mise à jour trouvée.</div>
-            </div>
-          </div>
-        </Transition>
-      </div>
+      <!-- Bouton version → ouvre la modal changelog -->
+      <button
+        @click="showChangelog = true"
+        class="relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold transition"
+        :class="hasUpdateBadge
+          ? 'border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20'
+          : 'border-slate-600 bg-slate-800/80 text-slate-200 hover:border-cyan-400/30 hover:text-cyan-200'"
+      >
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/>
+        </svg>
+        <span>{{ version ?? '—' }}</span>
+        <span v-if="hasUpdateBadge" class="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-400 animate-pulse"/>
+      </button>
 
       <!-- Se connecter -->
       <button
@@ -251,7 +401,7 @@ const statusColor = computed(() => {
         v-else-if="app.status.connected"
         @click="disconnect"
         :disabled="busy"
-        class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-semibold text-slate-400 hover:border-rose-400/40 hover:text-rose-300 transition disabled:opacity-50"
+        class="flex items-center gap-1.5 rounded-md border border-slate-600 bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-rose-400/40 hover:text-rose-300 transition disabled:opacity-50"
       >
         <svg v-if="busy" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -276,5 +426,13 @@ const statusColor = computed(() => {
 .slide-up-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

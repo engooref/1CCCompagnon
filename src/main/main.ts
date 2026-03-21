@@ -3,9 +3,10 @@ import path from 'node:path'
 import { logger } from './services/logger'
 import { registerAppIpc } from './ipc/app.ipc'
 import { createOverlayWindow, showOverlay, hideOverlay, setOverlayBounds, sendToOverlay, getOverlayWindow } from './windows/overlayWindow'
+import { setMainWindow } from './windows/mainWindow'
 import { updateEditorBounds, closeOverlayEditor, getOverlayEditorWindow } from './windows/overlayEditorWindow'
 import { startGameWatcher, stopGameWatcher, getGameWindowBounds } from './services/gameWatcher'
-import { initAutoUpdater } from './services/autoUpdaterService'
+import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterService'
 import { startWindowStateWatcher, stopWindowStateWatcher, killPersistentPS } from './services/windowStateWatcher'
 import { logParser } from './services/logParserService'
 import { getSettings } from './services/settingsStore'
@@ -103,6 +104,7 @@ function createMainWindow() {
     icon: path.join(APP_ROOT, 'build/icon.ico'),
   })
 
+  setMainWindow(mainWindow)
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') mainWindow?.webContents.toggleDevTools()
@@ -144,7 +146,10 @@ app.whenReady().then(async () => {
 
   // Start automatic update checks (reads settings.updateCheckInterval if present)
   try { startAutoUpdateChecker() } catch (e) { /* ignore */ }
-  try { await initAutoUpdater() } catch (e) { /* ignore */ }
+  try {
+    await initAutoUpdater()
+    setTimeout(() => checkForUpdatesNative().catch(() => {}), 3000)
+  } catch (e) { /* ignore */ }
 
   // Propagate layout changes to overlay immediately
   onLayoutChange((layout) => {

@@ -38,7 +38,7 @@ export default defineConfig({
     },
     server: {
       proxy: {
-        '/overlay':  { target: 'https://www.preprod.1ercorpscolonial.fr', changeOrigin: true, secure: true },
+        '/compagnon':  { target: 'https://www.preprod.1ercorpscolonial.fr', changeOrigin: true, secure: true },
         '/starmap':  { target: 'https://www.preprod.1ercorpscolonial.fr', changeOrigin: true, secure: true },
         '/market':   { target: 'https://www.preprod.1ercorpscolonial.fr', changeOrigin: true, secure: true },
       }

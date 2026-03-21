@@ -51,7 +51,7 @@ async function fetchMap() {
     const { data } = await http.get(url, { headers: authHeaders() })
     const raw = (data?.data ?? data) as MapInfo
     const base = app.settings?.siteUrl.replace(/\/$/, '') ?? ''
-    raw.imageUrl = base + '/overlay' + raw.imageUrl
+    raw.imageUrl = base  + raw.imageUrl
     mapInfo.value = raw
 
     // Fetch image avec token → blob URL
