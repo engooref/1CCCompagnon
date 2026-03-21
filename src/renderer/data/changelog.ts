@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.5.0',
+    date: '2026-04-01',
+    changes: [
+      { type: 'improvement', text: 'Ajout de nouvelles résolutions d\'écran' },
+      { type: 'improvement', text: 'Ajout de l\'agenda permettant de regarder les événements à venir' },
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-03-21',
     changes: [

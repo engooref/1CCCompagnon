@@ -67,6 +67,9 @@ contextBridge.exposeInMainWorld('oneCC', {
   // ── Performances ─────────────────────────────────────────────────────────
   getPerfMetrics: () => ipcRenderer.invoke('perf:get-metrics'),
 
+  // ── Notifications ─────────────────────────────────────────────────────────
+  showNotification: (title: string, body: string) => ipcRenderer.invoke('app:show-notification', title, body),
+
   // ── Logging ───────────────────────────────────────────────────────────────
   log: (level: string, message: string) => ipcRenderer.invoke('app:log', level, message),
   // ── Updates ───────────────────────────────────────────────────────────────

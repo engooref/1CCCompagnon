@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { app as electronApp, ipcMain, dialog, BrowserWindow, screen } from 'electron'
+import { app as electronApp, ipcMain, dialog, BrowserWindow, screen, Notification } from 'electron'
 import { clearApiKey, getApiKey, setApiKey } from '../services/secureStore'
 import { authenticateOverlay, checkConnection, getAppVersion, checkForUpdates, installUpdate, startAutoUpdateChecker, stopAutoUpdateChecker } from '../services/overlayService'
 import { initAutoUpdater, checkForUpdatesNative, downloadUpdateNative, installUpdateAndQuit, setFeedUrl } from '../services/autoUpdaterService'
@@ -175,6 +175,13 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
 
   // Editor close (window.close() is blocked in sandboxed renderer)
   ipcMain.handle('editor:close', () => { closeOverlayEditor() })
+
+  // -- Notifications ---------------------------------------------------------
+  ipcMain.handle('app:show-notification', (_e, title: string, body: string) => {
+    if (Notification.isSupported()) {
+      new Notification({ title, body }).show()
+    }
+  })
 
   // -- Renderer logging ------------------------------------------------------
   ipcMain.handle('app:log', (_e, level: string, message: string) => {

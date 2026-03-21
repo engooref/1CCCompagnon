@@ -67,6 +67,7 @@ export interface AppSettings {
   windowSize?: string
   marketOppsEnabled?: boolean
   marketOppsBudget?: number | null
+  agendaNotificationsEnabled?: boolean
 }
 
 export type ConnectionLevel = 'idle' | 'loading' | 'connected' | 'auth_error' | 'network_error' | 'missing_api_key'

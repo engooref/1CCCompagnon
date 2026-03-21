@@ -28,12 +28,16 @@ async function toggleOverlay() {
 // ─── Window size ──────────────────────────────────────────────────────────────
 
 const WINDOW_SIZES = [
+  { value: '800x600',   label: '800 × 600   — Tiny' },
+  { value: '960x640',  label: '960 × 640   — Mini' },
   { value: '1024x680',  label: '1024 × 680  — Compact' },
   { value: '1120x760',  label: '1120 × 760  — Standard (défaut)' },
   { value: '1280x800',  label: '1280 × 800  — Large' },
   { value: '1440x900',  label: '1440 × 900  — HD' },
   { value: '1600x1000', label: '1600 × 1000 — Wide HD' },
   { value: '1920x1080', label: '1920 × 1080 — Full HD' },
+  { value: '2560x1440', label: '2560 × 1440 — QHD' },
+  { value: '3840x2160', label: '3840 × 2160 — 4K UHD' },
 ]
 
 const windowSize    = computed(() => app.settings?.windowSize ?? '1120x760')
@@ -234,6 +238,21 @@ async function clearMapToggleKey() {
     mapKeyError.value = e?.message ?? 'Impossible de supprimer'
   } finally {
     mapKeySaving.value = false
+  }
+}
+
+// ─── Notifications agenda ───────────────────────────────────────────────────
+
+const agendaNotificationsEnabled = computed(() => app.settings?.agendaNotificationsEnabled ?? true)
+const agendaNotifSaving = ref(false)
+
+async function toggleAgendaNotifications() {
+  if (!app.settings) return
+  agendaNotifSaving.value = true
+  try {
+    await app.saveSettings({ agendaNotificationsEnabled: !agendaNotificationsEnabled.value })
+  } finally {
+    agendaNotifSaving.value = false
   }
 }
 
@@ -619,6 +638,29 @@ onMounted(() => { initMarketBudget(); initMapOpacity() })
           </svg>
           {{ gameFolder ? 'Changer le dossier' : 'Choisir un dossier' }}
         </button>
+      </div>
+
+      <!-- Notifications agenda -->
+      <div class="rounded-lg border border-slate-800 bg-black/20 p-4">
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-slate-200">Alertes agenda</p>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Envoie une notification Windows 15 minutes avant le début d'un événement.
+            </p>
+          </div>
+          <button
+            @click="toggleAgendaNotifications"
+            :disabled="agendaNotifSaving"
+            class="shrink-0 relative inline-flex h-6 w-11 items-center rounded-full border transition-colors duration-200 disabled:opacity-50"
+            :class="agendaNotificationsEnabled ? 'bg-cyan-500/30 border-cyan-400/40' : 'bg-slate-800 border-slate-700'"
+          >
+            <span
+              class="inline-block h-4 w-4 rounded-full shadow transition-transform duration-200"
+              :class="agendaNotificationsEnabled ? 'translate-x-6 bg-cyan-400' : 'translate-x-1 bg-slate-500'"
+            />
+          </button>
+        </div>
       </div>
 
       <!-- Résolution de la fenêtre -->

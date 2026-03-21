@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import StatusBar from '../components/StatusBar.vue'
 import { useAppStore } from '../stores/app'
+import { http } from '../services/http'
+import { createOverlayUrls } from '../config/api'
 
 const app = useAppStore()
 const route = useRoute()
 
-const NAV_ORDER = ['/', '/transport', '/maps', '/profils', '/gamelog', '/perf', '/settings']
+const NAV_ORDER = ['/', '/transport', '/maps', '/agenda', '/profils', '/gamelog', '/perf', '/settings']
 
 const transitionName = ref('page-forward')
 let prevIndex = NAV_ORDER.indexOf('/')
@@ -21,10 +23,53 @@ watch(() => route.path, (next, prev) => {
   prevIndex = nextIdx
 })
 
+// ─── Agenda notifications (alerte 15 min avant) ───────────────────────────
+
+const notifiedIds = new Set<number>()
+let agendaTimer: ReturnType<typeof setInterval> | null = null
+
+async function checkUpcomingEvents() {
+  if (!app.bearerToken || !app.settings) return
+  if (app.settings.agendaNotificationsEnabled === false) return
+  const urls = createOverlayUrls(app.settings)
+  if (!urls.agendaIndex) return
+
+  try {
+    const { data } = await http.get(urls.agendaIndex, {
+      headers: { Authorization: `Bearer ${app.bearerToken}` },
+      params: { limit: 20 },
+    })
+    const events: { id: number; name: string; start: string | null }[] = data?.events ?? []
+    const now = Date.now()
+
+    for (const event of events) {
+      if (!event.start || notifiedIds.has(event.id)) continue
+      const diffMin = (new Date(event.start).getTime() - now) / 60_000
+      if (diffMin >= 14 && diffMin < 16) {
+        notifiedIds.add(event.id)
+        window.oneCC.showNotification(
+          '⏰ Événement dans 15 min',
+          event.name,
+        )
+      }
+    }
+  } catch {
+    // silencieux
+  }
+}
+
 onMounted(async () => {
   if (!app.settings) {
     await app.init()
   }
+
+  // Vérification immédiate puis toutes les minutes
+  checkUpcomingEvents()
+  agendaTimer = setInterval(checkUpcomingEvents, 60_000)
+})
+
+onUnmounted(() => {
+  if (agendaTimer) clearInterval(agendaTimer)
 })
 </script>
 
@@ -56,6 +101,13 @@ onMounted(async () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 13l4.553 2.276A1 1 0 0021 21.382V10.618a1 1 0 00-.553-.894L15 7m0 13V7m0 0L9 7"/>
               </svg>
               Cartes
+            </RouterLink>
+            <RouterLink to="/agenda" class="flex items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors" active-class="border-cyan-400/30 bg-cyan-400/10 text-cyan-200">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+              Agenda
             </RouterLink>
             <RouterLink to="/profils" class="flex items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors" active-class="border-cyan-400/30 bg-cyan-400/10 text-cyan-200">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

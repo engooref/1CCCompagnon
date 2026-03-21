@@ -26,11 +26,17 @@ const defaults: AppSettings = {
       features:   '/map/{id}/features',
       mercureInfo: '/map/{id}/mercure-info',
     },
+    agenda: {
+      index: '/agenda',
+      show:  '/agenda/{id}',
+      store: '/events',
+    },
     updateUrl: '/update',
   },
   
   rememberConnection: true,
   overlayEnabled: true,
+  agendaNotificationsEnabled: true,
   gameFolder: '',
   toggleKey: 'F10',
   windowSize: '1120x760',

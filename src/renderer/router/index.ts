@@ -11,6 +11,8 @@ import GameLogPage from '../pages/GameLogPage.vue'
 import OverlayPage from '../pages/OverlayPage.vue'
 import OverlayEditorPage from '../pages/OverlayEditorPage.vue'
 import PerfPage from '../pages/PerfPage.vue'
+import AgendaPage from '../pages/AgendaPage.vue'
+import AgendaDetailPage from '../pages/AgendaDetailPage.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -23,6 +25,8 @@ export const router = createRouter({
     { path: '/transport/:id', name: 'transport-detail', component: TransportDetailPage },
     { path: '/maps', name: 'maps', component: MapPage },
     { path: '/maps/:id', name: 'map-detail', component: MapDetailPage },
+    { path: '/agenda', name: 'agenda', component: AgendaPage },
+    { path: '/agenda/:id', name: 'agenda-detail', component: AgendaDetailPage },
     { path: '/gamelog', name: 'gamelog', component: GameLogPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/overlay', name: 'overlay', component: OverlayPage },

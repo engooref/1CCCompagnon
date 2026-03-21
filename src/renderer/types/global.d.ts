@@ -52,6 +52,9 @@ declare global {
       onSettingsUpdate: (cb: (s: AppSettings) => void) => void
       offSettingsUpdate: () => void
 
+      // Notifications
+      showNotification: (title: string, body: string) => Promise<void>
+
       // Logging
       log: (level: string, message: string) => Promise<void>
     }

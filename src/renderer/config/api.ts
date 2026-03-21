@@ -31,5 +31,8 @@ export function createOverlayUrls(settings: AppSettings) {
     mapFeatures:          (id: number) => url(base, o, 'maps', 'features').replace('{id}', String(id)),
     mapMercureInfo:       (id: number) => url(base, o, 'maps', 'mercureInfo').replace('{id}', String(id)),
     updateUrl:           url('https://updates.1ercorpscolonial.fr', o, 'updateUrl'),
+    agendaIndex:         url(base, o, 'agenda', 'index'),
+    agendaShow:          (id: number) => url(base, o, 'agenda', 'show').replace('{id}', String(id)),
+    agendaStore:         url(base, o, 'agenda', 'store'),
   }
 }
