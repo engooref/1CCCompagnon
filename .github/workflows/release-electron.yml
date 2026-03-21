@@ -5,13 +5,23 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     runs-on: windows-latest
 
+    env:
+      DEFAULT_BRANCH: main
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ env.DEFAULT_BRANCH }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -19,23 +29,77 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Extract version from tag
+        id: version
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(.+)$') {
+            Write-Error "Tag invalide : $tag"
+            exit 1
+          }
+          $version = $Matches[1]
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Tag détecté : $tag"
+          Write-Host "Version cible : $version"
 
-      - name: Verify changelog entry exists for this version
+      - name: Sync package.json and package-lock.json with tag version
+        shell: powershell
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $currentVersion = $pkg.version
+          $targetVersion = "${{ steps.version.outputs.version }}"
+
+          Write-Host "Version package actuelle : $currentVersion"
+          Write-Host "Version attendue        : $targetVersion"
+
+          if ($currentVersion -ne $targetVersion) {
+            npm version $targetVersion --no-git-tag-version
+            Write-Host "✅ package.json et package-lock.json alignés sur $targetVersion"
+          } else {
+            Write-Host "✅ package.json déjà aligné"
+          }
+
+      - name: Reject if changelog entry is missing
         shell: node {0}
         run: |
           const fs = require('fs')
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
-          const version = pkg.version
-          const changelog = fs.readFileSync('src/renderer/data/changelog.ts', 'utf8')
-          const found = changelog.includes(`version: '${version}'`)
-          if (!found) {
-            console.error(`\n❌ ERREUR : La version ${version} n'a pas d'entrée dans src/renderer/data/changelog.ts`)
-            console.error(`   Ajoutez un bloc { version: '${version}', date: '...', changes: [...] } avant de pusher.\n`)
+
+          const version = process.env.VERSION
+          const changelogPath = 'src/renderer/data/changelog.ts'
+          const changelog = fs.readFileSync(changelogPath, 'utf8')
+
+          const expected = `version: '${version}'`
+
+          if (!changelog.includes(expected)) {
+            console.error(`\n❌ ERREUR : Le changelog ne contient pas l'entrée ${expected}`)
+            console.error(`   Fichier vérifié : ${changelogPath}`)
+            console.error(`   Le workflow est volontairement bloqué.\n`)
             process.exit(1)
           }
+
           console.log(`✅ Changelog trouvé pour la version ${version}`)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Commit updated package files if needed
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git diff --quiet package.json package-lock.json
+          if ($LASTEXITCODE -ne 0) {
+            git add package.json package-lock.json
+            git commit -m "chore: align package version with tag ${{ github.ref_name }}"
+            git push origin $env:DEFAULT_BRANCH
+            Write-Host "✅ package files poussés sur $env:DEFAULT_BRANCH"
+          } else {
+            Write-Host "✅ Aucun changement à commit"
+          }
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build Electron app
         run: npm run build
