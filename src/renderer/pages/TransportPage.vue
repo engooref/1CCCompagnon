@@ -73,7 +73,7 @@ async function fetchAll(force = false) {
     const { data, status } = await http.get(url, { headers: authHeaders() })
     logger.info('[Transport] réponse', status, data)
     const raw = data?.data ?? data
-    orders.value = (Array.isArray(raw) ? raw : [raw].filter(Boolean)) as TransportOrder[]
+    orders.value = (Array.isArray(raw) ? raw.filter(Boolean) : [raw].filter(Boolean)) as TransportOrder[]
     logger.info('[Transport] ordres chargés :', orders.value.length)
   } catch (e: any) {
     logger.error('[Transport] erreur :', {

@@ -75,9 +75,7 @@ export type GameWatcherCallbacks = {
 let watchInterval: ReturnType<typeof setInterval> | null = null
 let wasRunning = false
 
-async function tick(callbacks: GameWatcherCallbacks, alreadyRunning: boolean): Promise<void> {
-  const running = await isGameRunning()
-
+function processTick(callbacks: GameWatcherCallbacks, running: boolean, alreadyRunning: boolean): void {
   if (running && !wasRunning) {
     wasRunning = true
     // Si le jeu tournait déjà quand l'app a démarré, la fenêtre existe → pas de délai.
@@ -94,14 +92,20 @@ async function tick(callbacks: GameWatcherCallbacks, alreadyRunning: boolean): P
   }
 }
 
+async function tick(callbacks: GameWatcherCallbacks): Promise<void> {
+  const running = await isGameRunning()
+  processTick(callbacks, running, false)
+}
+
 export function startGameWatcher(callbacks: GameWatcherCallbacks): void {
   stopGameWatcher()
   wasRunning = false
 
-  // Vérification immédiate au démarrage
+  // Vérification immédiate au démarrage — on réutilise le résultat déjà obtenu
+  // pour éviter un double appel tasklist (1-3s chacun sur Windows)
   isGameRunning().then(alreadyRunning => {
-    tick(callbacks, alreadyRunning)
-    watchInterval = setInterval(() => tick(callbacks, false), 2000)
+    processTick(callbacks, alreadyRunning, alreadyRunning)
+    watchInterval = setInterval(() => tick(callbacks), 2000)
   })
 }
 

@@ -95,11 +95,11 @@ function withMeta(
 
 export const PATTERNS: Pattern[] = [
   // ── Player name ────────────────────────────────────────────────────────────
-  // Earliest detection : Channel Created contains nickname="<handle>" playerGEID=
+  // Earliest detection : Channel Created contains nickname="<handle>" playerGEID=<id>
   {
     type: 'player',
-    regex: /nickname="([^"]+)"\s+playerGEID=/,
-    extract: (m, rawLine) => withMeta({ player: m[1] }, rawLine),
+    regex: /nickname="([^"]+)"\s+playerGEID=(\d+)/,
+    extract: (m, rawLine) => withMeta({ player: m[1], playerGEID: m[2] }, rawLine),
   },
   {
     type: 'player',
@@ -134,12 +134,48 @@ export const PATTERNS: Pattern[] = [
     extract: (m, rawLine) => withMeta({ shard: m[1] }, rawLine),
   },
 
-  // ── Frontend / hangar ───────────────────────────────────────────────────────────
+  // ── Frontend / hangar ──────────────────────────────────────────────────────
   {
     type: 'hangar_enter',
     regex: /SubsumptionMissionComponent streaming in FrontendHangar/,
     extract: (_m, rawLine) => withMeta({}, rawLine),
   },
+
+  // ── Véhicule : spawn / destruction ────────────────────────────────────────
+  // Format : [VEHICLE SPAWN] CPlayerShipRespawnManager::OnVehicleSpawned <entityId> (<ShipName_entityId>) by player <playerGEID>
+  {
+    type: 'vehicle_spawn',
+    regex: /\[VEHICLE SPAWN\] CPlayerShipRespawnManager::OnVehicleSpawned \d+ \(([^)]+)\) by player (\d+)/,
+    extract: (m, rawLine) => withMeta({
+      shipRaw: m[1],
+      ship:    labelShip(m[1]),
+      playerGEID: m[2],
+    }, rawLine),
+  },
+  // Format : [VEHICLE SPAWN] Vehicle Destroyed (<ShipName_entityId>). Killed by (<player>). Reason: <reason>
+  {
+    type: 'vehicle_destroyed',
+    regex: /\[VEHICLE SPAWN\] Vehicle Destroyed \(([^)]+)\)\. Killed by \(([^)]+)\)\. Reason: (.+)/,
+    extract: (m, rawLine) => withMeta({
+      shipRaw:  m[1],
+      ship:     labelShip(m[1]),
+      killedBy: m[2].trim(),
+      reason:   m[3].trim(),
+    }, rawLine),
+  },
+
+  // ── Mort du joueur / éjection de zone ─────────────────────────────────────
+  // Format : <[ActorState] Dead> ... Actor '<player>' [id] ejected from zone '<from>' [id] to zone '<to>' [id]
+  {
+    type: 'player_ejected',
+    regex: /<\[ActorState\] Dead>.*Actor '([^']+)' \[\d+\] ejected from zone '([^']+)' \[\d+\] to zone '([^']+)'/,
+    extract: (m, rawLine) => withMeta({
+      player:   m[1],
+      fromZone: m[2],
+      toZone:   m[3],
+    }, rawLine),
+  },
+
   // ── Quantum / navigation ──────────────────────────────────────────────────
   {
     type: 'quantum_selected',
@@ -184,31 +220,12 @@ export const PATTERNS: Pattern[] = [
       }, rawLine),
   },
 
-  // ── ATC / landing request ────────────────────────────────────────────────
+  // ── ATC / landing request ─────────────────────────────────────────────────
   {
     type: 'atc_request',
-    // DoEstablishCommunicationCommon: ... for <player> [id] to track ... AImodule_ATC_<id>
     regex: /DoEstablishCommunicationCommon:.*\bfor (\S+) \[\d+\] to track their communication partner AImodule_ATC_/,
     extract: (m, rawLine) =>
       withMeta({ player: m[1] }, rawLine),
-  },
-  {
-    type: 'zone_transition',
-    regex: /^<Requesting Transition>\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^\|]+?)\s*\[(\d+)\]\s*\|\s*Transitioning from zone (\S+) in (\S+) to zone (\S+) in (\S+)\s*\[([^\]]+)\]\[([^\]]+)\]/,
-    extract: (m, rawLine) =>
-      withMeta({
-        component: m[1].trim(),
-        status: m[2].trim(),
-        currentSystem: m[3].trim(),
-        host: m[4].trim(),
-        hostId: m[5],
-        fromZone: m[6],
-        fromSystem: m[7],
-        toZone: m[8],
-        toSystem: m[9],
-        team: m[10],
-        category: m[11],
-      }, rawLine),
   },
 
   // ── Inventory / location ──────────────────────────────────────────────────
@@ -235,7 +252,6 @@ export const PATTERNS: Pattern[] = [
   // ── Disconnect ────────────────────────────────────────────────────────────
   {
     type: 'disconnect',
-    // Log: <Channel Disconnected> cause=30010 reason="Nub destroyed" ... hostType="Replicant"
     regex: /^<Channel Disconnected>\s+cause=(\d+)\s+reason="([^"]+)".*hostType="([^"]+)".*nickname="([^"]+)"/,
     extract: (m, rawLine) =>
       withMeta({

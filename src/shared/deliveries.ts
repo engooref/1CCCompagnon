@@ -27,6 +27,7 @@ export interface ManifestItem {
   commodityName?: string | null
   quantity?: number
   crateSizeMax?: number | null
+  cargos?: CargoItem[]
 }
 
 export interface ItineraryLine {

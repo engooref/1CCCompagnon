@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { http } from '../services/http'
@@ -20,8 +20,10 @@ const { isPinned, toggle: togglePin } = usePinnedTransport()
 const order     = ref<TransportOrder | null>(null)
 const loading   = ref(false)
 const error     = ref<string | null>(null)
+const deleting  = ref(false)
 const savingLeg = ref<string | null>(null)
 const expandedLegs = ref(new Set<string | number>())
+const generatingItinerary = ref(false)
 
 // ─── Market Opportunities ──────────────────────────────────────────────────
 const showMarketOpp    = ref(app.settings?.marketOppsEnabled ?? false)
@@ -159,7 +161,8 @@ async function fetchOrder() {
     const { data } = await http.get(urls.value.transportShow(orderId.value), {
       headers: authHeaders()
     })
-    order.value = (data?.data ?? data) as TransportOrder
+    const raw = data?.data ?? data
+    order.value = (raw?.order ?? raw) as TransportOrder | null
 
     connectMercure(
       urls.value.mercureInfo,
@@ -168,13 +171,32 @@ async function fetchOrder() {
         const { data } = await http.get(urls.value!.transportShow(orderId.value), {
           headers: authHeaders()
         })
-        order.value = (data?.data ?? data) as TransportOrder
+        const raw = data?.data ?? data
+        order.value = (raw?.order ?? raw) as TransportOrder | null
       },
     )
   } catch (e: any) {
     error.value = e?.response?.data?.message ?? e?.message ?? 'Erreur de chargement'
   } finally {
     loading.value = false
+  }
+}
+
+async function deleteOrder() {
+  if (!app.bearerToken || !urls.value || !order.value) return
+  if (!confirm(`Supprimer l'ordre "${order.value.name}" ? Cette action est irréversible.`)) return
+
+  deleting.value = true
+  try {
+    await http.delete(urls.value.transportShow(orderId.value), {
+      headers: authHeaders()
+    })
+    app.transportsLoaded = false
+    router.push({ name: 'transport' })
+  } catch (e: any) {
+    error.value = e?.response?.data?.message ?? e?.message ?? 'Erreur lors de la suppression'
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -201,6 +223,29 @@ async function toggleLeg(leg: ItineraryLine) {
 onMounted(() => {
   if (app.status.authReady) fetchOrder()
 })
+
+onUnmounted(() => {
+  // Invalider le cache pour forcer un rechargement de la liste
+  // (le statut obsolete peut avoir changé depuis la dernière fetch de liste)
+  app.transportsLoaded = false
+})
+
+async function generateItinerary() {
+  if (!app.bearerToken || !urls.value || !order.value) return
+  generatingItinerary.value = true
+  try {
+    await http.post(
+      urls.value.transportGenerate(orderId.value),
+      {},
+      { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
+    )
+    await fetchOrder()
+  } catch (e: any) {
+    error.value = e?.response?.data?.message ?? e?.message ?? 'Erreur lors de la génération'
+  } finally {
+    generatingItinerary.value = false
+  }
+}
 </script>
 
 <template>
@@ -231,6 +276,33 @@ onMounted(() => {
       </div>
 
       <div class="ml-auto flex items-center gap-2">
+        <button
+          @click="router.push({ name: 'transport-edit', params: { id: orderId } })"
+          class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+          title="Modifier l'ordre"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Modifier
+        </button>
+        <button
+          @click="deleteOrder"
+          :disabled="deleting"
+          class="flex items-center gap-1.5 rounded-md border border-rose-400/30 bg-rose-400/10 px-2.5 py-1 text-xs font-medium text-rose-300 hover:bg-rose-400/15 hover:border-rose-400/50 transition disabled:opacity-50"
+          title="Supprimer l'ordre"
+        >
+          <svg v-if="deleting" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+          Supprimer
+        </button>
         <button
           @click="togglePin(orderId)"
           class="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition"
@@ -306,9 +378,32 @@ onMounted(() => {
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mb-3">
           <span><span class="text-slate-400 font-medium">{{ lines.length }}</span> étape(s)</span>
           <span><span class="text-slate-400 font-medium">{{ order.ships?.length ?? 0 }}</span> vaisseau(x)</span>
-          <span v-if="order.itinerary?.generatedAt" class="ml-auto text-slate-600">
-            Généré : {{ formatDate(order.itinerary.generatedAt) }}
-          </span>
+          <div class="ml-auto flex items-center gap-2">
+            <span v-if="order.itinerary?.generatedAt" class="text-slate-600">
+              Généré : {{ formatDate(order.itinerary.generatedAt) }}
+            </span>
+            <button
+              v-if="order.itinerary?.obsolete || !order.itinerary?.generatedAt"
+              @click="generateItinerary"
+              :disabled="generatingItinerary"
+              class="flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition disabled:opacity-40"
+              :class="order.itinerary?.obsolete
+                ? 'border-rose-400/30 bg-rose-400/5 text-rose-300 hover:bg-rose-400/10'
+                : 'border-cyan-400/20 bg-cyan-400/5 text-cyan-200 hover:bg-cyan-400/10'"
+            >
+              <svg v-if="generatingItinerary" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              </svg>
+              <svg v-else-if="order.itinerary?.obsolete" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <svg v-else class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              {{ generatingItinerary ? 'Génération…' : order.itinerary?.obsolete ? 'Régénérer' : 'Générer l\'itinéraire' }}
+            </button>
+          </div>
         </div>
 
         <!-- Ships list -->

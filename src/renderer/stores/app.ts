@@ -33,8 +33,12 @@ export const useAppStore = defineStore('app', {
     async init() {
       this.loading = true
       try {
-        this.settings = await window.oneCC.getSettings()
-        this.apiKeyPresent = Boolean(await window.oneCC.getApiKey())
+        const [settings, apiKey] = await Promise.all([
+          window.oneCC.getSettings(),
+          window.oneCC.getApiKey(),
+        ])
+        this.settings = settings
+        this.apiKeyPresent = Boolean(apiKey)
         if (this.apiKeyPresent) {
           await this.authenticate()
         } else {

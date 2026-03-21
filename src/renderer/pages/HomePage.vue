@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { usePinnedTransport } from '../composables/usePinnedTransport'
+import { useGameLog } from '../composables/useGameLog'
 import { http } from '../services/http'
 import { createOverlayUrls } from '../config/api'
 import type { TransportOrder } from '../../shared/deliveries'
@@ -11,6 +12,7 @@ import type { TransportOrder } from '../../shared/deliveries'
 
 const app = useAppStore()
 const { pinnedId, isPinned } = usePinnedTransport()
+const { running } = useGameLog()
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +72,7 @@ async function fetchOrders() {
   try {
     const { data } = await http.get(url, { headers: { Authorization: `Bearer ${app.bearerToken}` } })
     const raw = data?.data ?? data
-    orders.value = (Array.isArray(raw) ? raw : [raw].filter(Boolean)) as TransportOrder[]
+    orders.value = (Array.isArray(raw) ? raw.filter(Boolean) : [raw].filter(Boolean)) as TransportOrder[]
     app.transports = orders.value
     app.transportsLoaded = true
   } catch {

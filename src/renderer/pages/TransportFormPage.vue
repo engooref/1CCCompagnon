@@ -14,6 +14,14 @@ interface FormShip {
   note: string
 }
 
+interface FormCargo {
+  _k: number
+  id?: number | null
+  commodityId: number | null
+  commodityName: string
+  quantity: number
+}
+
 interface FormManifest {
   _k: number
   id: number | null
@@ -24,6 +32,7 @@ interface FormManifest {
   commodityId: number | null
   commodityName: string
   quantity: number
+  cargos: FormCargo[]
 }
 
 interface SearchState {
@@ -61,10 +70,12 @@ const form = reactive({
 const loading    = ref(false)
 const saving     = ref(false)
 const generating = ref(false)
+const generatingItinerary = ref(false)
 const deleting   = ref(false)
 const error      = ref<string | null>(null)
 const saveError  = ref<string | null>(null)
 const savedId    = ref<number | null>(null)
+const itineraryGenerated = ref(false)
 
 // ─── Ship models ──────────────────────────────────────────────────────────────
 
@@ -111,8 +122,8 @@ async function loadReference() {
   if (!urls.value) return
   try {
     const { data } = await http.get(urls.value.shipModels, { headers: authHeaders() })
-
-    shipModels.value = data?.data ?? []
+    const raw = data?.data ?? data
+    shipModels.value = (Array.isArray(raw) ? raw.filter(Boolean) : []) as ShipModel[]
   } catch {
     shipModels.value = []
   }
@@ -126,7 +137,12 @@ async function loadOrder() {
     const { data } = await http.get(urls.value.transportShow(orderId.value), {
       headers: authHeaders(),
     })
-    const order = data?.data ?? data
+    const raw = data?.data ?? data
+    const order = (raw?.order ?? raw) as any
+    if (!order) {
+      error.value = 'Ordre introuvable'
+      return
+    }
 
     form.name            = order.name ?? null
     form.origin          = order.origin ?? null
@@ -137,25 +153,48 @@ async function loadOrder() {
       note:   s.note ?? '',
     }))
 
-    form.manifests = (order.manifests ?? []).map((m: any, i: number) => ({
-      _k:           Date.now() + 1000 + i,
-      id:           m.id ?? null,
-      pickup:       m.pickup ?? null,
-      pickupName:   m.pickupName ?? '',
-      dropoff:      m.dropoff ?? null,
-      dropoffName:  m.dropoffName ?? '',
-      commodityId:  m.commodityId ?? null,
-      commodityName: m.commodityName ?? '',
-      quantity:     m.quantity ?? 1,
-    }))
+      // Group server manifests by pickup+dropoff into a single form manifest with multiple cargos
+      const rawManifests: any[] = order.manifests ?? []
+      const groups: Record<string, any> = {}
+        for (const m of rawManifests) { 
+        const key = `${m.pickup ?? 'null'}::${m.dropoff ?? 'null'}`
+        const cargo = (m.cargos && m.cargos.length)
+          ? m.cargos.map((c: any) => ({ id: c.id ?? null, commodityId: c.commodityId ?? null, commodityName: c.commodityName ?? '', quantity: c.quantity ?? 1 }))
+          : [{ id: m.id ?? null, commodityId: m.commodityId ?? null, commodityName: m.commodityName ?? '', quantity: m.quantity ?? 1 }]
+
+        if (!groups[key]) {
+          groups[key] = {
+            _k: Date.now() + Math.floor(Math.random() * 10000),
+            id: null,
+            pickup: m.pickup ?? null,
+            pickupName: m.pickupName ?? '',
+            dropoff: m.dropoff ?? null,
+            dropoffName: m.dropoffName ?? '',
+            commodityId: null,
+            commodityName: '',
+            quantity: 1,
+            cargos: [] as FormCargo[],
+          }
+        }
+
+        for (const c of cargo) {
+          const _k = Date.now() + Math.floor(Math.random() * 10000)
+          groups[key].cargos.push({ _k, id: c.id ?? null, commodityId: c.commodityId ?? null, commodityName: c.commodityName ?? '', quantity: c.quantity ?? 1 })
+        }
+      }
+      form.manifests = Object.values(groups) as FormManifest[]
 
     getSearch('origin').query = form.originName
     for (const m of form.manifests) {
       getSearch(`pickup_${m._k}`).query    = m.pickupName
       getSearch(`dropoff_${m._k}`).query   = m.dropoffName
       getSearch(`commodity_${m._k}`).query = m.commodityName
+      for (const c of m.cargos) {
+        getSearch(`commodity_${m._k}_c_${c._k}`).query = c.commodityName ?? ''
+      }
     }
     savedId.value = order.id
+    itineraryGenerated.value = !!(order.itinerary && (order.itinerary.lines ?? []).length)
   } catch (e: any) {
     error.value = e?.response?.data?.message ?? e?.message ?? 'Erreur de chargement'
   } finally {
@@ -206,10 +245,17 @@ function addLine() {
     dropoff: null, dropoffName: '',
     commodityId: null, commodityName: '',
     quantity: 1,
+    cargos: [],
   })
   getSearch(`pickup_${_k}`).query    = ''
   getSearch(`dropoff_${_k}`).query   = ''
-  getSearch(`commodity_${_k}`).query = ''
+  // initialize with one empty cargo so UI always shows multi-cargo inputs
+  const m = form.manifests.find(mm => mm._k === _k)
+  if (m) {
+    const c_k = Date.now() + Math.floor(Math.random() * 1000)
+    m.cargos.push({ _k: c_k, id: null, commodityId: null, commodityName: '', quantity: 1 })
+    getSearch(`commodity_${_k}_c_${c_k}`).query = ''
+  }
 }
 
 function removeLine(idx: number) {
@@ -218,6 +264,10 @@ function removeLine(idx: number) {
     delete searches[`pickup_${m._k}`]
     delete searches[`dropoff_${m._k}`]
     delete searches[`commodity_${m._k}`]
+    // remove cargo search keys
+    (m.cargos ?? []).forEach(c => {
+      delete searches[`commodity_${m._k}_c_${c._k}`]
+    })
   }
   form.manifests.splice(idx, 1)
 }
@@ -320,16 +370,51 @@ async function searchCommodity(fieldKey: string, query: string) {
 }
 
 function selectCommodity(fieldKey: string, commodity: any) {
-  const key = Number(fieldKey.replace('commodity_', ''))
-  const m   = form.manifests.find(m => m._k === key)
-  if (m) {
-    m.commodityId   = commodity.id
-    m.commodityName = commodity.name
+  // support cargo keys: commodity_{manifestKey}_c_{cargoKey}
+  if (fieldKey.includes('_c_')) {
+    const parts = fieldKey.replace('commodity_', '').split('_c_')
+    const manifestKey = Number(parts[0])
+    const cargoKey = Number(parts[1])
+    const m = form.manifests.find(mm => mm._k === manifestKey)
+    if (m) {
+      const c = m.cargos.find(cc => cc._k === cargoKey)
+      if (c) {
+        c.commodityId = commodity.id
+        c.commodityName = commodity.name
+      }
+    }
+  } else {
+    const key = Number(fieldKey.replace('commodity_', ''))
+    const m   = form.manifests.find(m => m._k === key)
+    if (m) {
+      m.commodityId   = commodity.id
+      m.commodityName = commodity.name
+    }
   }
   const s   = getSearch(fieldKey)
   s.query   = commodity.name
   s.show    = false
   s.results = []
+}
+
+function addCargo(manifestKey: number) {
+  const m = form.manifests.find(mm => mm._k === manifestKey)
+  if (!m) return
+  const _k = Date.now() + Math.floor(Math.random() * 1000)
+  // Always add a new, empty cargo entry. Do not migrate or clear legacy single-item fields.
+  const initial = { id: null, commodityId: null, commodityName: '', quantity: 1 }
+  m.cargos.push({ _k, ...initial })
+  getSearch(`commodity_${manifestKey}_c_${_k}`).query = ''
+}
+
+function removeCargo(manifestKey: number, cargoKey: number) {
+  const m = form.manifests.find(mm => mm._k === manifestKey)
+  if (!m) return
+  const idx = m.cargos.findIndex(c => c._k === cargoKey)
+  if (idx !== -1) {
+    delete searches[`commodity_${manifestKey}_c_${cargoKey}`]
+    m.cargos.splice(idx, 1)
+  }
 }
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
@@ -342,13 +427,23 @@ async function save(): Promise<number | null> {
     name:            form.name,
     origin:          form.origin,
     ships:    form.ships.map(s => ({ shipId: s.shipId, note: s.note })),
-    lines:    form.manifests.map(m => ({
-      ...(m.id ? { id: m.id } : {}),
-      pickup:      m.pickup,
-      dropoff:     m.dropoff,
-      commodityId: m.commodityId,
-      quantity:    m.quantity ?? 1,
-    })),
+    lines:    form.manifests.flatMap(m =>
+      (m.cargos && m.cargos.length)
+        ? m.cargos.map(c => ({
+            ...(c.id ? { id: c.id } : {}),
+            pickup:      m.pickup,
+            dropoff:     m.dropoff,
+            commodityId: c.commodityId,
+            quantity:    c.quantity ?? 1,
+          }))
+        : [{
+            ...(m.id ? { id: m.id } : {}),
+            pickup:      m.pickup,
+            dropoff:     m.dropoff,
+            commodityId: m.commodityId,
+            quantity:    m.quantity ?? 1,
+          }]
+    ),
   }
   try {
     if (savedId.value) {
@@ -404,6 +499,24 @@ async function generate() {
   }
 }
 
+async function generateItinerary() {
+  if (!urls.value || !savedId.value) return
+  generatingItinerary.value = true
+  try {
+    await http.post(
+      urls.value.transportGenerate(savedId.value),
+      {},
+      { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
+    )
+    // refresh order data for the form
+    await loadOrder()
+  } catch (e: any) {
+    saveError.value = e?.response?.data?.message ?? e?.message ?? 'Erreur de génération'
+  } finally {
+    generatingItinerary.value = false
+  }
+}
+
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 async function deleteDelivery() {
@@ -446,6 +559,21 @@ async function deleteDelivery() {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
           </svg>
           Retour
+        </button>
+        <button
+          v-if="savedId && !itineraryGenerated"
+          @click="generateItinerary"
+          :disabled="generatingItinerary || saving || generating"
+          class="shrink-0 flex items-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/5 px-2.5 py-1 text-xs font-medium text-cyan-300/70 hover:bg-cyan-400/10 hover:text-cyan-200 transition disabled:opacity-40"
+        >
+          <svg v-if="generatingItinerary" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          <svg v-else class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          {{ generatingItinerary ? 'Génération…' : 'Générer l\'itinéraire' }}
         </button>
 
         <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -713,48 +841,58 @@ async function deleteDelivery() {
                 </div>
               </div>
 
-              <!-- Commodity + Quantity -->
-              <div class="grid grid-cols-3 gap-2">
+              <!-- Commodity + Quantity (support multiple cargos per line) -->
+              <div>
+                <label class="block text-[10px] text-slate-600 mb-1">Marchandises</label>
 
-                <!-- Commodity -->
-                <div class="col-span-2">
-                  <label class="block text-[10px] text-slate-600 mb-1">Marchandise</label>
-                  <div class="relative">
-                    <input
-                      :value="getSearch(`commodity_${m._k}`).query"
-                      @input="onCommodityInput(`commodity_${m._k}`, ($event.target as HTMLInputElement).value)"
-                      @blur="hideSearch(`commodity_${m._k}`)"
-                      type="text"
-                      placeholder="Rechercher une marchandise…"
-                      class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-                    />
-                    <div
-                      v-if="getSearch(`commodity_${m._k}`).show || getSearch(`commodity_${m._k}`).loading"
-                      class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-40 overflow-y-auto"
-                    >
-                      <div v-if="getSearch(`commodity_${m._k}`).loading" class="px-3 py-2 text-xs text-slate-500">Recherche…</div>
-                      <button
-                        v-for="c in getSearch(`commodity_${m._k}`).results"
-                        :key="c.id"
-                        @mousedown.prevent="selectCommodity(`commodity_${m._k}`, c)"
-                        class="w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
-                      >
-                        {{ c.name }}
-                      </button>
+                <!-- Multiple cargos UI (always shown) -->
+                <div class="space-y-2">
+                  <div
+                    v-for="(c, ci) in m.cargos"
+                    :key="c._k"
+                    class="grid grid-cols-12 gap-2 items-center"
+                  >
+                    <div class="col-span-7">
+                      <div class="relative">
+                        <input
+                          :value="getSearch(`commodity_${m._k}_c_${c._k}`).query"
+                          @input="onCommodityInput(`commodity_${m._k}_c_${c._k}`, ($event.target as HTMLInputElement).value)"
+                          @blur="hideSearch(`commodity_${m._k}_c_${c._k}`)"
+                          type="text"
+                          placeholder="Rechercher une marchandise…"
+                          class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                        />
+                        <div
+                          v-if="getSearch(`commodity_${m._k}_c_${c._k}`).show || getSearch(`commodity_${m._k}_c_${c._k}`).loading"
+                          class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-40 overflow-y-auto"
+                        >
+                          <div v-if="getSearch(`commodity_${m._k}_c_${c._k}`).loading" class="px-3 py-2 text-xs text-slate-500">Recherche…</div>
+                          <button
+                            v-for="res in getSearch(`commodity_${m._k}_c_${c._k}`).results"
+                            :key="res.id"
+                            @mousedown.prevent="selectCommodity(`commodity_${m._k}_c_${c._k}`, res)"
+                            class="w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
+                          >
+                            {{ res.name }}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-span-3">
+                      <input
+                        v-model.number="c.quantity"
+                        type="number"
+                        min="1"
+                        class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100"
+                      />
+                    </div>
+                    <div class="col-span-2 flex items-center justify-end">
+                      <button @click="removeCargo(m._k, c._k)" type="button" class="text-rose-400 hover:underline text-xs">Suppr</button>
                     </div>
                   </div>
-                </div>
-
-                <!-- Quantity -->
-                <div>
-                  <label class="block text-[10px] text-slate-600 mb-1">Quantité (SCU)</label>
-                  <input
-                    v-model.number="m.quantity"
-                    type="number"
-                    min="1"
-                    placeholder="1"
-                    class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-                  />
+                  <div>
+                    <button @click="addCargo(m._k)" type="button" class="text-xs text-cyan-300 hover:underline">+ Ajouter une cargaison</button>
+                  </div>
                 </div>
               </div>
 

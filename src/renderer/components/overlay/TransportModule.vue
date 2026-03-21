@@ -105,8 +105,9 @@ async function fetchActiveOrder() {
         const { data } = await http.get(urls.transportShow(pinnedId.value), {
           headers: { Authorization: `Bearer ${token}` },
         })
-        const o = (data?.data ?? data) as TransportOrder
-        if (o?.id) { order.value = o; return }
+        const raw = data?.data ?? data
+        const o = (raw?.order ?? raw) as TransportOrder | null
+        if (o && o.id) { order.value = o; return }
       } catch {
         // ordre épinglé introuvable → fallback
       }
@@ -117,7 +118,7 @@ async function fetchActiveOrder() {
       headers: { Authorization: `Bearer ${token}` },
     })
     const raw = data?.data ?? data
-    const orders = (Array.isArray(raw) ? raw : [raw].filter(Boolean)) as TransportOrder[]
+    const orders = (Array.isArray(raw) ? raw.filter(Boolean) : [raw].filter(Boolean)) as TransportOrder[]
     order.value =
       orders.find((o) => {
         const l = o.itinerary?.lines ?? []

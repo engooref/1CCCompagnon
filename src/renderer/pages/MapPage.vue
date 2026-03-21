@@ -39,7 +39,8 @@ async function fetchAll() {
   error.value   = null
   try {
     const { data } = await http.get(url, { headers: authHeaders() })
-    maps.value = (data?.data ?? data) as MapInfo[]
+    const raw = data?.data ?? data
+    maps.value = (Array.isArray(raw) ? raw.filter(Boolean) : [raw].filter(Boolean)) as MapInfo[]
   } catch (e: any) {
     error.value = e?.response?.data?.message ?? e?.message ?? 'Erreur de chargement'
     maps.value  = []

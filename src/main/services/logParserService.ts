@@ -4,6 +4,7 @@ import { parseLine } from './logPatterns'
 
 export interface GameState {
   player: string | null
+  playerGEID: string | null
   ship: string | null
   location: string | null
   destination: string | null
@@ -27,6 +28,7 @@ type Listener = (state: GameState, event: GameEvent) => void
 class LogParser {
   private state: GameState = {
     player: null,
+    playerGEID: null,
     ship: null,
     location: null,
     destination: null,
@@ -82,7 +84,48 @@ class LogParser {
       case 'player':
         if (d.player && d.player !== 'INVALID' && d.player !== 'unknown' && this.state.player !== d.player) {
           this.state.player = d.player
+          if (d.playerGEID) this.state.playerGEID = d.playerGEID
           this.emit('player', `Joueur : ${d.player}`, { player: d.player }, at)
+        } else if (d.playerGEID && !this.state.playerGEID) {
+          this.state.playerGEID = d.playerGEID
+        }
+        break
+
+      case 'vehicle_spawn': {
+        // Ne mettre à jour le vaisseau que si c'est le spawn du joueur local (GEID non nul et connu)
+        const geid = d.playerGEID ?? ''
+        if (geid !== '0' && geid !== '' && this.state.playerGEID === geid) {
+          const ship = d.ship ?? null
+          if (ship && this.state.ship !== ship) {
+            this.state.ship = ship
+            this.emit('vehicle_spawn', `Vaisseau : ${ship}`, { ship, shipRaw: d.shipRaw ?? null }, at)
+          }
+        }
+        break
+      }
+
+      case 'vehicle_destroyed':
+        this.emit('vehicle_destroyed', `Vaisseau détruit : ${d.ship}`, {
+          ship:     d.ship ?? null,
+          shipRaw:  d.shipRaw ?? null,
+          killedBy: d.killedBy ?? null,
+          reason:   d.reason ?? null,
+        }, at)
+        // Effacer le vaisseau si c'est le joueur lui-même qui a été tué
+        if (d.killedBy && d.killedBy === this.state.player) {
+          this.state.ship = null
+        }
+        break
+
+      case 'player_ejected':
+        if (d.player === this.state.player) {
+          this.state.ship = null
+          this.state.activity = 'space'
+          this.emit('player_death', `Mort : éjecté de ${d.fromZone}`, {
+            player:   d.player ?? null,
+            fromZone: d.fromZone ?? null,
+            toZone:   d.toZone ?? null,
+          }, at)
         }
         break
 
@@ -161,14 +204,6 @@ class LogParser {
         this.emit('quantum_preparing', `Préparation quantum vers ${d.destination}`, {
           destination: d.destination ?? null,
           ship: this.state.ship,
-        }, at)
-        break
-
-      case 'zone_transition':
-        this.state.location = d.toZone ?? this.state.location
-        this.emit('zone_transition', `${d.fromZone} → ${d.toZone}`, {
-          fromZone: d.fromZone ?? null,
-          toZone: d.toZone ?? null,
         }, at)
         break
 
@@ -392,6 +427,7 @@ class LogParser {
     } else {
       this.state = {
         player: null,
+        playerGEID: null,
         ship: null,
         location: null,
         destination: null,

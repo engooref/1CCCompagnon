@@ -10,7 +10,6 @@ import MapDetailPage from '../pages/MapDetailPage.vue'
 import GameLogPage from '../pages/GameLogPage.vue'
 import OverlayPage from '../pages/OverlayPage.vue'
 import OverlayEditorPage from '../pages/OverlayEditorPage.vue'
-import PerfPage from '../pages/PerfPage.vue'
 import AgendaPage from '../pages/AgendaPage.vue'
 import AgendaDetailPage from '../pages/AgendaDetailPage.vue'
 
@@ -31,6 +30,5 @@ export const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/overlay', name: 'overlay', component: OverlayPage },
     { path: '/overlay-editor', name: 'overlay-editor', component: OverlayEditorPage },
-    { path: '/perf', name: 'perf', component: PerfPage },
   ]
 })

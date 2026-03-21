@@ -105,7 +105,14 @@ function createMainWindow() {
   })
 
   setMainWindow(mainWindow)
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+    // Démarrer uIOhook après l'affichage de la fenêtre pour ne pas bloquer le démarrage
+    setImmediate(() => {
+      uIOhook.start()
+      ioHookStarted = true
+    })
+  })
   mainWindow.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') mainWindow?.webContents.toggleDevTools()
   })
@@ -144,12 +151,13 @@ app.whenReady().then(async () => {
   createMainWindow()
   createOverlayWindow()
 
-  // Start automatic update checks (reads settings.updateCheckInterval if present)
-  try { startAutoUpdateChecker() } catch (e) { /* ignore */ }
-  try {
-    await initAutoUpdater()
-    setTimeout(() => checkForUpdatesNative().catch(() => {}), 3000)
-  } catch (e) { /* ignore */ }
+  // Démarrage des services en arrière-plan (non-bloquants)
+  setImmediate(() => {
+    try { startAutoUpdateChecker() } catch { /* ignore */ }
+    initAutoUpdater()
+      .then(() => setTimeout(() => checkForUpdatesNative().catch(() => {}), 5000))
+      .catch(() => { /* ignore */ })
+  })
 
   // Propagate layout changes to overlay immediately
   onLayoutChange((layout) => {
@@ -167,7 +175,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  startGameWatcher({
+  // Démarrer le watcher de jeu en arrière-plan pour ne pas bloquer l'affichage de la fenêtre.
+  // tasklist (isGameRunning) prend 1-3s sur Windows — on le diffère pour ne pas retarder le rendu.
+  setImmediate(() => startGameWatcher({
     onStart(bounds) {
       currentGameBounds = bounds
       setOverlayBounds(toLogicalBounds(bounds))
@@ -179,16 +189,6 @@ app.whenReady().then(async () => {
       if (gameFolder) {
         logParser.start(gameFolder)
         showOverlayIfInGame()
-      }
-
-      const toggleOverlay = async () => {
-        if (getOverlayWindow()?.isVisible()) {
-          hideOverlay()
-          manuallyHidden = true
-        } else {
-          manuallyHidden = false
-          await refreshOverlayBounds()
-        }
       }
 
       startWindowStateWatcher({
@@ -217,7 +217,7 @@ app.whenReady().then(async () => {
       hideOverlay()
       manuallyHidden = false
     },
-  })
+  }))
 
   // Map toggle key setup
   const toggleMapVisibility = () => {
@@ -349,8 +349,6 @@ app.whenReady().then(async () => {
   }
 
   uIOhook.on('keydown', (e: any) => { /* debug */ })
-  uIOhook.start()
-  ioHookStarted = true
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

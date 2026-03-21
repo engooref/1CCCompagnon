@@ -60,7 +60,8 @@ async function fetchAndApplyFeatures(id: number) {
     const { data } = await http.get(urls.mapFeatures(id), {
       headers: { Authorization: `Bearer ${token}` },
     })
-    const features = (data?.data ?? data) as MapFeature[]
+    const raw = data?.data ?? data
+    const features = (Array.isArray(raw) ? raw.filter(Boolean) : []) as MapFeature[]
     logger.info('[MapModule] fetchAndApplyFeatures ✓ count=', Array.isArray(features) ? features.length : 'NOT_ARRAY', features)
     if (Array.isArray(features) && currentMapInfo) leaflet.applyFeatures(features, currentMapInfo)
   } catch (e) {

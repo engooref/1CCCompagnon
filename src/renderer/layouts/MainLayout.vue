@@ -9,7 +9,7 @@ import { createOverlayUrls } from '../config/api'
 const app = useAppStore()
 const route = useRoute()
 
-const NAV_ORDER = ['/', '/transport', '/maps', '/agenda', '/profils', '/gamelog', '/perf', '/settings']
+const NAV_ORDER = ['/', '/transport', '/maps', '/agenda', '/profils', '/gamelog', '/settings']
 
 const transitionName = ref('page-forward')
 let prevIndex = NAV_ORDER.indexOf('/')
@@ -58,11 +58,7 @@ async function checkUpcomingEvents() {
   }
 }
 
-onMounted(async () => {
-  if (!app.settings) {
-    await app.init()
-  }
-
+onMounted(() => {
   // Vérification immédiate puis toutes les minutes
   checkUpcomingEvents()
   agendaTimer = setInterval(checkUpcomingEvents, 60_000)
@@ -120,13 +116,6 @@ onUnmounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
               </svg>
               Journal jeu
-            </RouterLink>
-
-            <RouterLink to="/perf" class="flex items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors" active-class="border-cyan-400/30 bg-cyan-400/10 text-cyan-200">
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-              </svg>
-              Performances
             </RouterLink>
 
             <!-- Séparateur + Paramètres en bas -->

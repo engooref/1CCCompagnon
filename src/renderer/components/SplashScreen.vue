@@ -1,30 +1,63 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
+const props = defineProps<{ ready?: boolean }>()
 const emit = defineEmits<{ done: [] }>()
 
 const progress = ref(0)
 const phase = ref<'enter' | 'load' | 'exit'>('enter')
+const version = ref('0.2')
+
+let appReady = false
+let rafId: number | null = null
+
+function finishSplash() {
+  if (phase.value === 'exit') return
+  if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+  // Remplir rapidement la barre jusqu'à 100 %
+  const fill = () => {
+    progress.value = Math.min(100, progress.value + 8)
+    if (progress.value < 100) {
+      rafId = requestAnimationFrame(fill)
+    } else {
+      phase.value = 'exit'
+      setTimeout(() => emit('done'), 420)
+    }
+  }
+  rafId = requestAnimationFrame(fill)
+}
+
+watch(() => props.ready, (val) => {
+  if (val) {
+    appReady = true
+    if (phase.value === 'load') finishSplash()
+  }
+})
 
 onMounted(() => {
+  try {
+    ;(window as any).oneCC.getAppVersion().then((v: string) => { if (v) version.value = v })
+  } catch { /* ignore */ }
+
   // Phase 1 : entrée du logo (600ms)
   setTimeout(() => {
     phase.value = 'load'
 
-    // Phase 2 : barre de chargement (1400ms)
+    // Si l'app est déjà prête, terminer directement
+    if (appReady) { finishSplash(); return }
+
+    // Phase 2 : progression lente plafonnée à 85% en attendant l'app
     const start = Date.now()
-    const duration = 1400
     const tick = () => {
       const elapsed = Date.now() - start
-      progress.value = Math.min(100, Math.round((elapsed / duration) * 100))
-      if (elapsed < duration) requestAnimationFrame(tick)
-      else {
-        // Phase 3 : sortie (400ms puis done)
-        phase.value = 'exit'
-        setTimeout(() => emit('done'), 420)
+      progress.value = Math.min(85, Math.round((elapsed / 2000) * 85))
+      if (!appReady) {
+        // Timeout de sécurité à 4s (depuis le début de phase 2)
+        if (elapsed < 4000) rafId = requestAnimationFrame(tick)
+        else finishSplash()
       }
     }
-    requestAnimationFrame(tick)
+    rafId = requestAnimationFrame(tick)
   }, 600)
 })
 </script>
@@ -77,10 +110,7 @@ onMounted(() => {
   </Transition>
 </template>
 
-<script lang="ts">
-// version statique (pas d'IPC au splash)
-const version = '0.2'
-</script>
+
 
 <style scoped>
 /* ── Root ─────────────────────────────────────────────────────────── */
