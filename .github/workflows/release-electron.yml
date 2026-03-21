@@ -1,0 +1,68 @@
+name: Build and Publish Electron Update
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run build
+
+      - name: Package release
+        run: npx electron-builder --win nsis
+
+      - name: List release files
+        run: Get-ChildItem -Recurse release
+        shell: powershell
+
+      - name: Write SSH private key
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:USERPROFILE\.ssh | Out-Null
+          @"
+          ${{ secrets.SSH_PRIVATE_KEY }}
+          "@ | Out-File -FilePath $env:USERPROFILE\.ssh\id_ed25519 -Encoding ascii
+          icacls $env:USERPROFILE\.ssh\id_ed25519 /inheritance:r
+          icacls $env:USERPROFILE\.ssh\id_ed25519 /grant:r "$($env:USERNAME):(R)"
+
+      - name: Write known_hosts
+        shell: powershell
+        run: |
+          @"
+          ${{ secrets.SSH_KNOWN_HOSTS }}
+          "@ | Out-File -FilePath $env:USERPROFILE\.ssh\known_hosts -Encoding ascii
+
+      - name: Upload update files via SCP
+        shell: powershell
+        run: |
+          scp -P ${{ secrets.SSH_PORT }} `
+            -i $env:USERPROFILE\.ssh\id_ed25519 `
+            release\latest.yml `
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.UPDATE_PATH }}/
+
+          scp -P ${{ secrets.SSH_PORT }} `
+            -i $env:USERPROFILE\.ssh\id_ed25519 `
+            release\*.exe `
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.UPDATE_PATH }}/
+
+          scp -P ${{ secrets.SSH_PORT }} `
+            -i $env:USERPROFILE\.ssh\id_ed25519 `
+            release\*.blockmap `
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.UPDATE_PATH }}/

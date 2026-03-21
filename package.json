@@ -1,13 +1,16 @@
 {
   "name": "1cc-electron-overlay",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "description": "Compagnon pour le jeu 1er Corps Colonial",
+  "author": "Engooref",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "postinstall": "electron-rebuild -f -w uiohook-napi --only uiohook-napi"
+    "postinstall": "electron-builder install-app-deps",
+    "release": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",
@@ -17,12 +20,12 @@
     "leaflet": "^1.9.4",
     "pinia": "^3.0.1",
     "uiohook-napi": "^1.5.4",
-    "electron-updater": "^5.4.1",
+    "electron-updater": "^5.3.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^0.0.0",
+    "electron-rebuild": "^3.2.9",
     "@types/node": "^22.13.10",
     "@vitejs/plugin-vue": "^5.2.1",
     "autoprefixer": "^10.4.27",
@@ -31,6 +34,53 @@
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "electron-builder": "^24.8.0"
+  },
+  "build": {
+    "appId": "fr.1ercorpscolonial.app",
+    "productName": "1CC Compagnon",
+    "copyright": "Copyright © 2026 1er Corps Colonial",
+    "artifactName": "${productName}-${version}-setup.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.1ercorpscolonial.fr/"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "selectPerMachineByDefault": false,
+
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "1CC Compagnon",
+
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

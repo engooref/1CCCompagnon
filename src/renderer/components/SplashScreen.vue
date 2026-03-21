@@ -1,0 +1,256 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
+const emit = defineEmits<{ done: [] }>()
+
+const progress = ref(0)
+const phase = ref<'enter' | 'load' | 'exit'>('enter')
+
+onMounted(() => {
+  // Phase 1 : entrée du logo (600ms)
+  setTimeout(() => {
+    phase.value = 'load'
+
+    // Phase 2 : barre de chargement (1400ms)
+    const start = Date.now()
+    const duration = 1400
+    const tick = () => {
+      const elapsed = Date.now() - start
+      progress.value = Math.min(100, Math.round((elapsed / duration) * 100))
+      if (elapsed < duration) requestAnimationFrame(tick)
+      else {
+        // Phase 3 : sortie (400ms puis done)
+        phase.value = 'exit'
+        setTimeout(() => emit('done'), 420)
+      }
+    }
+    requestAnimationFrame(tick)
+  }, 600)
+})
+</script>
+
+<template>
+  <Transition name="splash-out">
+    <div
+      v-if="phase !== 'exit'"
+      class="splash-root"
+    >
+      <!-- Grille de fond -->
+      <div class="grid-bg" />
+
+      <!-- Lignes de scan -->
+      <div class="scan-line" />
+
+      <!-- Contenu centré -->
+      <div class="content" :class="phase === 'load' ? 'content--visible' : ''">
+
+        <!-- Losange décoratif -->
+        <div class="diamond-wrap">
+          <div class="diamond" />
+          <div class="diamond diamond--ring" />
+        </div>
+
+        <!-- Titre -->
+        <div class="title-block">
+          <p class="label">1ER CORPS COLONIAL</p>
+          <h1 class="title">1CC <span class="title-accent">COMPAGNON</span></h1>
+          <p class="subtitle">STAR CITIZEN COMPANION v{{ version }}</p>
+        </div>
+
+        <!-- Barre de chargement -->
+        <div class="bar-wrap">
+          <div class="bar-track">
+            <div class="bar-fill" :style="{ width: progress + '%' }" />
+            <div class="bar-glow" :style="{ left: progress + '%' }" />
+          </div>
+          <div class="bar-labels">
+            <span class="bar-status">INITIALISATION SYSTÈME</span>
+            <span class="bar-pct">{{ progress }}%</span>
+          </div>
+        </div>
+
+        <!-- Coins décoratifs -->
+        <div class="corner corner--tl" /><div class="corner corner--tr" />
+        <div class="corner corner--bl" /><div class="corner corner--br" />
+      </div>
+    </div>
+  </Transition>
+</template>
+
+<script lang="ts">
+// version statique (pas d'IPC au splash)
+const version = '0.2'
+</script>
+
+<style scoped>
+/* ── Root ─────────────────────────────────────────────────────────── */
+.splash-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #03070f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ── Grille de fond ───────────────────────────────────────────────── */
+.grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(34,211,238,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: grid-drift 8s linear infinite;
+}
+@keyframes grid-drift {
+  from { transform: translateY(0); }
+  to   { transform: translateY(48px); }
+}
+
+/* ── Ligne de scan ────────────────────────────────────────────────── */
+.scan-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(34,211,238,.35), transparent);
+  animation: scan 3s ease-in-out infinite;
+}
+@keyframes scan {
+  0%   { top: -2px; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── Bloc central ─────────────────────────────────────────────────── */
+.content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  padding: 56px 72px;
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
+  transition: opacity .5s ease, transform .5s ease;
+}
+.content--visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Losange ──────────────────────────────────────────────────────── */
+.diamond-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+.diamond {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(34,211,238,.7);
+  transform: rotate(45deg);
+  animation: diamond-pulse 2s ease-in-out infinite;
+}
+.diamond--ring {
+  inset: -10px;
+  border-color: rgba(34,211,238,.2);
+  animation: diamond-pulse 2s ease-in-out infinite .3s;
+}
+@keyframes diamond-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+/* ── Titre ────────────────────────────────────────────────────────── */
+.title-block {
+  text-align: center;
+}
+.label {
+  font-size: 10px;
+  letter-spacing: .35em;
+  color: rgba(34,211,238,.5);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.title {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: .2em;
+  color: #e2e8f0;
+  line-height: 1;
+}
+.title-accent {
+  color: rgb(34,211,238);
+}
+.subtitle {
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: .25em;
+  color: rgba(148,163,184,.4);
+  text-transform: uppercase;
+}
+
+/* ── Barre ────────────────────────────────────────────────────────── */
+.bar-wrap {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bar-track {
+  position: relative;
+  height: 2px;
+  background: rgba(34,211,238,.12);
+}
+.bar-fill {
+  height: 100%;
+  background: rgb(34,211,238);
+  transition: width .05s linear;
+}
+.bar-glow {
+  position: absolute;
+  top: -3px;
+  width: 20px;
+  height: 8px;
+  margin-left: -10px;
+  background: rgba(34,211,238,.6);
+  filter: blur(6px);
+  transition: left .05s linear;
+}
+.bar-labels {
+  display: flex;
+  justify-content: space-between;
+}
+.bar-status {
+  font-size: 9px;
+  letter-spacing: .2em;
+  color: rgba(34,211,238,.45);
+}
+.bar-pct {
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: rgba(34,211,238,.45);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Coins ────────────────────────────────────────────────────────── */
+.corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: rgba(34,211,238,.4);
+  border-style: solid;
+}
+.corner--tl { top: 12px;  left: 12px;  border-width: 1px 0 0 1px; }
+.corner--tr { top: 12px;  right: 12px; border-width: 1px 1px 0 0; }
+.corner--bl { bottom: 12px; left: 12px;  border-width: 0 0 1px 1px; }
+.corner--br { bottom: 12px; right: 12px; border-width: 0 1px 1px 0; }
+
+/* ── Transition de sortie ─────────────────────────────────────────── */
+.splash-out-leave-active { transition: opacity .4s ease, transform .4s ease; }
+.splash-out-leave-to     { opacity: 0; transform: scale(1.03); }
+</style>

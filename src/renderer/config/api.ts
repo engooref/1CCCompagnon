@@ -30,6 +30,6 @@ export function createOverlayUrls(settings: AppSettings) {
     mapShow:              (id: number) => url(base, o, 'maps', 'show').replace('{id}', String(id)),
     mapFeatures:          (id: number) => url(base, o, 'maps', 'features').replace('{id}', String(id)),
     mapMercureInfo:       (id: number) => url(base, o, 'maps', 'mercureInfo').replace('{id}', String(id)),
-    updateUrl:           url(base, o, 'updateUrl'),
+    updateUrl:           url('https://updates.1ercorpscolonial.fr', o, 'updateUrl'),
   }
 }

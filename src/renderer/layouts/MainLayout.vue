@@ -1,10 +1,25 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { RouterLink, RouterView } from 'vue-router'
+import { onMounted, ref, watch } from 'vue'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
 import StatusBar from '../components/StatusBar.vue'
 import { useAppStore } from '../stores/app'
 
 const app = useAppStore()
+const route = useRoute()
+
+const NAV_ORDER = ['/', '/transport', '/maps', '/profils', '/gamelog', '/perf', '/settings']
+
+const transitionName = ref('page-forward')
+let prevIndex = NAV_ORDER.indexOf('/')
+
+watch(() => route.path, (next, prev) => {
+  const ni = NAV_ORDER.findIndex(p => next.startsWith(p) && p !== '/' || next === p)
+  const pi = NAV_ORDER.findIndex(p => prev.startsWith(p) && p !== '/' || prev === p)
+  const nextIdx = ni === -1 ? 0 : ni
+  const prevIdx = pi === -1 ? prevIndex : pi
+  transitionName.value = nextIdx >= prevIdx ? 'page-forward' : 'page-back'
+  prevIndex = nextIdx
+})
 
 onMounted(async () => {
   if (!app.settings) {
@@ -17,7 +32,7 @@ onMounted(async () => {
   <div class="h-full text-slate-100">
     <div class="grid h-full grid-rows-[64px_1fr_auto] overflow-hidden border border-cyan-400/20 bg-slate-950/80">
       <header class="flex items-center border-b border-cyan-400/20 px-5">
-        <h1 class="text-lg font-bold tracking-[0.2em]">1CC OVERLAY</h1>
+        <h1 class="text-lg font-bold tracking-[0.2em]">1CC COMPAGNON</h1>
       </header>
 
       <div class="grid min-h-0 grid-cols-[260px_1fr]">
@@ -76,7 +91,11 @@ onMounted(async () => {
         </aside>
 
         <main class="min-h-0 overflow-hidden p-6">
-          <RouterView />
+          <RouterView v-slot="{ Component }">
+            <Transition :name="transitionName" mode="out-in">
+              <component :is="Component" :key="route.path" />
+            </Transition>
+          </RouterView>
         </main>
       </div>
 
@@ -84,3 +103,19 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ── Forward (vers le bas dans la nav) ───────────────────────────── */
+.page-forward-enter-active,
+.page-forward-leave-active,
+.page-back-enter-active,
+.page-back-leave-active {
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.page-forward-enter-from { opacity: 0; transform: translateY(10px); }
+.page-forward-leave-to   { opacity: 0; transform: translateY(-8px); }
+
+.page-back-enter-from { opacity: 0; transform: translateY(-10px); }
+.page-back-leave-to   { opacity: 0; transform: translateY(8px); }
+</style>

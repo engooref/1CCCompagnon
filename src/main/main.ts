@@ -38,7 +38,7 @@ function domKeyCodeToUiohook(domCode: number): number {
 }
 
 const APP_ROOT = app.getAppPath()
-const RENDERER_DIST = path.join(APP_ROOT, 'dist')
+const RENDERER_DIST = path.join(APP_ROOT, 'out/renderer')
 
 let mainWindow: BrowserWindow | null = null
 let boundsInterval: ReturnType<typeof setInterval> | null = null
@@ -100,6 +100,7 @@ function createMainWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
+    icon: path.join(APP_ROOT, 'build/icon.ico'),
   })
 
   mainWindow.once('ready-to-show', () => mainWindow?.show())
@@ -111,7 +112,7 @@ function createMainWindow() {
     return { action: 'deny' }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
+  if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     mainWindow.loadFile(path.join(RENDERER_DIST, 'index.html'))
@@ -135,7 +136,7 @@ function createMainWindow() {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   registerAppIpc(() => currentGameBounds)
   createMainWindow()
@@ -143,7 +144,7 @@ app.whenReady().then(() => {
 
   // Start automatic update checks (reads settings.updateCheckInterval if present)
   try { startAutoUpdateChecker() } catch (e) { /* ignore */ }
-  try { initAutoUpdater() } catch (e) { /* ignore */ }
+  try { await initAutoUpdater() } catch (e) { /* ignore */ }
 
   // Propagate layout changes to overlay immediately
   onLayoutChange((layout) => {
@@ -288,8 +289,10 @@ app.whenReady().then(() => {
       return
     }
 
-    // If no game is running, still allow opening the overlay via shortcut
-    // using the primary display bounds.
+    // In prod, require the game to be running to show the overlay
+    if (app.isPackaged) return
+
+    // In dev, allow opening without the game using primary display bounds
     const workArea = screen.getPrimaryDisplay().workArea
     setOverlayBounds({
       x: Math.round(workArea.x),

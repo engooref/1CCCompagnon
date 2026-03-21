@@ -154,7 +154,7 @@ onMounted(async () => {
     const settings = await window.oneCC.getSettings()
     logger.info('[MapModule] settings chargés')
     urls     = createOverlayUrls(settings)
-    siteBase = settings.siteUrl.replace(/\/$/, '')
+    siteBase = settings.siteUrl.replace(/\/$/, '') + '/overlay'
     const auth = await window.oneCC.overlayAuth()
     logger.info('[MapModule] auth ok, token=', auth?.token ? auth.token.slice(0, 12) + '…' : 'ABSENT')
     token = auth.token

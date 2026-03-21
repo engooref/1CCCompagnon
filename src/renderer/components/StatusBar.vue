@@ -9,6 +9,7 @@ const showUpdates = ref(false)
 const checkingUpdate = ref(false)
 const updateInfo = ref<any>(null)
 const autoUpdateEnabled = ref(false)
+const selectedAssetUrl = ref<string | null>(null)
 
 // ── Login popover ─────────────────────────────────────────────────────────────
 const showPanel  = ref(false)
@@ -44,6 +45,28 @@ async function openUpdates() {
     version.value = v
     const res = await (window as any).oneCC.checkForUpdates()
     updateInfo.value = res
+    // If manifest contains assets array, try to pick a platform asset
+    if (!updateInfo.value.url && Array.isArray(res?.assets) && res.assets.length) {
+      const ua = navigator.userAgent || ''
+      const isWin = /windows|win32/i.test(ua)
+      const isMac = /macintosh|mac os x/i.test(ua)
+      const isLinux = /linux/i.test(ua)
+      function pick(list: string[]) {
+        const l = list.map(String)
+        if (isWin) {
+          return l.find(u => /\.exe$|nsis|win/i.test(u)) || l[0]
+        }
+        if (isMac) {
+          return l.find(u => /\.dmg$|mac|darwin/i.test(u)) || l[0]
+        }
+        if (isLinux) {
+          return l.find(u => /\.AppImage$|linux|AppImage/i.test(u)) || l[0]
+        }
+        return l[0]
+      }
+      selectedAssetUrl.value = pick(res.assets)
+      if (selectedAssetUrl.value) updateInfo.value.url = selectedAssetUrl.value
+    }
   } catch (e: any) {
     updateInfo.value = { available: false }
   } finally {
@@ -53,7 +76,13 @@ async function openUpdates() {
 
 async function doInstall() {
   if (!updateInfo.value?.url) return
-  await (window as any).oneCC.installUpdate(updateInfo.value.url)
+  // Prefer native installer if available
+  try {
+    // fallback: open external URL
+    await (window as any).oneCC.installUpdate(updateInfo.value.url)
+  } catch {
+    // noop
+  }
 }
 
 function onUpdateAvailable(payload: any) {

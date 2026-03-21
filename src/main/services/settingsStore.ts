@@ -28,6 +28,7 @@ const defaults: AppSettings = {
     },
     updateUrl: '/overlay/update',
   },
+  
   rememberConnection: true,
   overlayEnabled: true,
   gameFolder: '',

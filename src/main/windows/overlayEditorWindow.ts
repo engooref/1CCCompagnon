@@ -10,7 +10,7 @@ export function openOverlayEditor(): BrowserWindow {
     return win
   }
 
-  const RENDERER_DIST = path.join(app.getAppPath(), 'dist')
+  const RENDERER_DIST = path.join(app.getAppPath(), 'out/renderer')
   const display = screen.getPrimaryDisplay().workArea
   const width = Math.min(1560, Math.max(1180, display.width - 80))
   const height = Math.min(980, Math.max(760, display.height - 80))
@@ -41,7 +41,7 @@ export function openOverlayEditor(): BrowserWindow {
     if (input.type === 'keyDown' && input.key === 'F12') win?.webContents.toggleDevTools()
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
+  if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/overlay-editor`)
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'), { hash: '/overlay-editor' })

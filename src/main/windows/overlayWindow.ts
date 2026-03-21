@@ -4,7 +4,7 @@ import path from 'node:path'
 let win: BrowserWindow | null = null
 
 export function createOverlayWindow(): BrowserWindow {
-  const RENDERER_DIST = path.join(app.getAppPath(), 'dist')
+  const RENDERER_DIST = path.join(app.getAppPath(), 'out/renderer')
   const { width, height } = screen.getPrimaryDisplay().size
 
   win = new BrowserWindow({
@@ -39,15 +39,17 @@ export function createOverlayWindow(): BrowserWindow {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setMenu(null)
 
-  if (process.env.ELECTRON_RENDERER_URL) {
+  if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/overlay`)
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'), { hash: '/overlay' })
   }
 
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.openDevTools({ mode: 'detach' })
-  })
+  if (!app.isPackaged) {
+    win.webContents.on('did-finish-load', () => {
+      win?.webContents.openDevTools({ mode: 'detach' })
+    })
+  }
 
   win.on('closed', () => { win = null })
   return win
