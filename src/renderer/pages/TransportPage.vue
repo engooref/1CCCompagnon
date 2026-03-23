@@ -98,7 +98,7 @@ onMounted(() => {
     <!-- Not authenticated -->
     <div
       v-if="!app.status.authReady"
-      class="flex flex-1 items-center justify-center text-slate-500 text-sm"
+      class="flex flex-1 items-center justify-center text-th-muted text-sm"
     >
       Connexion requise pour accéder au transport.
     </div>
@@ -108,22 +108,22 @@ onMounted(() => {
       <!-- ── Header bar ─────────────────────────────────────────────────── -->
       <div class="shrink-0 flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <div class="h-7 w-7 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center shrink-0">
-            <svg class="w-4 h-4 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="h-7 w-7 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
             </svg>
           </div>
-          <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-widest text-th-secondary">
             Transports
-            <span v-if="orders.length" class="ml-1 font-normal text-slate-600">({{ orders.length }})</span>
+            <span v-if="orders.length" class="ml-1 font-normal text-th-muted">({{ orders.length }})</span>
           </span>
         </div>
 
         <button
           @click="fetchAll(true)"
           :disabled="loading"
-          class="flex items-center gap-1.5 rounded-md border border-cyan-400/20 bg-cyan-400/5 px-2.5 py-1 text-xs font-medium text-cyan-300/70 hover:bg-cyan-400/10 hover:text-cyan-200 transition disabled:opacity-40"
+          class="flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent/70 hover:bg-accent/10 hover:text-accent transition disabled:opacity-40"
         >
           <svg class="w-3 h-3" :class="{ 'animate-spin': loading }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -147,7 +147,7 @@ onMounted(() => {
       <div class="flex-1 min-h-0 overflow-y-auto">
 
       <!-- ── Loading / Error / Empty ────────────────────────────────────── -->
-      <div v-if="loading && !orders.length" class="rounded-lg border border-cyan-400/10 bg-black/20 p-4 text-sm text-slate-500">
+      <div v-if="loading && !orders.length" class="rounded-lg border border-accent/10 bg-black/20 p-4 text-sm text-th-muted">
         Chargement des ordres…
       </div>
 
@@ -157,7 +157,7 @@ onMounted(() => {
 
       <div
         v-else-if="!orders.length"
-        class="rounded-lg border border-dashed border-cyan-400/15 bg-black/10 p-6 text-center text-sm text-slate-500"
+        class="rounded-lg border border-dashed border-accent/15 bg-black/10 p-6 text-center text-sm text-th-muted"
       >
         Aucun ordre de transport.
       </div>
@@ -167,18 +167,18 @@ onMounted(() => {
         <div
           v-for="order in orders"
           :key="order.id"
-          class="group rounded-lg border border-cyan-400/20 bg-black/20 p-4 cursor-pointer hover:border-cyan-400/40 hover:bg-black/30 transition-colors"
+          class="group rounded-lg border border-accent/20 bg-black/20 p-4 cursor-pointer hover:border-accent/40 hover:bg-black/30 transition-colors"
           @click="router.push({ name: 'transport-detail', params: { id: order.id } })"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 mb-0.5">
-                <p class="text-sm font-bold truncate text-slate-100 group-hover:text-cyan-200 transition-colors">
+                <p class="text-sm font-bold truncate text-th-primary group-hover:text-accent transition-colors">
                   {{ order.name ?? `Ordre #${order.id}` }}
                 </p>
                 <span
                   v-if="isPinned(order.id)"
-                  class="shrink-0 inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300"
+                  class="shrink-0 inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent"
                 >
                   <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
@@ -195,25 +195,25 @@ onMounted(() => {
                 >Valide</span>
               </div>
 
-              <p v-if="order.originName" class="text-xs text-slate-500">
-                Départ : <span class="text-slate-400">{{ order.originName }}</span>
-                <span v-if="order.originSystemName" class="text-slate-600"> · {{ order.originSystemName }}</span>
+              <p v-if="order.originName" class="text-xs text-th-muted">
+                Départ : <span class="text-th-secondary">{{ order.originName }}</span>
+                <span v-if="order.originSystemName" class="text-th-muted"> · {{ order.originSystemName }}</span>
               </p>
 
-              <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span><span class="text-slate-400 font-medium">{{ order.itinerary?.lines?.length ?? 0 }}</span> étape(s)</span>
-                <span><span class="text-slate-400 font-medium">{{ order.shipsCount ?? 0 }}</span> vaisseau(x)</span>
+              <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-th-muted">
+                <span><span class="text-th-secondary font-medium">{{ order.itinerary?.lines?.length ?? 0 }}</span> étape(s)</span>
+                <span><span class="text-th-secondary font-medium">{{ order.shipsCount ?? 0 }}</span> vaisseau(x)</span>
               </div>
 
               <!-- Progress bar -->
               <div v-if="order.itinerary?.lines?.length" class="mt-2">
-                <div class="h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                <div class="h-1 w-full overflow-hidden rounded-full bg-th-card">
                   <div
-                    class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500"
+                    class="h-full rounded-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500"
                     :style="{ width: orderProgress(order) + '%' }"
                   />
                 </div>
-                <p class="mt-0.5 text-right text-[10px] text-slate-600">{{ orderProgress(order) }}%</p>
+                <p class="mt-0.5 text-right text-[10px] text-th-muted">{{ orderProgress(order) }}%</p>
               </div>
             </div>
 
@@ -223,8 +223,8 @@ onMounted(() => {
                 @click="togglePin(order.id)"
                 class="rounded border p-1 transition"
                 :class="isPinned(order.id)
-                  ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
-                  : 'border-slate-700 bg-slate-800 text-slate-500 hover:text-cyan-300 hover:border-cyan-400/30'"
+                  ? 'border-accent/40 bg-accent/10 text-accent'
+                  : 'border-th-subtle bg-th-card text-th-muted hover:text-accent hover:border-accent/30'"
                 :title="isPinned(order.id) ? 'Désépingler de l\'overlay' : 'Épingler dans l\'overlay'"
               >
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -234,7 +234,7 @@ onMounted(() => {
               </button>
               <button
                 @click="router.push({ name: 'transport-edit', params: { id: order.id } })"
-                class="rounded border border-slate-700 bg-slate-800 p-1 text-slate-500 hover:text-cyan-300 hover:border-cyan-400/30 transition"
+                class="rounded border border-th-subtle bg-th-card p-1 text-th-muted hover:text-accent hover:border-accent/30 transition"
                 title="Modifier"
               >
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -245,7 +245,7 @@ onMounted(() => {
               <button
                 @click="deleteOrder(order, $event)"
                 :disabled="deletingId === order.id"
-                class="rounded border border-slate-700 bg-slate-800 p-1 text-slate-500 hover:text-rose-400 hover:border-rose-400/30 transition disabled:opacity-40"
+                class="rounded border border-th-subtle bg-th-card p-1 text-th-muted hover:text-rose-400 hover:border-rose-400/30 transition disabled:opacity-40"
                 title="Supprimer"
               >
                 <svg v-if="deletingId === order.id" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -258,7 +258,7 @@ onMounted(() => {
                 </svg>
               </button>
             </div>
-            <svg class="mt-1 shrink-0 w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="mt-1 shrink-0 w-4 h-4 text-th-muted group-hover:text-th-secondary transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
           </div>

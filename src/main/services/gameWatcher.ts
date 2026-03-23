@@ -1,112 +1,194 @@
-import { exec } from 'node:child_process'
+/**
+ * gameWatcher.ts
+ *
+ * Watcher unifié pour Star Citizen — remplace l'ancien duo
+ * gameWatcher (PowerShell tasklist + DWM via C#) + windowStateWatcher (PS persistant).
+ *
+ * Utilise l'addon natif sc_overlay_tracker.node via scTrackerNative.ts :
+ *   - Détection processus       → nativeGetState().found
+ *   - Bounds réelles (DWM)      → nativeGetState().x/y/width/height
+ *   - Minimize / restore        → nativeGetState().minimized
+ *   - Focus / unfocus           → nativeGetState().focused
+ *
+ * Polling toutes les 250 ms (nativeGetState < 2 ms → overhead négligeable).
+ *
+ * API publique :
+ *   startGameWatcher(callbacks) → démarre
+ *   stopGameWatcher()           → arrête
+ *   getGameWindowBounds()       → Rectangle physique (raw DPI) | null
+ */
+
+import { loadNativeTracker, nativeStartTracking, nativeGetState, isNativeTrackerAvailable } from './scTrackerNative'
+import { logger } from './logger'
 import type { Rectangle } from 'electron'
 
-const GAME_EXE  = 'StarCitizen.exe'
-const GAME_PROC = 'StarCitizen'          // nom sans .exe pour Get-Process
+const GAME_EXE = 'StarCitizen.exe'
+const POLL_MS  = 250
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type GameWatcherCallbacks = {
+  /** Jeu démarré et fenêtre trouvée. `bounds` en pixels physiques (raw DPI). `focused` = SC est au premier plan au moment de la détection. */
+  onStart:         (bounds: Rectangle, focused: boolean) => void
+  /** Processus terminé. */
+  onStop:          () => void
+  /** Fenêtre minimisée. */
+  onMinimize:      () => void
+  /** Fenêtre restaurée. `foreground` = elle est revenue au premier plan. */
+  onRestore:       (foreground: boolean) => void
+  /** SC est passée au premier plan. */
+  onFocus?:        () => void
+  /** Une autre fenêtre est venue devant SC. */
+  onUnfocus?:      () => void
+  /**
+   * Position / taille de la fenêtre a changé pendant que le jeu tourne.
+   * Déclenché seulement si la fenêtre n'est pas minimisée.
+   * `bounds` en pixels physiques (raw DPI).
+   */
+  onBoundsChange?: (bounds: Rectangle) => void
+}
+
+type WatchState = 'gone' | 'foreground' | 'running' | 'minimized'
+
+// ─── État interne ─────────────────────────────────────────────────────────────
+
+let watchInterval: ReturnType<typeof setInterval> | null = null
+let lastWatchState: WatchState = 'gone'
+let cachedBounds:   Rectangle | null = null
+let lastBounds:     Rectangle | null = null  // Pour la détection de changement de bounds
+
+// ─── API publique ─────────────────────────────────────────────────────────────
+
+/**
+ * Bounds courantes de la fenêtre Star Citizen en pixels physiques (raw DPI).
+ * Null si le jeu n'est pas lancé ou n'est pas trouvé.
+ * Valeur synchrone — mise à jour toutes les 250 ms par le watcher.
+ */
+export function getGameWindowBounds(): Rectangle | null {
+  return cachedBounds
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function isGameRunning(): Promise<boolean> {
-  return new Promise(resolve => {
-    exec(
-      `tasklist /FI "IMAGENAME eq ${GAME_EXE}" /NH /FO CSV`,
-      { timeout: 3000 },
-      (err, stdout) => resolve(!err && stdout.includes(GAME_EXE))
-    )
-  })
+function boundsChanged(a: Rectangle, b: Rectangle): boolean {
+  return a.x !== b.x || a.y !== b.y || a.width !== b.width || a.height !== b.height
 }
 
-/**
- * Retourne les bounds visibles de la fenêtre Star Citizen.
- * Utilise DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS=9) qui exclut
- * les bordures DWM invisibles (important en mode fenêtré).
- * Fallback sur GetWindowRect si DWM échoue (fullscreen / erreur).
- */
-function getGameScreenBounds(): Promise<Rectangle | null> {
-  const script = [
-    '$p = Get-Process -Name StarCitizen -ErrorAction SilentlyContinue | Select-Object -First 1',
-    'if (-not $p -or $p.MainWindowHandle -eq [IntPtr]::Zero) { Write-Output "NOT_FOUND"; exit }',
-    'Add-Type -TypeDefinition @"',
-    'using System;',
-    'using System.Runtime.InteropServices;',
-    'public static class GWB {',
-    '    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);',
-    '    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int sz);',
-    '    public struct RECT { public int Left, Top, Right, Bottom; }',
-    '}',
-    '"@',
-    '$r = New-Object GWB+RECT',
-    // DWMWA_EXTENDED_FRAME_BOUNDS = 9 ; retourne les bounds visibles sans ombre DWM
-    '$hr = [GWB]::DwmGetWindowAttribute($p.MainWindowHandle, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r))',
-    'if ($hr -ne 0) { [GWB]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null }',
-    'Write-Output "$($r.Left),$($r.Top),$($r.Right - $r.Left),$($r.Bottom - $r.Top)"',
-  ].join('\n')
-
-  // Encodage UTF-16LE + Base64 pour éviter les problèmes d'échappement
-  const encoded = Buffer.from(script, 'utf16le').toString('base64')
-
-  return new Promise(resolve => {
-    exec(
-      `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
-      { timeout: 6000 },
-      (err, stdout) => {
-        const out = stdout.trim()
-        if (err || out === 'NOT_FOUND' || !out) { resolve(null); return }
-        const parts = out.split(',').map(Number)
-        if (parts.length === 4 && parts.every(n => !isNaN(n))) {
-          resolve({ x: parts[0], y: parts[1], width: parts[2], height: parts[3] })
-        } else {
-          resolve(null)
-        }
-      }
-    )
-  })
+function toRect(s: { x: number; y: number; width: number; height: number }): Rectangle {
+  return { x: s.x, y: s.y, width: s.width, height: s.height }
 }
-
-export { getGameScreenBounds as getGameWindowBounds }
 
 // ─── Watcher ──────────────────────────────────────────────────────────────────
 
-export type GameWatcherCallbacks = {
-  onStart: (bounds: Rectangle) => void
-  onStop:  () => void
-}
-
-let watchInterval: ReturnType<typeof setInterval> | null = null
-let wasRunning = false
-
-function processTick(callbacks: GameWatcherCallbacks, running: boolean, alreadyRunning: boolean): void {
-  if (running && !wasRunning) {
-    wasRunning = true
-    // Si le jeu tournait déjà quand l'app a démarré, la fenêtre existe → pas de délai.
-    // Sinon, attendre 4s que le jeu initialise sa fenêtre.
-    const delay = alreadyRunning ? 0 : 4000
-    setTimeout(async () => {
-      const bounds = await getGameScreenBounds()
-      callbacks.onStart(bounds ?? { x: 0, y: 0, width: 1920, height: 1080 })
-    }, delay)
-
-  } else if (!running && wasRunning) {
-    wasRunning = false
-    callbacks.onStop()
-  }
-}
-
-async function tick(callbacks: GameWatcherCallbacks): Promise<void> {
-  const running = await isGameRunning()
-  processTick(callbacks, running, false)
-}
-
 export function startGameWatcher(callbacks: GameWatcherCallbacks): void {
   stopGameWatcher()
-  wasRunning = false
 
-  // Vérification immédiate au démarrage — on réutilise le résultat déjà obtenu
-  // pour éviter un double appel tasklist (1-3s chacun sur Windows)
-  isGameRunning().then(alreadyRunning => {
-    processTick(callbacks, alreadyRunning, alreadyRunning)
-    watchInterval = setInterval(() => tick(callbacks), 2000)
-  })
+  // Charger l'addon natif (idempotent si déjà chargé)
+  if (!isNativeTrackerAvailable()) loadNativeTracker()
+
+  if (!isNativeTrackerAvailable()) {
+    logger.error('[gameWatcher] Addon natif non disponible — watcher désactivé. Lancer "npm run build:native".')
+    return
+  }
+
+  nativeStartTracking(GAME_EXE)
+  logger.info(`[gameWatcher] Démarré — polling ${GAME_EXE} toutes les ${POLL_MS} ms`)
+
+  lastWatchState = 'gone'
+  cachedBounds   = null
+  lastBounds     = null
+
+  function tick() {
+    const s = nativeGetState()
+    if (!s) return  // Addon non disponible
+
+    const newState: WatchState = !s.found
+      ? 'gone'
+      : s.minimized
+        ? 'minimized'
+        : s.focused
+          ? 'foreground'
+          : 'running'
+
+    // Mise à jour du cache bounds (sauf si "gone")
+    if (newState !== 'gone') {
+      cachedBounds = toRect(s)
+    }
+
+    // ── Détection de changement de bounds ────────────────────────────────────
+    // Seulement quand le jeu tourne (non minimisé, non absent) et que l'état
+    // précédent était aussi "running" (pas une transition d'état majeure).
+    if (
+      newState !== 'gone' &&
+      newState !== 'minimized' &&
+      lastWatchState !== 'gone' &&
+      lastWatchState !== 'minimized' &&
+      lastBounds && cachedBounds &&
+      callbacks.onBoundsChange &&
+      boundsChanged(lastBounds, cachedBounds)
+    ) {
+      callbacks.onBoundsChange(cachedBounds)
+    }
+
+    // Snapshot des bounds pour la prochaine comparaison
+    if (cachedBounds) lastBounds = { ...cachedBounds }
+
+    // ── Transitions d'état ───────────────────────────────────────────────────
+
+    // gone → found : jeu démarré
+    if (lastWatchState === 'gone' && newState !== 'gone') {
+      logger.info(`[gameWatcher] SC détecté → state=${newState} bounds=${JSON.stringify(cachedBounds)}`)
+      lastWatchState = newState
+      callbacks.onStart(cachedBounds!, newState === 'foreground')
+      return
+    }
+
+    // found → gone : jeu fermé
+    if (lastWatchState !== 'gone' && newState === 'gone') {
+      logger.info('[gameWatcher] SC disparu (processus terminé)')
+      lastWatchState = 'gone'
+      cachedBounds   = null
+      lastBounds     = null
+      callbacks.onStop()
+      return
+    }
+
+    // running/foreground → minimized
+    if (newState === 'minimized' && lastWatchState !== 'minimized') {
+      logger.info('[gameWatcher] SC minimisé')
+      lastWatchState = newState
+      callbacks.onMinimize()
+      return
+    }
+
+    // minimized → running/foreground
+    if (newState !== 'minimized' && lastWatchState === 'minimized') {
+      logger.info(`[gameWatcher] SC restauré → foreground=${newState === 'foreground'}`)
+      lastWatchState = newState
+      setTimeout(() => callbacks.onRestore(newState === 'foreground'), 250)
+      return
+    }
+
+    // running → foreground (focus obtenu)
+    if (newState === 'foreground' && lastWatchState !== 'foreground') {
+      logger.info('[gameWatcher] SC focus obtenu')
+      lastWatchState = newState
+      callbacks.onFocus?.()
+      return
+    }
+
+    // foreground → running (focus perdu, SC visible mais pas au premier plan)
+    if (newState === 'running' && lastWatchState === 'foreground') {
+      logger.info('[gameWatcher] SC focus perdu')
+      lastWatchState = newState
+      callbacks.onUnfocus?.()
+      return
+    }
+
+    lastWatchState = newState
+  }
+
+  watchInterval = setInterval(tick, POLL_MS)
 }
 
 export function stopGameWatcher(): void {
@@ -114,6 +196,7 @@ export function stopGameWatcher(): void {
     clearInterval(watchInterval)
     watchInterval = null
   }
+  lastWatchState = 'gone'
+  cachedBounds   = null
+  lastBounds     = null
 }
-
-

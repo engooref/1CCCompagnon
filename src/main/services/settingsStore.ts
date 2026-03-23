@@ -1,5 +1,13 @@
 import ElectronStore from 'electron-store'
-import type { AppSettings } from '@shared/general'
+import type { AppSettings, AppearanceSettings } from '@shared/general'
+
+const DEFAULT_APPEARANCE: AppearanceSettings = {
+  primaryColor: '#22d3ee',
+  accentColor:  '#0e7490',
+  textColor:    '#f1f5f9',
+  navPosition:  'left',
+  fontSize:     16,
+}
 
 const defaults: AppSettings = {
   siteUrl: 'https://www.preprod.1ercorpscolonial.fr/compagnon',
@@ -31,6 +39,12 @@ const defaults: AppSettings = {
       show:  '/agenda/{id}',
       store: '/events',
     },
+    inventory: {
+      index:  '/inventory',
+      show:   '/inventory/{id}',
+      search: '/inventory/search',
+      mercureInfo: '/inventory/mercure-info',
+    },
     updateUrl: '/update',
   },
   
@@ -43,6 +57,7 @@ const defaults: AppSettings = {
   toggleKeyCode: null,
   mapOverlayOpacity: 0.85,
   overlayLayout: {},
+  appearance: { ...DEFAULT_APPEARANCE },
 }
 
 function createStore() {
@@ -68,7 +83,8 @@ export function getSettings(): AppSettings {
     overlayLayout: {
       ...(defaults.overlayLayout ?? {}),
       ...(saved?.overlayLayout ?? {})
-    }
+    },
+    appearance: { ...DEFAULT_APPEARANCE, ...(saved?.appearance ?? {}) },
   }
 }
 
@@ -85,6 +101,9 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
     overlayModules: 'overlayModules' in partial
       ? (partial.overlayModules ?? undefined)
       : current.overlayModules,
+    appearance: 'appearance' in partial
+      ? { ...DEFAULT_APPEARANCE, ...(current.appearance ?? {}), ...(partial.appearance ?? {}) }
+      : current.appearance,
   }
 
   store.set('settings', next)

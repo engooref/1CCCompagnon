@@ -158,7 +158,7 @@ const changeTypeLabel: Record<string, string> = {
   breaking:    'Rupture',
 }
 const changeTypeClass: Record<string, string> = {
-  feature:     'bg-cyan-400/15 text-cyan-300 border-cyan-400/30',
+  feature:     'bg-accent/15 text-accent border-accent/30',
   fix:         'bg-rose-400/15 text-rose-300 border-rose-400/30',
   improvement: 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30',
   breaking:    'bg-amber-400/15 text-amber-300 border-amber-400/30',
@@ -170,16 +170,16 @@ const changeTypeClass: Record<string, string> = {
   <Transition name="slide-up">
     <div
       v-if="nativeChecking || nativeNoUpdate"
-      class="shrink-0 border-t border-cyan-400/15 bg-slate-900/60 px-5 py-2 flex items-center gap-2"
+      class="shrink-0 border-t border-accent/15 bg-th-surface px-5 py-2 flex items-center gap-2"
     >
-      <svg v-if="nativeChecking" class="w-3 h-3 animate-spin text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24">
+      <svg v-if="nativeChecking" class="w-3 h-3 animate-spin text-accent shrink-0" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
       </svg>
       <svg v-else class="w-3 h-3 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
       </svg>
-      <span class="text-[11px]" :class="nativeChecking ? 'text-cyan-300' : 'text-emerald-300'">
+      <span class="text-[11px]" :class="nativeChecking ? 'text-accent' : 'text-emerald-300'">
         {{ nativeChecking ? 'Recherche de mises à jour…' : 'Application à jour.' }}
       </span>
     </div>
@@ -196,7 +196,7 @@ const changeTypeClass: Record<string, string> = {
           <span class="text-xs font-semibold text-amber-200">Téléchargement de la mise à jour…</span>
           <span class="text-xs font-mono text-amber-300">{{ nativeDownloadProgress }}%</span>
         </div>
-        <div class="h-1.5 w-full rounded-full bg-slate-700">
+        <div class="h-1.5 w-full rounded-full bg-th-card">
           <div class="h-1.5 rounded-full bg-amber-400 transition-all duration-300" :style="{ width: nativeDownloadProgress + '%' }"/>
         </div>
       </div>
@@ -211,7 +211,7 @@ const changeTypeClass: Record<string, string> = {
         <button @click="installNow" class="rounded-md bg-emerald-500 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-400 transition">
           Installer maintenant
         </button>
-        <button @click="showUpdateBanner = false" class="text-slate-500 hover:text-slate-300 transition text-lg leading-none">✕</button>
+        <button @click="showUpdateBanner = false" class="text-th-muted hover:text-th-secondary transition text-lg leading-none">✕</button>
       </div>
 
       <div v-else class="flex items-center gap-3">
@@ -224,7 +224,7 @@ const changeTypeClass: Record<string, string> = {
           — Télécharger maintenant ?
         </span>
         <button @click="acceptUpdate" class="rounded-md bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-400 transition">Oui</button>
-        <button @click="postponeUpdate" class="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 hover:text-slate-100 transition">Plus tard</button>
+        <button @click="postponeUpdate" class="rounded-md border border-th-subtle bg-th-card px-3 py-1 text-xs font-semibold text-th-secondary hover:text-th-primary transition">Plus tard</button>
       </div>
     </div>
   </Transition>
@@ -236,15 +236,15 @@ const changeTypeClass: Record<string, string> = {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       @click.self="showChangelog = false"
     >
-      <div class="w-[520px] max-h-[80vh] flex flex-col rounded-2xl border border-cyan-400/20 bg-[#070b12] shadow-2xl shadow-black/80">
+      <div class="w-[520px] max-h-[80vh] flex flex-col rounded-2xl border border-accent/20 bg-th-base shadow-2xl shadow-black/80">
 
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-cyan-400/15">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-accent/15">
           <div>
-            <h2 class="text-sm font-bold tracking-widest text-slate-100 uppercase">Notes de version</h2>
-            <p class="text-[11px] text-slate-500 mt-0.5">1CC Compagnon · v{{ version ?? '—' }}</p>
+            <h2 class="text-sm font-bold tracking-widest text-th-primary uppercase">Notes de version</h2>
+            <p class="text-[11px] text-th-muted mt-0.5">1CC Compagnon · v{{ version ?? '—' }}</p>
           </div>
-          <button @click="showChangelog = false" class="text-slate-600 hover:text-slate-300 transition">
+          <button @click="showChangelog = false" class="text-th-muted hover:text-th-secondary transition">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
             </svg>
@@ -280,13 +280,13 @@ const changeTypeClass: Record<string, string> = {
             <div class="flex items-baseline gap-3 mb-3">
               <span
                 class="font-mono text-sm font-bold"
-                :class="entry.version === version ? 'text-cyan-300' : 'text-slate-400'"
+                :class="entry.version === version ? 'text-accent' : 'text-th-secondary'"
               >v{{ entry.version }}</span>
               <span
                 v-if="entry.version === version"
-                class="rounded-full bg-cyan-400/15 border border-cyan-400/30 px-2 py-0.5 text-[10px] font-semibold text-cyan-300"
+                class="rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[10px] font-semibold text-accent"
               >version actuelle</span>
-              <span class="text-[11px] text-slate-600 ml-auto">{{ entry.date }}</span>
+              <span class="text-[11px] text-th-muted ml-auto">{{ entry.date }}</span>
             </div>
             <ul class="space-y-1.5">
               <li v-for="(change, i) in entry.changes" :key="i" class="flex items-start gap-2">
@@ -294,7 +294,7 @@ const changeTypeClass: Record<string, string> = {
                   class="mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold"
                   :class="changeTypeClass[change.type]"
                 >{{ changeTypeLabel[change.type] }}</span>
-                <span class="text-xs text-slate-300 leading-relaxed">{{ change.text }}</span>
+                <span class="text-xs text-th-secondary leading-relaxed">{{ change.text }}</span>
               </li>
             </ul>
           </div>
@@ -303,17 +303,17 @@ const changeTypeClass: Record<string, string> = {
     </div>
   </Transition>
 
-  <footer class="relative shrink-0 border-t border-cyan-400/20 px-5 py-2 flex items-center gap-3">
+  <footer class="relative shrink-0 border-t border-accent/20 px-5 py-2 flex items-center gap-3">
 
     <!-- ── Popover connexion ─────────────────────────────────────────────── -->
     <Transition name="slide-up">
       <div
         v-if="showPanel"
-        class="absolute bottom-full right-4 mb-2 w-72 rounded-xl border border-cyan-400/20 bg-[#0a1120] shadow-2xl shadow-black/60 p-4 space-y-3"
+        class="absolute bottom-full right-4 mb-2 w-72 rounded-xl border border-accent/20 bg-th-base shadow-2xl shadow-black/60 p-4 space-y-3"
       >
         <div class="flex items-center justify-between">
-          <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Connexion</p>
-          <button @click="closePanel" class="text-slate-600 hover:text-slate-300 transition">
+          <p class="text-xs font-bold uppercase tracking-wider text-th-secondary">Connexion</p>
+          <button @click="closePanel" class="text-th-muted hover:text-th-secondary transition">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
             </svg>
@@ -321,7 +321,7 @@ const changeTypeClass: Record<string, string> = {
         </div>
 
         <div class="space-y-1.5">
-          <label class="text-[11px] text-slate-500">Clé API</label>
+          <label class="text-[11px] text-th-muted">Clé API</label>
           <input
             ref="inputRef"
             v-model="apiKeyInput"
@@ -329,7 +329,7 @@ const changeTypeClass: Record<string, string> = {
             placeholder="Coller la clé API…"
             @keydown.enter="submitLogin"
             @keydown.escape="closePanel"
-            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-cyan-400/50 focus:outline-none transition"
+            class="w-full rounded-lg border border-th-subtle bg-th-surface px-3 py-2 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/50 focus:outline-none transition"
           />
           <p v-if="loginError" class="text-[11px] text-rose-400">{{ loginError }}</p>
         </div>
@@ -338,7 +338,7 @@ const changeTypeClass: Record<string, string> = {
           <button
             @click="submitLogin"
             :disabled="busy"
-            class="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-400/20 transition disabled:opacity-50"
+            class="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 py-2 text-xs font-semibold text-accent hover:bg-accent/20 transition disabled:opacity-50"
           >
             <svg v-if="busy" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -349,7 +349,7 @@ const changeTypeClass: Record<string, string> = {
             </svg>
             Se connecter
           </button>
-          <button @click="closePanel" class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+          <button @click="closePanel" class="rounded-lg border border-th-subtle bg-th-card px-3 py-2 text-xs font-semibold text-th-secondary hover:text-th-primary transition">
             Annuler
           </button>
         </div>
@@ -361,13 +361,13 @@ const changeTypeClass: Record<string, string> = {
     <span class="text-xs font-semibold" :class="statusColor">{{ statusText }}</span>
 
     <template v-if="app.profile">
-      <span class="text-slate-700">·</span>
-      <img v-if="app.avatarUrl" :src="app.avatarUrl" class="h-5 w-5 rounded-full border border-cyan-400/25 object-cover"/>
-      <span class="text-xs text-slate-400 truncate">{{ app.profileLabel }}</span>
+      <span class="text-th-disabled">·</span>
+      <img v-if="app.avatarUrl" :src="app.avatarUrl" class="h-5 w-5 rounded-full border border-accent/25 object-cover"/>
+      <span class="text-xs text-th-secondary truncate">{{ app.profileLabel }}</span>
     </template>
 
     <div class="ml-auto flex items-center gap-2">
-      <span v-if="app.status.latencyMs" class="text-[11px] text-slate-500">{{ app.status.latencyMs }} ms</span>
+      <span v-if="app.status.latencyMs" class="text-[11px] text-th-muted">{{ app.status.latencyMs }} ms</span>
 
       <!-- Bouton version → ouvre la modal changelog -->
       <button
@@ -375,7 +375,7 @@ const changeTypeClass: Record<string, string> = {
         class="relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold transition"
         :class="hasUpdateBadge
           ? 'border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20'
-          : 'border-slate-600 bg-slate-800/80 text-slate-200 hover:border-cyan-400/30 hover:text-cyan-200'"
+          : 'border-th-subtle bg-th-card text-th-primary hover:border-accent/30 hover:text-accent'"
       >
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/>
@@ -388,7 +388,7 @@ const changeTypeClass: Record<string, string> = {
       <button
         v-if="!app.status.connected && app.status.level !== 'loading'"
         @click="openPanel"
-        class="flex items-center gap-1.5 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-400/20 transition"
+        class="flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/20 transition"
       >
         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"/>
@@ -401,7 +401,7 @@ const changeTypeClass: Record<string, string> = {
         v-else-if="app.status.connected"
         @click="disconnect"
         :disabled="busy"
-        class="flex items-center gap-1.5 rounded-md border border-slate-600 bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-rose-400/40 hover:text-rose-300 transition disabled:opacity-50"
+        class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-[11px] font-semibold text-th-primary hover:border-rose-400/40 hover:text-rose-300 transition disabled:opacity-50"
       >
         <svg v-if="busy" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>

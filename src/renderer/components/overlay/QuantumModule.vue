@@ -6,7 +6,7 @@ defineProps<{ state: GameState }>()
 
 <template>
   <div class="rounded-lg border border-violet-400/25 backdrop-blur-sm px-4 py-2.5 shadow-xl"
-       style="background-color: rgb(0 0 0 / var(--bg-alpha, 0.65))">
+       style="background-color: rgb(from var(--bg-color, #000000) r g b / var(--bg-alpha, 0.65))">
     <!-- Indicateur pulsant -->
     <div class="flex items-center gap-2.5 mb-1.5">
       <span class="relative flex h-2 w-2 shrink-0">
@@ -18,7 +18,7 @@ defineProps<{ state: GameState }>()
 
     <!-- Route -->
     <div class="flex items-center gap-2 text-sm">
-      <span v-if="state.location" class="text-slate-500 text-xs truncate max-w-[130px]">
+      <span v-if="state.location" class="text-th-muted text-xs truncate max-w-[130px]">
         {{ state.location }}
       </span>
       <svg
@@ -28,7 +28,7 @@ defineProps<{ state: GameState }>()
       >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
       </svg>
-      <span v-if="state.destination" class="font-bold text-slate-100 truncate max-w-[160px]">
+      <span v-if="state.destination" class="font-bold text-th-primary truncate max-w-[160px]">
         {{ state.destination }}
       </span>
     </div>

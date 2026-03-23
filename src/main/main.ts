@@ -2,16 +2,16 @@ import { app, BrowserWindow, shell, screen, globalShortcut, Menu } from 'electro
 import path from 'node:path'
 import { logger } from './services/logger'
 import { registerAppIpc } from './ipc/app.ipc'
-import { createOverlayWindow, showOverlay, hideOverlay, setOverlayBounds, sendToOverlay, getOverlayWindow } from './windows/overlayWindow'
+import { createOverlayWindow, showOverlay, hideOverlay, sendToOverlay, getOverlayWindow } from './windows/overlayWindow'
 import { setMainWindow } from './windows/mainWindow'
-import { updateEditorBounds, closeOverlayEditor, getOverlayEditorWindow } from './windows/overlayEditorWindow'
+import { getOverlayEditorWindow } from './windows/overlayEditorWindow'
 import { startGameWatcher, stopGameWatcher, getGameWindowBounds } from './services/gameWatcher'
+import { loadNativeTracker } from './services/scTrackerNative'
 import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterService'
-import { startWindowStateWatcher, stopWindowStateWatcher, killPersistentPS } from './services/windowStateWatcher'
 import { logParser } from './services/logParserService'
 import { getSettings } from './services/settingsStore'
 import { startAutoUpdateChecker } from './services/overlayService'
-import { getLayout, onLayoutChange } from './services/layoutStore'
+import { onLayoutChange } from './services/layoutStore'
 import { uIOhook } from 'uiohook-napi'
 
 interface ToggleKeyObject { accel?: string; keyCode?: number }
@@ -38,47 +38,36 @@ function domKeyCodeToUiohook(domCode: number): number {
   return mapped ?? domCode
 }
 
-const APP_ROOT = app.getAppPath()
+const APP_ROOT      = app.getAppPath()
 const RENDERER_DIST = path.join(APP_ROOT, 'out/renderer')
 
-let mainWindow: BrowserWindow | null = null
-let boundsInterval: ReturnType<typeof setInterval> | null = null
-let ioHookHandler: ((e: any) => void) | null = null
+let mainWindow:       BrowserWindow | null = null
+let ioHookHandler:    ((e: any) => void) | null = null
 let mapIoHookHandler: ((e: any) => void) | null = null
-let ioHookStarted = false
+let ioHookStarted  = false
 let manuallyHidden = false
-let currentGameBounds: { x: number; y: number; width: number; height: number } | null = null
+let isGameFocused  = false
 
+// ─── Helpers overlay ──────────────────────────────────────────────────────────
+
+/** Convertit des bounds physiques (raw DPI) en bounds logiques (CSS pixels) pour Electron. */
 function toLogicalBounds(b: { x: number; y: number; width: number; height: number }) {
   const dpr = screen.getPrimaryDisplay().scaleFactor ?? 1
   return {
-    x: Math.round(b.x / dpr),
-    y: Math.round(b.y / dpr),
-    width: Math.round(b.width / dpr),
+    x:      Math.round(b.x      / dpr),
+    y:      Math.round(b.y      / dpr),
+    width:  Math.round(b.width  / dpr),
     height: Math.round(b.height / dpr),
   }
 }
 
-async function refreshOverlayBounds() {
-  const b = await getGameWindowBounds()
-  if (b) {
-    currentGameBounds = b
-    const ow = getOverlayWindow()
-    if (ow && !ow.isDestroyed()) {
-      ow.setBounds(toLogicalBounds(b))
-      ow.setAlwaysOnTop(true, 'screen-saver')
-      if (!manuallyHidden && !ow.isVisible()) ow.showInactive()
-    }
-    updateEditorBounds(b)
-  }
+/** Envoie les bounds logiques du jeu au renderer de l'overlay pour positionner le conteneur. */
+function sendGameBounds(b: { x: number; y: number; width: number; height: number } | null) {
+  sendToOverlay('overlay:game-bounds', b ? toLogicalBounds(b) : null)
 }
 
-function showOverlayIfInGame() {
-  const state = logParser.getState()
-  if (state.shard && state.activity !== 'hangar') {
-    if (!manuallyHidden) showOverlay()
-  }
-}
+
+// ─── Main window ──────────────────────────────────────────────────────────────
 
 function createMainWindow() {
   const settings = getSettings()
@@ -107,7 +96,6 @@ function createMainWindow() {
   setMainWindow(mainWindow)
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
-    // Démarrer uIOhook après l'affichage de la fenêtre pour ne pas bloquer le démarrage
     setImmediate(() => {
       uIOhook.start()
       ioHookStarted = true
@@ -127,31 +115,33 @@ function createMainWindow() {
     mainWindow.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 
-  // When main window is closed, ensure overlay and editor are closed/destroyed
   mainWindow.on('closed', () => {
     try {
       const ow = getOverlayWindow()
-      if (ow && !ow.isDestroyed()) {
-        try { ow.destroy() } catch {}
-      }
+      if (ow && !ow.isDestroyed()) { try { ow.destroy() } catch {} }
     } catch {}
-
     try {
       const ed = getOverlayEditorWindow()
-      if (ed && !ed.isDestroyed()) {
-        try { ed.destroy() } catch {}
-      }
+      if (ed && !ed.isDestroyed()) { try { ed.destroy() } catch {} }
     } catch {}
   })
 }
 
+// ─── App ready ────────────────────────────────────────────────────────────────
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
-  registerAppIpc(() => currentGameBounds)
+
+  // Charger l'addon natif en premier — synchrone, < 5 ms
+  loadNativeTracker()
+
+  // L'IPC utilise getGameWindowBounds() (synchrone, cache mis à jour par le watcher)
+  registerAppIpc(getGameWindowBounds)
+
   createMainWindow()
   createOverlayWindow()
 
-  // Démarrage des services en arrière-plan (non-bloquants)
+  // Services en arrière-plan (non bloquants)
   setImmediate(() => {
     try { startAutoUpdateChecker() } catch { /* ignore */ }
     initAutoUpdater()
@@ -159,67 +149,95 @@ app.whenReady().then(async () => {
       .catch(() => { /* ignore */ })
   })
 
-  // Propagate layout changes to overlay immediately
+  // Propagation des changements de layout à l'overlay
   onLayoutChange((layout) => {
     sendToOverlay('overlay:layout-update', layout)
   })
 
-  // Propagate game log events to overlay
+  // Propagation des événements de jeu à l'overlay + logique show/hide
   logParser.on((state, event) => {
     sendToOverlay('overlay:state', state)
     sendToOverlay('overlay:event', event)
 
     if (!manuallyHidden) {
-      if (event.type === 'shard') showOverlay()
+      if (event.type === 'shard' && isGameFocused) showOverlay()
       else if (event.type === 'activity' && event.payload.activity === 'hangar') hideOverlay()
     }
   })
 
-  // Démarrer le watcher de jeu en arrière-plan pour ne pas bloquer l'affichage de la fenêtre.
-  // tasklist (isGameRunning) prend 1-3s sur Windows — on le diffère pour ne pas retarder le rendu.
+  // ── Watcher de jeu (natif, poll 250 ms) ─────────────────────────────────────
   setImmediate(() => startGameWatcher({
-    onStart(bounds) {
-      currentGameBounds = bounds
-      setOverlayBounds(toLogicalBounds(bounds))
 
-      if (boundsInterval) clearInterval(boundsInterval)
-      boundsInterval = setInterval(() => refreshOverlayBounds(), 5000)
+    onStart(bounds, focused) {
+      logger.info('[overlay] SC détecté — bounds physiques', JSON.stringify(bounds))
+      isGameFocused = focused
+      sendGameBounds(bounds)
 
       const { gameFolder } = getSettings()
-      if (gameFolder) {
-        logParser.start(gameFolder)
-        showOverlayIfInGame()
-      }
+      if (gameFolder) logParser.start(gameFolder)
 
-      startWindowStateWatcher({
-        onMinimize: hideOverlay,
-        onRestore: async () => {
-          if (manuallyHidden) return
-          const state = logParser.getState()
-          if (state.shard && state.activity !== 'hangar') await refreshOverlayBounds()
-        },
-        onFocus: async () => {
-          if (manuallyHidden) return
-          const state = logParser.getState()
-          if (state.shard && state.activity !== 'hangar') await refreshOverlayBounds()
-        },
-        onUnfocus: () => {
-          hideOverlay()
-        },
-      })
+      if (!manuallyHidden && focused) {
+        showOverlay()
+        logger.info('[overlay] show → SC lancé (focused)')
+      } else {
+        logger.info(`[overlay] SC lancé mais overlay non affiché — focused=${focused} manuallyHidden=${manuallyHidden}`)
+      }
     },
 
     onStop() {
-      if (boundsInterval) { clearInterval(boundsInterval); boundsInterval = null }
-      currentGameBounds = null
-      stopWindowStateWatcher()
+      logger.info('[overlay] SC fermé — hide overlay')
+      isGameFocused = false
       logParser.stop()
+      sendGameBounds(null)
       hideOverlay()
       manuallyHidden = false
     },
+
+    onMinimize() {
+      logger.info('[overlay] SC minimisé — hide overlay')
+      isGameFocused = false
+      sendGameBounds(null)
+      hideOverlay()
+    },
+
+    onRestore(foreground: boolean) {
+      logger.info(`[overlay] SC restauré — foreground=${foreground} manuallyHidden=${manuallyHidden}`)
+      isGameFocused = foreground
+      if (manuallyHidden || !foreground) return
+      const b = getGameWindowBounds()
+      if (b) sendGameBounds(b)
+      showOverlay()
+      logger.info('[overlay] show → SC restauré')
+    },
+
+    onFocus() {
+      logger.info(`[overlay] SC focus — manuallyHidden=${manuallyHidden}`)
+      isGameFocused = true
+      if (manuallyHidden) return
+      const b = getGameWindowBounds()
+      if (b) sendGameBounds(b)
+      showOverlay()
+      logger.info('[overlay] show → SC focus')
+    },
+
+    onUnfocus() {
+      logger.info('[overlay] SC perd le focus — hide overlay')
+      isGameFocused = false
+      sendGameBounds(null)
+      hideOverlay()
+    },
+
+    onBoundsChange(bounds) {
+      const ow = getOverlayWindow()
+      if (ow && !ow.isDestroyed() && ow.isVisible()) {
+        logger.debug(`[overlay] bounds changed → ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`)
+        sendGameBounds(bounds)
+      }
+    },
   }))
 
-  // Map toggle key setup
+  // ── Map toggle key ────────────────────────────────────────────────────────────
+
   const toggleMapVisibility = () => {
     sendToOverlay('overlay:map-toggle', undefined)
   }
@@ -229,7 +247,6 @@ app.whenReady().then(async () => {
   function registerMapIoHook(domKeyCode?: number) {
     if (mapIoHookHandler) { uIOhook.off('keydown', mapIoHookHandler); mapIoHookHandler = null }
     if (typeof domKeyCode !== 'number') return
-    // uIOhook prend la main : désenregistrer globalShortcut pour éviter le double-toggle
     try { if (_registeredMapKey) globalShortcut.unregister(_registeredMapKey) } catch {}
     _registeredMapKey = null
     const uiCode = domKeyCodeToUiohook(domKeyCode)
@@ -251,11 +268,8 @@ app.whenReady().then(async () => {
   }
 
   const initialMapSettings = getSettings()
-  const initialMapKey = initialMapSettings.mapToggleKey
-  const initialMapKeyCode = initialMapSettings.mapToggleKeyCode
-
-  if (initialMapKey) registerMapToggleKey(initialMapKey)
-  if (typeof initialMapKeyCode === 'number') registerMapIoHook(initialMapKeyCode)
+  if (initialMapSettings.mapToggleKey)                            registerMapToggleKey(initialMapSettings.mapToggleKey)
+  if (typeof initialMapSettings.mapToggleKeyCode === 'number')   registerMapIoHook(initialMapSettings.mapToggleKeyCode)
 
   ;(global as any).__setMapToggleKey = (newKey: string | ToggleKeyObject) => {
     if (typeof newKey === 'string') {
@@ -271,7 +285,8 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Toggle key setup
+  // ── Overlay toggle key ────────────────────────────────────────────────────────
+
   let currentKey = getSettings().toggleKey || 'F10'
   const currentKeyCode = getSettings().toggleKeyCode
 
@@ -280,31 +295,27 @@ app.whenReady().then(async () => {
     if (!ow) return
 
     if (ow.isVisible()) {
+      logger.info('[overlay] toggle → hide (manuallyHidden)')
       hideOverlay()
       manuallyHidden = true
       return
     }
 
-    // We want to show the overlay
     manuallyHidden = false
 
-    if (currentGameBounds) {
-      // In-game: follow the game window bounds as usual
-      void refreshOverlayBounds()
+    const b = getGameWindowBounds()
+    if (b) {
+      logger.info('[overlay] toggle → show (SC running)')
+      sendGameBounds(b)
+      showOverlay()
       return
     }
 
-    // In prod, require the game to be running to show the overlay
+    logger.info('[overlay] toggle → SC non détecté, overlay non affiché')
+
     if (app.isPackaged) return
 
-    // In dev, allow opening without the game using primary display bounds
-    const workArea = screen.getPrimaryDisplay().workArea
-    setOverlayBounds({
-      x: Math.round(workArea.x),
-      y: Math.round(workArea.y),
-      width: Math.round(workArea.width),
-      height: Math.round(workArea.height),
-    })
+    // En dev : afficher en plein écran principal sans SC
     showOverlay()
   }
 
@@ -336,7 +347,6 @@ app.whenReady().then(async () => {
   registerToggleKey(currentKey)
   if (typeof currentKeyCode === 'number') registerIoHook(currentKeyCode)
 
-  // Export toggle key change handler via IPC
   ;(global as any).__setToggleKey = (newKey: string | ToggleKeyObject) => {
     if (typeof newKey === 'string') {
       currentKey = newKey
@@ -348,20 +358,20 @@ app.whenReady().then(async () => {
     }
   }
 
-  uIOhook.on('keydown', (e: any) => { /* debug */ })
+  uIOhook.on('keydown', (_e: any) => { /* debug hook */ })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
 })
 
+// ─── Nettoyage ────────────────────────────────────────────────────────────────
+
 app.on('window-all-closed', () => {
   stopGameWatcher()
-  stopWindowStateWatcher()
-  killPersistentPS()
   globalShortcut.unregisterAll()
   if (ioHookStarted) { try { uIOhook.stop() } catch { /* ignore */ } }
-  // Make sure overlay/editor windows are destroyed before quitting
+
   try {
     const ow = getOverlayWindow()
     if (ow && !ow.isDestroyed()) { try { ow.destroy() } catch {} }

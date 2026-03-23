@@ -1,3 +1,5 @@
+@import './styles/theme-variables.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,8 +7,8 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  background: #070b12;
-  color: #e2e8f0;
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 html,
@@ -16,8 +18,8 @@ body,
   height: 100%;
   overflow: hidden;
   background:
-    radial-gradient(circle at top, rgba(81, 216, 255, 0.12), transparent 30%),
-    linear-gradient(180deg, #09101b 0%, #070b12 100%);
+    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.12), transparent 30%),
+    linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-base) 100%);
 }
 
 /* Overlay window must be fully transparent — no background at all */
@@ -32,12 +34,17 @@ html.overlay-mode #app {
   box-sizing: border-box;
 }
 
+/* Empêche currentColor (= text-primary) de contaminer les bordures */
+*, ::before, ::after {
+  border-color: var(--border);
+}
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+  background: rgba(var(--accent-rgb), 0.20);
   border-radius: 9999px;
 }

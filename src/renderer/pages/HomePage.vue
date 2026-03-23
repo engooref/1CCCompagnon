@@ -168,23 +168,23 @@ watch(() => app.status.authReady, (v) => {
     </div>
 
     <!-- ── Profil + connexion ─────────────────────────────────────────────── -->
-    <div class="shrink-0 rounded-lg border border-cyan-400/20 bg-black/20 p-4 flex items-center gap-4">
+    <div class="shrink-0 rounded-lg border border-accent/20 bg-black/20 p-4 flex items-center gap-4">
       <!-- Avatar -->
       <img
         v-if="profile?.avatar"
         :src="profile.avatar"
         alt="Avatar"
-        class="h-14 w-14 rounded-full border-2 border-cyan-400/40 object-cover shadow-lg shrink-0"
+        class="h-14 w-14 rounded-full border-2 border-accent/40 object-cover shadow-lg shrink-0"
       />
       <div
         v-else
-        class="h-14 w-14 rounded-full border-2 border-cyan-400/20 bg-slate-800 flex items-center justify-center text-2xl text-slate-500 shrink-0"
+        class="h-14 w-14 rounded-full border-2 border-accent/20 bg-th-card flex items-center justify-center text-2xl text-th-muted shrink-0"
       >?</div>
 
       <!-- Infos -->
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <p class="text-base font-bold text-slate-100 truncate">
+          <p class="text-base font-bold text-th-primary truncate">
             {{ profile?.username ?? 'Non connecté' }}
           </p>
           <span
@@ -193,22 +193,22 @@ watch(() => app.status.authReady, (v) => {
             :class="rhStatusColor"
           >{{ rh.status }}</span>
         </div>
-        <p v-if="rh?.grade?.name" class="text-xs text-slate-400 mt-0.5">
+        <p v-if="rh?.grade?.name" class="text-xs text-th-secondary mt-0.5">
           {{ rh.grade.name }}
-          <span v-if="rh.level" class="text-slate-600"> · Niv. {{ rh.level }}</span>
+          <span v-if="rh.level" class="text-th-muted"> · Niv. {{ rh.level }}</span>
         </p>
 
         <!-- Barre XP compacte -->
         <div v-if="rh?.nextLevelXp" class="mt-2">
-          <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-th-card">
             <div
-              class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500 shadow-[0_0_6px_rgba(34,211,238,0.4)]"
+              class="h-full rounded-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500 shadow-[0_0_6px_rgba(var(--accent-rgb),0.4)]"
               :style="{ width: xpPercent + '%' }"
             />
           </div>
-          <p class="mt-0.5 text-[10px] text-slate-600 text-right">
+          <p class="mt-0.5 text-[10px] text-th-muted text-right">
             {{ rh.totalXp.toLocaleString('fr-FR') }} / {{ rh.nextLevelXp.toLocaleString('fr-FR') }} XP
-            <span class="text-cyan-400/70">({{ xpPercent }}%)</span>
+            <span class="text-accent/70">({{ xpPercent }}%)</span>
           </p>
         </div>
       </div>
@@ -219,8 +219,8 @@ watch(() => app.status.authReady, (v) => {
           <span class="h-2 w-2 rounded-full shrink-0" :class="connDotClass"/>
           <span class="text-xs font-semibold" :class="connTextClass">{{ connLabel }}</span>
         </div>
-        <span v-if="app.status.latencyMs" class="text-[10px] text-slate-600 font-mono">{{ app.status.latencyMs }} ms</span>
-        <span v-if="app.status.checkedAt" class="text-[10px] text-slate-700">
+        <span v-if="app.status.latencyMs" class="text-[10px] text-th-muted font-mono">{{ app.status.latencyMs }} ms</span>
+        <span v-if="app.status.checkedAt" class="text-[10px] text-th-disabled">
           {{ new Date(app.status.checkedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }}
         </span>
       </div>
@@ -230,19 +230,19 @@ watch(() => app.status.authReady, (v) => {
     <div class="shrink-0 grid grid-cols-3 gap-3">
 
       <!-- Transports actifs -->
-      <div class="rounded-lg border border-cyan-400/15 bg-black/20 p-3 flex items-center gap-3">
-        <div class="h-8 w-8 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div class="rounded-lg border border-accent/15 bg-black/20 p-3 flex items-center gap-3">
+        <div class="h-8 w-8 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
           </svg>
         </div>
         <div class="min-w-0">
-          <p class="text-lg font-bold text-slate-100 leading-none">
-            <span v-if="loadingOrds" class="text-slate-600 text-sm">…</span>
+          <p class="text-lg font-bold text-th-primary leading-none">
+            <span v-if="loadingOrds" class="text-th-muted text-sm">…</span>
             <span v-else>{{ activeOrdersCount }}</span>
           </p>
-          <p class="text-[10px] text-slate-500 mt-0.5 truncate">Ordres actifs</p>
+          <p class="text-[10px] text-th-muted mt-0.5 truncate">Ordres actifs</p>
         </div>
       </div>
 
@@ -257,11 +257,11 @@ watch(() => app.status.authReady, (v) => {
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
             <span v-if="running" class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"/>
-            <p class="text-[11px] font-semibold" :class="running ? 'text-emerald-300' : 'text-slate-500'">
+            <p class="text-[11px] font-semibold" :class="running ? 'text-emerald-300' : 'text-th-muted'">
               {{ running ? 'EN DIRECT' : 'Inactif' }}
             </p>
           </div>
-          <p class="text-[10px] text-slate-500 mt-0.5 truncate">Journal de jeu</p>
+          <p class="text-[10px] text-th-muted mt-0.5 truncate">Journal de jeu</p>
         </div>
       </div>
 
@@ -274,10 +274,10 @@ watch(() => app.status.authReady, (v) => {
           </svg>
         </div>
         <div class="min-w-0">
-          <p class="text-[11px] font-semibold text-slate-200 truncate leading-tight">
+          <p class="text-[11px] font-semibold text-th-primary truncate leading-tight">
             {{ pinnedOrder?.name ?? (pinnedId != null ? `#${pinnedId}` : '—') }}
           </p>
-          <p class="text-[10px] text-slate-500 mt-0.5">Transport épinglé</p>
+          <p class="text-[10px] text-th-muted mt-0.5">Transport épinglé</p>
         </div>
       </div>
 
@@ -293,7 +293,7 @@ watch(() => app.status.authReady, (v) => {
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
           </div>
-          <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Agenda</span>
+          <span class="text-xs font-semibold uppercase tracking-widest text-th-secondary">Agenda</span>
         </div>
         <RouterLink
           to="/agenda"
@@ -307,14 +307,14 @@ watch(() => app.status.authReady, (v) => {
       </div>
 
       <!-- Chargement -->
-      <div v-if="loadingAgenda" class="rounded-lg border border-violet-400/10 bg-black/20 p-3 text-xs text-slate-600 text-center">
+      <div v-if="loadingAgenda" class="rounded-lg border border-violet-400/10 bg-black/20 p-3 text-xs text-th-muted text-center">
         Chargement…
       </div>
 
       <!-- Vide -->
       <div
         v-else-if="!agendaEvents.length"
-        class="rounded-lg border border-dashed border-violet-400/10 bg-black/10 p-3 text-xs text-slate-600 text-center"
+        class="rounded-lg border border-dashed border-violet-400/10 bg-black/10 p-3 text-xs text-th-muted text-center"
       >
         Aucun événement à venir
       </div>
@@ -337,7 +337,7 @@ watch(() => app.status.authReady, (v) => {
                   :style="event.type.color
                     ? { borderColor: event.type.color + '55', backgroundColor: event.type.color + '20', color: event.type.color }
                     : {}"
-                  :class="!event.type.color ? 'border-slate-600 bg-slate-800 text-slate-400' : ''"
+                  :class="!event.type.color ? 'border-th-subtle bg-th-card text-th-secondary' : ''"
                 >{{ event.type.name }}</span>
 
                 <!-- Badge "bientôt" -->
@@ -348,12 +348,12 @@ watch(() => app.status.authReady, (v) => {
                   {{ minutesUntil(event.start) }} min
                 </span>
               </div>
-              <p class="text-xs font-bold text-slate-100 truncate group-hover:text-violet-200 transition-colors">
+              <p class="text-xs font-bold text-th-primary truncate group-hover:text-violet-200 transition-colors">
                 {{ event.name }}
               </p>
-              <p class="text-[10px] text-slate-600 mt-0.5">{{ formatEventDate(event.start) }}</p>
+              <p class="text-[10px] text-th-muted mt-0.5">{{ formatEventDate(event.start) }}</p>
             </div>
-            <svg class="shrink-0 w-3 h-3 mt-0.5 text-slate-700 group-hover:text-slate-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="shrink-0 w-3 h-3 mt-0.5 text-th-disabled group-hover:text-th-muted transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
           </div>
@@ -365,18 +365,18 @@ watch(() => app.status.authReady, (v) => {
     <div class="shrink-0 flex flex-col gap-3">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <div class="h-6 w-6 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center shrink-0">
-              <svg class="w-3.5 h-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div class="h-6 w-6 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+              <svg class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
               </svg>
             </div>
-            <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Transports</span>
-            <span v-if="orders.length" class="text-xs text-slate-600">({{ orders.length }})</span>
+            <span class="text-xs font-semibold uppercase tracking-widest text-th-secondary">Transports</span>
+            <span v-if="orders.length" class="text-xs text-th-muted">({{ orders.length }})</span>
           </div>
           <RouterLink
             to="/transport"
-            class="text-[11px] text-cyan-400/60 hover:text-cyan-300 transition flex items-center gap-1"
+            class="text-[11px] text-accent/60 hover:text-accent transition flex items-center gap-1"
           >
             Voir tous
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -386,14 +386,14 @@ watch(() => app.status.authReady, (v) => {
         </div>
 
         <!-- Loading -->
-        <div v-if="loadingOrds" class="rounded-lg border border-cyan-400/10 bg-black/20 p-4 text-xs text-slate-600 text-center">
+        <div v-if="loadingOrds" class="rounded-lg border border-accent/10 bg-black/20 p-4 text-xs text-th-muted text-center">
           Chargement…
         </div>
 
         <!-- Non connecté -->
         <div
           v-else-if="!app.status.authReady"
-          class="rounded-lg border border-dashed border-slate-800 p-4 text-xs text-slate-600 text-center"
+          class="rounded-lg border border-dashed border-th-subtle p-4 text-xs text-th-muted text-center"
         >
           Connexion requise
         </div>
@@ -401,7 +401,7 @@ watch(() => app.status.authReady, (v) => {
         <!-- Aucun ordre -->
         <div
           v-else-if="!orders.length"
-          class="rounded-lg border border-dashed border-cyan-400/10 bg-black/10 p-4 text-xs text-slate-600 text-center"
+          class="rounded-lg border border-dashed border-accent/10 bg-black/10 p-4 text-xs text-th-muted text-center"
         >
           Aucun ordre de transport
         </div>
@@ -412,17 +412,17 @@ watch(() => app.status.authReady, (v) => {
             v-for="order in recentOrders"
             :key="order.id"
             :to="`/transport/${order.id}`"
-            class="group block rounded-lg border border-cyan-400/15 bg-black/20 p-3 hover:border-cyan-400/35 hover:bg-black/30 transition-colors"
+            class="group block rounded-lg border border-accent/15 bg-black/20 p-3 hover:border-accent/35 hover:bg-black/30 transition-colors"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                  <p class="text-xs font-bold truncate text-slate-100 group-hover:text-cyan-200 transition-colors">
+                  <p class="text-xs font-bold truncate text-th-primary group-hover:text-accent transition-colors">
                     {{ order.name ?? `Ordre #${order.id}` }}
                   </p>
                   <span
                     v-if="isPinned(order.id)"
-                    class="shrink-0 inline-flex items-center gap-0.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300"
+                    class="shrink-0 inline-flex items-center gap-0.5 rounded-full border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9px] font-semibold text-accent"
                   >
                     <svg class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
@@ -434,24 +434,24 @@ watch(() => app.status.authReady, (v) => {
                     class="shrink-0 inline-flex items-center rounded-full border border-rose-400/30 bg-rose-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-300"
                   >Obsolète</span>
                 </div>
-                <p v-if="order.originName" class="text-[10px] text-slate-600 truncate">
+                <p v-if="order.originName" class="text-[10px] text-th-muted truncate">
                   {{ order.originName }}
                 </p>
                 <!-- Progress -->
                 <div v-if="order.itinerary?.lines?.length" class="mt-1.5">
-                  <div class="h-1 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div class="h-1 w-full overflow-hidden rounded-full bg-th-card">
                     <div
-                      class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500"
+                      class="h-full rounded-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500"
                       :style="{ width: orderProgress(order) + '%' }"
                     />
                   </div>
-                  <div class="flex items-center justify-between mt-0.5 text-[9px] text-slate-600">
+                  <div class="flex items-center justify-between mt-0.5 text-[9px] text-th-muted">
                     <span>{{ order.itinerary.lines.filter(l => l.completed).length }}/{{ order.itinerary.lines.length }} étapes</span>
                     <span>{{ orderProgress(order) }}%</span>
                   </div>
                 </div>
               </div>
-              <svg class="mt-0.5 shrink-0 w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="mt-0.5 shrink-0 w-3.5 h-3.5 text-th-muted group-hover:text-th-secondary transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
               </svg>
             </div>

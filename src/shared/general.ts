@@ -1,10 +1,29 @@
+// ─── Système d'apparence ──────────────────────────────────────────────────────
+
+export interface AppearanceSettings {
+  /** Couleur principale du HUD (hex). Défaut : #22d3ee */
+  primaryColor: string
+  /** Couleur d'accent secondaire (hex). Défaut : #0e7490 */
+  accentColor:  string
+  /** Couleur du texte principal (hex). Défaut : #f1f5f9 */
+  textColor:    string
+  /** Position de la barre de navigation. Défaut : left */
+  navPosition:  'left' | 'right' | 'top'
+  /** Taille de base du texte en px. Défaut : 16 */
+  fontSize?: number
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type UrlsRoutes = {
   [key: string]: string | UrlsRoutes
 }
 
 export interface OverlayElementPos {
-  x: number
-  y: number
+  /** Position X en fraction de la largeur overlay (0.0 = gauche · 1.0 = droite) */
+  xPct: number
+  /** Position Y en fraction de la hauteur overlay (0.0 = haut · 1.0 = bas) */
+  yPct: number
 }
 
 export type OverlayModuleType = 'status' | 'transport' | 'quantum' | 'zone'
@@ -21,14 +40,16 @@ export interface OverlayModuleConfig {
   opacity: number
   locked: boolean
   zIndex: number
+  fontSize: number  // zoom scale 0.75–1.5, default 1.0
+  bgColor: string   // hex background tint color, empty = pure black
   anchor: OverlayAnchor
 }
 
 export const DEFAULT_OVERLAY_MODULES: OverlayModuleConfig[] = [
-  { id: 'status',    type: 'status',    title: 'Statut',    visible: true, minimized: false, width: 240, height: 110, opacity: 0.65, locked: false, zIndex: 10, anchor: 'top-left' },
-  { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 20, anchor: 'top-right' },
-  { id: 'quantum',   type: 'quantum',   title: 'Quantum',   visible: true, minimized: false, width: 320, height: 88,  opacity: 0.65, locked: false, zIndex: 30, anchor: 'bottom-left' },
-  { id: 'zone',      type: 'zone',      title: 'Zone',      visible: true, minimized: false, width: 240, height: 84,  opacity: 0.65, locked: false, zIndex: 40, anchor: 'bottom-right' },
+  { id: 'status',    type: 'status',    title: 'Statut',    visible: true, minimized: false, width: 240, height: 110, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-left' },
+  { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 20, fontSize: 1, bgColor: '', anchor: 'top-right' },
+  { id: 'quantum',   type: 'quantum',   title: 'Quantum',   visible: true, minimized: false, width: 320, height: 88,  opacity: 0.65, locked: false, zIndex: 30, fontSize: 1, bgColor: '', anchor: 'bottom-left' },
+  { id: 'zone',      type: 'zone',      title: 'Zone',      visible: true, minimized: false, width: 240, height: 84,  opacity: 0.65, locked: false, zIndex: 40, fontSize: 1, bgColor: '', anchor: 'bottom-right' },
 ]
 
 export type OverlayLayoutKey = string
@@ -68,6 +89,11 @@ export interface AppSettings {
   marketOppsEnabled?: boolean
   marketOppsBudget?: number | null
   agendaNotificationsEnabled?: boolean
+  appHue?: number         // hue-rotate deg for app accent (0 = cyan default)
+  appScale?: number       // UI zoom scale 0.85–1.15, default 1
+  appBrightness?: number  // brightness filter 0.7–1.3, default 1
+  defaultPage?: string    // route path shown on startup e.g. '/transport'
+  appearance?: AppearanceSettings
 }
 
 export type ConnectionLevel = 'idle' | 'loading' | 'connected' | 'auth_error' | 'network_error' | 'missing_api_key'

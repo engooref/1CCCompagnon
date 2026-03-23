@@ -143,7 +143,9 @@ class LogParser {
 
       case 'client_spawned':
         this.state.isConnected = true
-        this.state.activity = 'space'
+        // Ne pas forcer 'space' ici — le joueur peut avoir spawn en station.
+        // L'activité sera déterminée par FrontendHangar, location ou les events quantum.
+        if (this.state.activity === 'unknown') this.state.activity = 'space'
         if (!this.state.sessionAt) this.state.sessionAt = at
         this.emit('client_spawned', 'Joueur spawn', {}, at)
         break
@@ -151,7 +153,8 @@ class LogParser {
       case 'shard':
         if (d.shard && this.state.shard !== d.shard) {
           this.state.shard = d.shard
-          this.state.activity = 'space'
+          // Ne pas forcer 'space' : on sait juste que le joueur est dans un shard,
+          // pas encore où il se trouve.
           this.state.isConnected = true
           if (!this.state.sessionAt) this.state.sessionAt = at
           this.emit('shard', `Serveur : ${d.shard}`, { shard: d.shard }, at)
@@ -212,7 +215,10 @@ class LogParser {
         if (loc && this.state.location !== loc) {
           this.state.location = loc
           this.state.destination = null
-          if (this.state.activity === 'quantum') this.state.activity = 'space'
+          // Fin de quantum ou activité indéterminée → le joueur est dans/près d'une location
+          if (this.state.activity === 'quantum' || this.state.activity === 'unknown') {
+            this.state.activity = 'space'
+          }
           this.emit('location', `Localisation : ${loc}`, {
             location: loc,
             rawLocation: d.rawLocation ?? null,

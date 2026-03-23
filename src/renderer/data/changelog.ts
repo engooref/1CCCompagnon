@@ -8,11 +8,23 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.6.0',
+    date: '2026-05-15',
+    changes: [
+      { type: 'feature', text: 'Ajout de la personnalisation de l\'interface' },
+      { type: 'feature', text: 'Ajout du système d\'inventaire et synchronisation direct avec le site' },
+      { type: 'improvement', text: 'Overlay amélioré : plus fluide, mieux synchronisé avec le jeu et plus stable.' },    
+      { type: 'improvement', text: 'Amélioration des ordres de transports, permettant pour un meme manifests de mettre plusieurs cargaisons' },
+
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-04-01',
     changes: [
-      { type: 'improvement', text: 'Ajout de nouvelles résolutions d\'écran' },
-      { type: 'improvement', text: 'Ajout de l\'agenda permettant de regarder les événements à venir' },
+      { type: 'feature', text: 'Ajout de nouvelles résolutions d\'écran' },
+      { type: 'feature', text: 'Ajout de l\'agenda permettant de regarder les événements à venir avec notifications' },
+
     ],
   },
   {
@@ -30,7 +42,7 @@ export const changelog: ChangelogEntry[] = [
     version: '0.3.0',
     date: '2026-03-10',
     changes: [
-      { type: 'feature',     text: 'Première version publique' },
+      { type: 'feature',     text: 'Première version' },
     ],
   },
 ]

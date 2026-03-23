@@ -151,7 +151,7 @@ onMounted(() => {
   <section class="h-full flex flex-col gap-4">
 
     <!-- Not authenticated -->
-    <div v-if="!app.status.authReady" class="flex flex-1 items-center justify-center text-slate-500 text-sm">
+    <div v-if="!app.status.authReady" class="flex flex-1 items-center justify-center text-th-muted text-sm">
       Connexion requise.
     </div>
 
@@ -161,7 +161,7 @@ onMounted(() => {
       <div class="shrink-0 flex items-center gap-3">
         <button
           @click="router.push({ name: 'agenda' })"
-          class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+          class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-xs text-th-secondary hover:text-th-primary hover:border-th-subtle transition"
         >
           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -176,14 +176,14 @@ onMounted(() => {
             :style="data.event.type.color
               ? { borderColor: data.event.type.color + '55', backgroundColor: data.event.type.color + '20', color: data.event.type.color }
               : {}"
-            :class="!data.event.type.color ? 'border-slate-600 bg-slate-800 text-slate-400' : ''"
+            :class="!data.event.type.color ? 'border-th-subtle bg-th-card text-th-secondary' : ''"
           >
             {{ data.event.type.name }}
           </span>
-          <h2 class="text-sm font-bold text-slate-100 truncate">{{ data.event.name }}</h2>
+          <h2 class="text-sm font-bold text-th-primary truncate">{{ data.event.name }}</h2>
         </div>
 
-        <div v-if="loading && !data" class="text-xs text-slate-500">Chargement…</div>
+        <div v-if="loading && !data" class="text-xs text-th-muted">Chargement…</div>
       </div>
 
       <!-- Error -->
@@ -192,7 +192,7 @@ onMounted(() => {
       </div>
 
       <!-- Loading skeleton -->
-      <div v-else-if="loading && !data" class="rounded-lg border border-violet-400/10 bg-black/20 p-4 text-sm text-slate-500">
+      <div v-else-if="loading && !data" class="rounded-lg border border-violet-400/10 bg-black/20 p-4 text-sm text-th-muted">
         Chargement de l'événement…
       </div>
 
@@ -200,21 +200,21 @@ onMounted(() => {
       <template v-if="data">
 
         <!-- Ma réponse -->
-        <div v-if="data.myResponse" class="shrink-0 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 flex items-center gap-3">
-          <span class="text-xs text-slate-500">Ma réponse :</span>
+        <div v-if="data.myResponse" class="shrink-0 rounded-lg border border-th-subtle bg-th-surface px-4 py-2.5 flex items-center gap-3">
+          <span class="text-xs text-th-muted">Ma réponse :</span>
           <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold" :class="typeRepClass(data.myResponse.type)">
             {{ typeRepLabel(data.myResponse.type) }}
           </span>
-          <span v-if="data.myResponse.team" class="text-xs text-slate-400">
-            Escouade : <span class="font-medium text-slate-200">{{ data.myResponse.team.name }}</span>
+          <span v-if="data.myResponse.team" class="text-xs text-th-secondary">
+            Escouade : <span class="font-medium text-th-primary">{{ data.myResponse.team.name }}</span>
           </span>
-          <span v-if="data.myResponse.vaisseau" class="text-xs text-slate-400">
-            Vaisseau : <span class="font-medium text-slate-200">{{ data.myResponse.vaisseau }}</span>
+          <span v-if="data.myResponse.vaisseau" class="text-xs text-th-secondary">
+            Vaisseau : <span class="font-medium text-th-primary">{{ data.myResponse.vaisseau }}</span>
           </span>
         </div>
 
         <!-- ── Tabs ──────────────────────────────────────────────────────── -->
-        <div class="shrink-0 flex gap-1 border-b border-slate-800 pb-0">
+        <div class="shrink-0 flex gap-1 border-b border-th-subtle pb-0">
           <button
             v-for="tab in ([
               { key: 'info', label: 'Infos' },
@@ -228,7 +228,7 @@ onMounted(() => {
             class="px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px"
             :class="activeTab === tab.key
               ? 'border-violet-400 text-violet-300'
-              : 'border-transparent text-slate-500 hover:text-slate-300'"
+              : 'border-transparent text-th-muted hover:text-th-secondary'"
           >
             {{ tab.label }}
           </button>
@@ -239,77 +239,77 @@ onMounted(() => {
 
           <!-- TAB: Infos -->
           <div v-if="activeTab === 'info'" class="space-y-3">
-            <div class="rounded-lg border border-slate-700/60 bg-black/20 divide-y divide-slate-800">
+            <div class="rounded-lg border border-th-muted bg-black/20 divide-y divide-[var(--border-subtle)]">
               <div class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Début</span>
-                <span class="text-xs text-slate-200">{{ formatDate(data.event.start) }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Début</span>
+                <span class="text-xs text-th-primary">{{ formatDate(data.event.start) }}</span>
               </div>
               <div class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Fin</span>
-                <span class="text-xs text-slate-200">{{ formatDate(data.event.end) }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Fin</span>
+                <span class="text-xs text-th-primary">{{ formatDate(data.event.end) }}</span>
               </div>
               <div v-if="data.event.launchServer" class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Lancement serveur</span>
-                <span class="text-xs text-slate-200">{{ formatDate(data.event.launchServer) }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Lancement serveur</span>
+                <span class="text-xs text-th-primary">{{ formatDate(data.event.launchServer) }}</span>
               </div>
               <div v-if="data.event.launchScenario" class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Lancement scénario</span>
-                <span class="text-xs text-slate-200">{{ formatDate(data.event.launchScenario) }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Lancement scénario</span>
+                <span class="text-xs text-th-primary">{{ formatDate(data.event.launchScenario) }}</span>
               </div>
               <div v-if="data.event.location" class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Lieu</span>
-                <span class="text-xs text-slate-200">{{ data.event.location }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Lieu</span>
+                <span class="text-xs text-th-primary">{{ data.event.location }}</span>
               </div>
               <div v-if="data.event.spawn" class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Spawn</span>
-                <span class="text-xs text-slate-200">{{ data.event.spawn }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Spawn</span>
+                <span class="text-xs text-th-primary">{{ data.event.spawn }}</span>
               </div>
               <div v-if="data.event.responsable" class="px-4 py-3 flex gap-3">
-                <span class="w-32 shrink-0 text-xs text-slate-500">Responsable</span>
-                <span class="text-xs text-slate-200">{{ data.event.responsable }}</span>
+                <span class="w-32 shrink-0 text-xs text-th-muted">Responsable</span>
+                <span class="text-xs text-th-primary">{{ data.event.responsable }}</span>
               </div>
             </div>
 
-            <div v-if="data.event.object1CC" class="rounded-lg border border-slate-700/60 bg-black/20 p-4">
+            <div v-if="data.event.object1CC" class="rounded-lg border border-th-muted bg-black/20 p-4">
               <p class="text-xs font-semibold text-violet-300/80 mb-1.5">Objectif 1CC</p>
-              <p class="text-xs text-slate-300 whitespace-pre-line">{{ data.event.object1CC }}</p>
+              <p class="text-xs text-th-secondary whitespace-pre-line">{{ data.event.object1CC }}</p>
             </div>
 
-            <div v-if="data.event.objectAdv" class="rounded-lg border border-slate-700/60 bg-black/20 p-4">
+            <div v-if="data.event.objectAdv" class="rounded-lg border border-th-muted bg-black/20 p-4">
               <p class="text-xs font-semibold text-rose-300/80 mb-1.5">Objectif adverse</p>
-              <p class="text-xs text-slate-300 whitespace-pre-line">{{ data.event.objectAdv }}</p>
+              <p class="text-xs text-th-secondary whitespace-pre-line">{{ data.event.objectAdv }}</p>
             </div>
 
-            <div v-if="data.event.description" class="rounded-lg border border-slate-700/60 bg-black/20 p-4">
-              <p class="text-xs font-semibold text-slate-400 mb-1.5">Description</p>
-              <p class="text-xs text-slate-300 whitespace-pre-line">{{ data.event.description }}</p>
+            <div v-if="data.event.description" class="rounded-lg border border-th-muted bg-black/20 p-4">
+              <p class="text-xs font-semibold text-th-secondary mb-1.5">Description</p>
+              <p class="text-xs text-th-secondary whitespace-pre-line">{{ data.event.description }}</p>
             </div>
 
-            <div v-if="data.event.commentaire" class="rounded-lg border border-slate-700/60 bg-black/20 p-4">
-              <p class="text-xs font-semibold text-slate-400 mb-1.5">Commentaire</p>
-              <p class="text-xs text-slate-300 whitespace-pre-line">{{ data.event.commentaire }}</p>
+            <div v-if="data.event.commentaire" class="rounded-lg border border-th-muted bg-black/20 p-4">
+              <p class="text-xs font-semibold text-th-secondary mb-1.5">Commentaire</p>
+              <p class="text-xs text-th-secondary whitespace-pre-line">{{ data.event.commentaire }}</p>
             </div>
           </div>
 
           <!-- TAB: Inscriptions -->
           <div v-else-if="activeTab === 'inscriptions'">
-            <div v-if="!data.inscriptions.length" class="p-4 text-sm text-slate-500">Aucune inscription.</div>
+            <div v-if="!data.inscriptions.length" class="p-4 text-sm text-th-muted">Aucune inscription.</div>
             <div v-else class="space-y-1.5">
               <div
                 v-for="ins in data.inscriptions"
                 :key="ins.userId"
-                class="flex items-center gap-3 rounded-lg border border-slate-700/50 bg-black/20 px-3 py-2"
+                class="flex items-center gap-3 rounded-lg border border-th-muted bg-black/20 px-3 py-2"
               >
                 <img
                   v-if="ins.avatar"
                   :src="ins.avatar"
-                  class="w-6 h-6 rounded-full shrink-0 bg-slate-800"
+                  class="w-6 h-6 rounded-full shrink-0 bg-th-card"
                   :alt="ins.username"
                 />
-                <div v-else class="w-6 h-6 rounded-full shrink-0 bg-slate-700 flex items-center justify-center text-[10px] text-slate-400">
+                <div v-else class="w-6 h-6 rounded-full shrink-0 bg-th-card flex items-center justify-center text-[10px] text-th-secondary">
                   {{ ins.username.charAt(0).toUpperCase() }}
                 </div>
-                <span class="flex-1 text-xs text-slate-200">{{ ins.username }}</span>
+                <span class="flex-1 text-xs text-th-primary">{{ ins.username }}</span>
                 <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold" :class="typeRepClass(ins.type)">
                   {{ typeRepLabel(ins.type) }}
                 </span>
@@ -319,30 +319,30 @@ onMounted(() => {
 
           <!-- TAB: Escouades -->
           <div v-else-if="activeTab === 'escouades'">
-            <div v-if="!data.escouades.length" class="p-4 text-sm text-slate-500">Aucune escouade attribuée.</div>
+            <div v-if="!data.escouades.length" class="p-4 text-sm text-th-muted">Aucune escouade attribuée.</div>
             <div v-else class="space-y-3">
               <div
                 v-for="escouade in data.escouades"
                 :key="escouade.id ?? 0"
-                class="rounded-lg border border-slate-700/50 bg-black/20 overflow-hidden"
+                class="rounded-lg border border-th-muted bg-black/20 overflow-hidden"
               >
                 <!-- Escouade header -->
                 <div
-                  class="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800"
+                  class="flex items-center gap-2 px-4 py-2.5 border-b border-th-subtle"
                   :style="escouade.color ? { borderLeftColor: escouade.color, borderLeftWidth: '3px' } : {}"
                 >
-                  <span class="text-xs font-bold text-slate-200">{{ escouade.name }}</span>
-                  <span class="text-xs text-slate-600">({{ escouade.membres.length }} membre{{ escouade.membres.length > 1 ? 's' : '' }})</span>
+                  <span class="text-xs font-bold text-th-primary">{{ escouade.name }}</span>
+                  <span class="text-xs text-th-muted">({{ escouade.membres.length }} membre{{ escouade.membres.length > 1 ? 's' : '' }})</span>
                 </div>
 
                 <!-- Membres -->
-                <div class="divide-y divide-slate-800/60">
+                <div class="divide-y divide-[var(--border-subtle)]">
                   <div v-for="m in escouade.membres" :key="m.id" class="flex items-center gap-3 px-4 py-2">
-                    <img v-if="m.avatar" :src="m.avatar" class="w-5 h-5 rounded-full shrink-0 bg-slate-800" :alt="m.username" />
-                    <div v-else class="w-5 h-5 rounded-full shrink-0 bg-slate-700 flex items-center justify-center text-[10px] text-slate-400">
+                    <img v-if="m.avatar" :src="m.avatar" class="w-5 h-5 rounded-full shrink-0 bg-th-card" :alt="m.username" />
+                    <div v-else class="w-5 h-5 rounded-full shrink-0 bg-th-card flex items-center justify-center text-[10px] text-th-secondary">
                       {{ m.username.charAt(0).toUpperCase() }}
                     </div>
-                    <span class="flex-1 text-xs text-slate-200">{{ m.username }}</span>
+                    <span class="flex-1 text-xs text-th-primary">{{ m.username }}</span>
                     <div class="flex gap-1 flex-wrap justify-end">
                       <span
                         v-for="role in m.roles"
@@ -351,7 +351,7 @@ onMounted(() => {
                         :style="role.color
                           ? { borderColor: role.color + '55', backgroundColor: role.color + '20', color: role.color }
                           : {}"
-                        :class="!role.color ? 'border-slate-700 bg-slate-800 text-slate-400' : ''"
+                        :class="!role.color ? 'border-th-subtle bg-th-card text-th-secondary' : ''"
                       >
                         {{ role.name }}
                       </span>
@@ -364,21 +364,21 @@ onMounted(() => {
 
           <!-- TAB: Vaisseaux -->
           <div v-else-if="activeTab === 'vaisseaux'">
-            <div v-if="!data.vaisseaux.length" class="p-4 text-sm text-slate-500">Aucun vaisseau attribué.</div>
+            <div v-if="!data.vaisseaux.length" class="p-4 text-sm text-th-muted">Aucun vaisseau attribué.</div>
             <div v-else class="space-y-3">
               <div
                 v-for="vaisseau in data.vaisseaux"
                 :key="vaisseau.id"
-                class="rounded-lg border border-slate-700/50 bg-black/20 overflow-hidden"
+                class="rounded-lg border border-th-muted bg-black/20 overflow-hidden"
               >
                 <!-- Vaisseau header -->
-                <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-800">
+                <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-th-subtle">
                   <div class="flex items-center gap-2">
-                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg class="w-3.5 h-3.5 text-th-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                     </svg>
-                    <span class="text-xs font-bold text-slate-200">{{ vaisseau.name ?? `Vaisseau #${vaisseau.id}` }}</span>
-                    <span v-if="vaisseau.model" class="text-xs text-slate-500">— {{ vaisseau.model }}</span>
+                    <span class="text-xs font-bold text-th-primary">{{ vaisseau.name ?? `Vaisseau #${vaisseau.id}` }}</span>
+                    <span v-if="vaisseau.model" class="text-xs text-th-muted">— {{ vaisseau.model }}</span>
                   </div>
                   <span
                     v-if="vaisseau.team"
@@ -386,25 +386,25 @@ onMounted(() => {
                     :style="vaisseau.team.color
                       ? { borderColor: vaisseau.team.color + '55', backgroundColor: vaisseau.team.color + '20', color: vaisseau.team.color }
                       : {}"
-                    :class="!vaisseau.team.color ? 'border-slate-700 bg-slate-800 text-slate-400' : ''"
+                    :class="!vaisseau.team.color ? 'border-th-subtle bg-th-card text-th-secondary' : ''"
                   >
                     {{ vaisseau.team.name }}
                   </span>
                 </div>
 
                 <!-- Slots -->
-                <div class="divide-y divide-slate-800/60">
+                <div class="divide-y divide-[var(--border-subtle)]">
                   <div v-for="(slot, i) in vaisseau.slots" :key="i" class="flex items-center gap-3 px-4 py-2">
-                    <span class="shrink-0 w-24 text-[10px] text-slate-500">{{ slot.slotRole ?? 'Slot' }}</span>
+                    <span class="shrink-0 w-24 text-[10px] text-th-muted">{{ slot.slotRole ?? 'Slot' }}</span>
                     <template v-if="slot.membre">
-                      <img v-if="slot.membre.avatar" :src="slot.membre.avatar" class="w-5 h-5 rounded-full shrink-0 bg-slate-800" :alt="slot.membre.username" />
-                      <div v-else class="w-5 h-5 rounded-full shrink-0 bg-slate-700 flex items-center justify-center text-[10px] text-slate-400">
+                      <img v-if="slot.membre.avatar" :src="slot.membre.avatar" class="w-5 h-5 rounded-full shrink-0 bg-th-card" :alt="slot.membre.username" />
+                      <div v-else class="w-5 h-5 rounded-full shrink-0 bg-th-card flex items-center justify-center text-[10px] text-th-secondary">
                         {{ slot.membre.username.charAt(0).toUpperCase() }}
                       </div>
-                      <span class="text-xs text-slate-200">{{ slot.membre.username }}</span>
+                      <span class="text-xs text-th-primary">{{ slot.membre.username }}</span>
                     </template>
-                    <span v-else class="text-xs text-slate-600 italic">Vide</span>
-                    <span v-if="slot.notes" class="ml-auto text-[10px] text-slate-500 italic">{{ slot.notes }}</span>
+                    <span v-else class="text-xs text-th-muted italic">Vide</span>
+                    <span v-if="slot.notes" class="ml-auto text-[10px] text-th-muted italic">{{ slot.notes }}</span>
                   </div>
                 </div>
               </div>

@@ -16,7 +16,7 @@ export function createOverlayWindow(): BrowserWindow {
     backgroundColor: '#00000000',
     frame: false,
     autoHideMenuBar: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: true,
     focusable: false,
     hasShadow: false,
@@ -34,7 +34,9 @@ export function createOverlayWindow(): BrowserWindow {
     },
   })
 
-  win.setAlwaysOnTop(true, 'screen-saver')
+  // Do not force the highest "screen-saver" topmost level at creation.
+  // We'll enable a milder topmost level when showing the overlay so it
+  // follows the game's window without staying above every other app.
   win.setIgnoreMouseEvents(true, { forward: true })
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setMenu(null)
@@ -45,11 +47,8 @@ export function createOverlayWindow(): BrowserWindow {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'), { hash: '/overlay' })
   }
 
-  if (!app.isPackaged) {
-    win.webContents.on('did-finish-load', () => {
-      win?.webContents.openDevTools({ mode: 'detach' })
-    })
-  }
+  // Do not open DevTools automatically for overlay window in development.
+  // Developers can still toggle DevTools with F12 (handled elsewhere).
 
   win.on('closed', () => { win = null })
   return win
@@ -59,12 +58,17 @@ export function getOverlayWindow(): BrowserWindow | null { return win }
 
 export function showOverlay(): void {
   if (!win || win.isDestroyed()) return
-  win.setAlwaysOnTop(true, 'screen-saver')
+  // Use a less aggressive topmost level so other apps can still appear
+  // above the overlay when appropriate.
+  win.setAlwaysOnTop(true, 'pop-up-menu')
   win.showInactive()
 }
 
 export function hideOverlay(): void {
   if (!win || win.isDestroyed()) return
+  // Remove topmost flag when hiding to avoid leaving a persistent topmost
+  // state if the window is later shown/hidden.
+  try { win.setAlwaysOnTop(false) } catch (e) { /* noop */ }
   win.hide()
 }
 

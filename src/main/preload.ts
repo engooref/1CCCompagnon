@@ -41,12 +41,16 @@ contextBridge.exposeInMainWorld('oneCC', {
   onOverlayLayoutUpdate: (cb: (l: unknown) => void) => ipcRenderer.on('overlay:layout-update', (_e, l) => cb(l)),
   onMapToggle:  (cb: () => void) => ipcRenderer.on('overlay:map-toggle', () => cb()),
   offMapToggle: () => ipcRenderer.removeAllListeners('overlay:map-toggle'),
+  /** Bounds logiques (CSS px) de la fenêtre SC sur l'écran. null = SC absent/minimisé. */
+  onOverlayGameBounds: (cb: (b: { x: number; y: number; width: number; height: number } | null) => void) =>
+    ipcRenderer.on('overlay:game-bounds', (_e, b) => cb(b)),
 
   offOverlay: () => {
     ipcRenderer.removeAllListeners('overlay:state')
     ipcRenderer.removeAllListeners('overlay:event')
     ipcRenderer.removeAllListeners('overlay:layout-update')
     ipcRenderer.removeAllListeners('overlay:map-toggle')
+    ipcRenderer.removeAllListeners('overlay:game-bounds')
   },
 
   // ── Editeur overlay ───────────────────────────────────────────────────────

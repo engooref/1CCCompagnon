@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { http } from '../services/http'
@@ -78,6 +78,13 @@ function testNotification() {
 onMounted(() => {
   if (app.status.authReady) fetchEvents()
 })
+
+function onAgendaUpdated(e: any) {
+  events.value = e?.detail ?? []
+}
+
+onMounted(() => window.addEventListener('agenda:updated', onAgendaUpdated))
+onUnmounted(() => window.removeEventListener('agenda:updated', onAgendaUpdated))
 </script>
 
 <template>
@@ -86,7 +93,7 @@ onMounted(() => {
     <!-- Not authenticated -->
     <div
       v-if="!app.status.authReady"
-      class="flex flex-1 items-center justify-center text-slate-500 text-sm"
+      class="flex flex-1 items-center justify-center text-th-muted text-sm"
     >
       Connexion requise pour accéder à l'agenda.
     </div>
@@ -102,16 +109,16 @@ onMounted(() => {
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
           </div>
-          <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <span class="text-xs font-semibold uppercase tracking-widest text-th-secondary">
             Agenda
-            <span v-if="events.length" class="ml-1 font-normal text-slate-600">({{ events.length }})</span>
+            <span v-if="events.length" class="ml-1 font-normal text-th-muted">({{ events.length }})</span>
           </span>
         </div>
 
         <div class="flex items-center gap-2">
           <button
             @click="testNotification()"
-            class="flex items-center gap-1.5 rounded-md border border-slate-600/40 bg-slate-700/20 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-700/40 hover:text-slate-300 transition"
+            class="flex items-center gap-1.5 rounded-md border border-th-muted bg-th-card/20 px-2.5 py-1 text-xs font-medium text-th-muted hover:bg-th-card/40 hover:text-th-secondary transition"
             title="Simuler une alerte agenda"
           >
             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -139,7 +146,7 @@ onMounted(() => {
       <div class="flex-1 min-h-0 overflow-y-auto">
 
         <!-- Loading -->
-        <div v-if="loading && !events.length" class="rounded-lg border border-violet-400/10 bg-black/20 p-4 text-sm text-slate-500">
+        <div v-if="loading && !events.length" class="rounded-lg border border-violet-400/10 bg-black/20 p-4 text-sm text-th-muted">
           Chargement des événements…
         </div>
 
@@ -151,7 +158,7 @@ onMounted(() => {
         <!-- Empty -->
         <div
           v-else-if="!events.length"
-          class="rounded-lg border border-dashed border-violet-400/15 bg-black/10 p-6 text-center text-sm text-slate-500"
+          class="rounded-lg border border-dashed border-violet-400/15 bg-black/10 p-6 text-center text-sm text-th-muted"
         >
           Aucun événement à venir.
         </div>
@@ -175,29 +182,29 @@ onMounted(() => {
                     :style="event.type.color
                       ? { borderColor: event.type.color + '55', backgroundColor: event.type.color + '20', color: event.type.color }
                       : {}"
-                    :class="!event.type.color ? 'border-slate-600 bg-slate-800 text-slate-400' : ''"
+                    :class="!event.type.color ? 'border-th-subtle bg-th-card text-th-secondary' : ''"
                   >
                     {{ event.type.name }}
                   </span>
-                  <p class="text-sm font-bold truncate text-slate-100 group-hover:text-violet-200 transition-colors">
+                  <p class="text-sm font-bold truncate text-th-primary group-hover:text-violet-200 transition-colors">
                     {{ event.name }}
                   </p>
                 </div>
 
                 <!-- Date -->
-                <p class="text-xs text-slate-500">
-                  <span class="text-slate-400">{{ formatDate(event.start) }}</span>
-                  <span v-if="event.end" class="text-slate-600"> → {{ formatDate(event.end) }}</span>
+                <p class="text-xs text-th-muted">
+                  <span class="text-th-secondary">{{ formatDate(event.start) }}</span>
+                  <span v-if="event.end" class="text-th-muted"> → {{ formatDate(event.end) }}</span>
                 </p>
 
                 <!-- Location -->
-                <p v-if="event.location" class="mt-0.5 text-xs text-slate-600">
+                <p v-if="event.location" class="mt-0.5 text-xs text-th-muted">
                   📍 {{ event.location }}
                 </p>
               </div>
 
               <!-- Chevron -->
-              <svg class="mt-1 shrink-0 w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="mt-1 shrink-0 w-4 h-4 text-th-muted group-hover:text-th-secondary transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
               </svg>
             </div>

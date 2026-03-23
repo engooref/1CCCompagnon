@@ -21,9 +21,9 @@ const ZONE_CONFIG: Record<string, { icon: string; label: string; borderClass: st
   <div
     class="rounded-lg border backdrop-blur-sm px-3 py-2 shadow-xl"
     :class="event.payload.zone
-      ? (ZONE_CONFIG[event.payload.zone!]?.borderClass ?? 'border-white/10 text-slate-200')
-      : 'border-slate-700/50 text-slate-400'"
-    :style="{ 'background-color': `rgb(0 0 0 / var(--bg-alpha, 0.65))` }"
+      ? (ZONE_CONFIG[event.payload.zone!]?.borderClass ?? 'border-white/10 text-th-primary')
+      : 'border-th-muted text-th-secondary'"
+    style="background-color: rgb(from var(--bg-color, #000000) r g b / var(--bg-alpha, 0.65))"
   >
     <p class="text-xs font-semibold">
       <template v-if="event.payload.zone">

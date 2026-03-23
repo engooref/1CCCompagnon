@@ -18,6 +18,8 @@ function normalizeModule(mod: Partial<OverlayModuleConfig> & Pick<OverlayModuleC
     opacity: Math.min(1, Math.max(0, mod.opacity ?? fallback?.opacity ?? 1)),
     locked: mod.locked ?? false,
     zIndex: Math.round(mod.zIndex ?? fallback?.zIndex ?? 10),
+    fontSize:    Math.min(1.5, Math.max(0.75, mod.fontSize ?? fallback?.fontSize ?? 1)),
+    bgColor:     mod.bgColor ?? fallback?.bgColor ?? '',
     anchor: mod.anchor ?? fallback?.anchor ?? 'top-left',
   }
 }
@@ -44,7 +46,7 @@ export function useOverlayLayout() {
     return modules.find((mod) => mod.id === id)
   }
 
-  function getStyle(id: string): Record<string, string> {
+  function getStyle(id: string, vw?: number, vh?: number): Record<string, string> {
     const mod = getModule(id)
     const pos = positions[id]
     const width = Math.round(mod?.width ?? 240)
@@ -56,13 +58,17 @@ export function useOverlayLayout() {
       height: 'auto',
       '--bg-alpha': `${mod?.opacity ?? 0.65}`,
       zIndex: `${mod?.zIndex ?? 1}`,
+      '--bg-color': (mod?.bgColor || '#000000'),
       transform: 'translateZ(0)',
       willChange: 'transform',
     }
 
     if (pos) {
-      style.left = `${Math.round(pos.x)}px`
-      style.top = `${Math.round(pos.y)}px`
+      // Conversion fraction → pixels selon la taille de la fenêtre SC (ou du viewport si absent)
+      const w = vw ?? window.innerWidth
+      const h = vh ?? window.innerHeight
+      style.left = `${Math.round(pos.xPct * w)}px`
+      style.top  = `${Math.round(pos.yPct * h)}px`
       return style
     }
 

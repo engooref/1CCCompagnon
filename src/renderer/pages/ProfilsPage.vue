@@ -33,21 +33,21 @@ const statusColor = computed(() => {
     <!-- Non connecté -->
     <div
       v-if="!app.status.authReady"
-      class="flex h-full items-center justify-center text-slate-500 text-sm"
+      class="flex h-full items-center justify-center text-th-muted text-sm"
     >
       Connexion requise pour afficher le profil.
     </div>
 
     <template v-else>
       <!-- En-tête profil -->
-      <div class="flex items-center gap-5 rounded-lg border border-cyan-400/20 bg-black/20 p-5">
+      <div class="flex items-center gap-5 rounded-lg border border-accent/20 bg-black/20 p-5">
         <img
           v-if="profile?.avatar"
           :src="profile.avatar"
           alt="Avatar"
-          class="h-16 w-16 rounded-full border-2 border-cyan-400/40 object-cover shadow-lg"
+          class="h-16 w-16 rounded-full border-2 border-accent/40 object-cover shadow-lg"
         />
-        <div v-else class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-cyan-400/20 bg-slate-800 text-2xl text-slate-500">
+        <div v-else class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-accent/20 bg-th-card text-2xl text-th-muted">
           ?
         </div>
 
@@ -58,24 +58,24 @@ const statusColor = computed(() => {
       </div>
 
       <!-- Données RH -->
-      <div class="rounded-lg border border-cyan-400/20 bg-black/20 p-5 space-y-5">
-        <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Ressources Humaines</p>
+      <div class="rounded-lg border border-accent/20 bg-black/20 p-5 space-y-5">
+        <p class="text-xs font-semibold uppercase tracking-widest text-th-muted">Ressources Humaines</p>
 
-        <div v-if="!rh" class="text-sm text-slate-500">Aucune donnée RH associée à ce compte.</div>
+        <div v-if="!rh" class="text-sm text-th-muted">Aucune donnée RH associée à ce compte.</div>
 
         <template v-else>
           <!-- Grade & statut -->
           <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div>
-              <p class="text-xs text-slate-500 mb-1">Grade</p>
-              <p class="font-semibold text-slate-100">{{ rh.grade?.name ?? '—' }}</p>
+              <p class="text-xs text-th-muted mb-1">Grade</p>
+              <p class="font-semibold text-th-primary">{{ rh.grade?.name ?? '—' }}</p>
             </div>
             <div>
-              <p class="text-xs text-slate-500 mb-1">Niveau</p>
-              <p class="font-semibold text-slate-100">{{ rh.level ?? '—' }}</p>
+              <p class="text-xs text-th-muted mb-1">Niveau</p>
+              <p class="font-semibold text-th-primary">{{ rh.level ?? '—' }}</p>
             </div>
             <div>
-              <p class="text-xs text-slate-500 mb-1">Statut</p>
+              <p class="text-xs text-th-muted mb-1">Statut</p>
               <span
                 class="inline-block rounded border px-2 py-0.5 text-xs font-semibold"
                 :class="statusColor"
@@ -84,34 +84,34 @@ const statusColor = computed(() => {
               </span>
             </div>
             <div>
-              <p class="text-xs text-slate-500 mb-1">Date d'entrée</p>
-              <p class="text-sm text-slate-200">{{ formatDate(rh.dateEntree) }}</p>
+              <p class="text-xs text-th-muted mb-1">Date d'entrée</p>
+              <p class="text-sm text-th-primary">{{ formatDate(rh.dateEntree) }}</p>
             </div>
             <div>
-              <p class="text-xs text-slate-500 mb-1">Dernière promotion</p>
-              <p class="text-sm text-slate-200">{{ formatDate(rh.lastPromotion) }}</p>
+              <p class="text-xs text-th-muted mb-1">Dernière promotion</p>
+              <p class="text-sm text-th-primary">{{ formatDate(rh.lastPromotion) }}</p>
             </div>
           </div>
 
           <!-- Barre XP -->
           <div>
             <div class="mb-1.5 flex items-center justify-between text-xs">
-              <span class="text-slate-400">Expérience</span>
-              <span class="text-cyan-300 font-semibold">
+              <span class="text-th-secondary">Expérience</span>
+              <span class="text-accent font-semibold">
                 {{ rh.totalXp.toLocaleString('fr-FR') }}
-                <span v-if="rh.nextLevelXp" class="text-slate-500 font-normal">
+                <span v-if="rh.nextLevelXp" class="text-th-muted font-normal">
                   / {{ rh.nextLevelXp.toLocaleString('fr-FR') }} XP
                 </span>
-                <span v-else class="text-slate-500 font-normal"> XP</span>
+                <span v-else class="text-th-muted font-normal"> XP</span>
               </span>
             </div>
-            <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+            <div class="h-2 w-full overflow-hidden rounded-full bg-th-card">
               <div
-                class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500 shadow-[0_0_8px_rgba(34,211,238,0.4)]"
+                class="h-full rounded-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500 shadow-[0_0_8px_rgba(var(--accent-rgb),0.4)]"
                 :style="{ width: xpPercent + '%' }"
               />
             </div>
-            <p v-if="rh.nextLevelXp" class="mt-1 text-right text-xs text-slate-500">
+            <p v-if="rh.nextLevelXp" class="mt-1 text-right text-xs text-th-muted">
               {{ xpPercent }}% vers le prochain niveau
             </p>
           </div>

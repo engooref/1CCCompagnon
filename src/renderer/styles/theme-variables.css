@@ -1,0 +1,112 @@
+/**
+ * 1CC Overlay — CSS Custom Properties (Theme System)
+ *
+ * Single source of truth for all visual properties.
+ * Updated at runtime by applyAppearance() without restarting the app.
+ * Never use hardcoded color values in components — reference these variables.
+ *
+ * --accent-rgb is a bare RGB triplet (no alpha), enabling Tailwind's opacity
+ * modifier: rgb(var(--accent-rgb) / 0.2) → works with bg-accent/20
+ */
+
+:root {
+  /* ─── Couleur de bordure (accentColor) ──────────────────────────────────── */
+  --accent-rgb:    34 211 238;              /* #22d3ee cyan-400 — espace requis pour Tailwind /alpha */
+  --accent:        rgb(var(--accent-rgb));
+  --accent-dim:    rgba(var(--accent-rgb), 0.30);
+  --accent-border: rgba(var(--accent-rgb), 0.20);
+  --accent-bg:     rgba(var(--accent-rgb), 0.10);
+  --accent-hover:  rgba(var(--accent-rgb), 0.15);
+  --border:        rgba(var(--accent-rgb), 0.20);
+
+  /* ─── Teinte de fond (primaryColor) ─────────────────────────────────────── */
+  --accent2-rgb:   14 116 144;              /* #0e7490 cyan-700 — espace requis pour Tailwind /alpha */
+  --accent2:       rgb(var(--accent2-rgb));
+
+  /* ─── Backgrounds ───────────────────────────────────────────────────────── */
+  --bg-base:     #070b12;                    /* html/body root                */
+  --bg-primary:  #09101b;                    /* main window background        */
+  --bg-surface:  rgba(15, 23, 42, 0.80);    /* sidebar, header               */
+  --bg-card:     rgba(0, 0, 0, 0.20);       /* cards, panels                 */
+  --bg-hover:    rgba(255, 255, 255, 0.05); /* generic hover state           */
+  --bg-active:   rgba(var(--accent-rgb), 0.10); /* active nav item           */
+
+  /* ─── Text ──────────────────────────────────────────────────────────────── */
+  --text-primary:   #f1f5f9;                /* slate-100                      */
+  --text-bright:    #ffffff;                /* texte lumineux (50% vers blanc) */
+  --text-secondary: #94a3b8;                /* slate-400                      */
+  --text-muted:     #475569;                /* slate-600                      */
+  --text-disabled:  #334155;                /* slate-700                      */
+
+  /* ─── Borders ───────────────────────────────────────────────────────────── */
+  --border:        rgba(var(--accent-rgb), 0.20);
+  --border-subtle: rgba(var(--accent-rgb), 0.15);
+  --border-muted:  rgba(var(--accent-rgb), 0.08);
+
+  /* ─── Semantic / status colors ──────────────────────────────────────────── */
+  --color-success: #34d399;                 /* emerald-400                    */
+  --color-danger:  #fb7185;                 /* rose-400                       */
+  --color-warning: #fbbf24;                 /* amber-400                      */
+
+  /* ─── Border radius ─────────────────────────────────────────────────────── */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-full: 9999px;
+
+  /* ─── Density / spacing multiplier ─────────────────────────────────────── */
+  --density: 1;
+  --sp-1: calc(0.25rem * var(--density));
+  --sp-2: calc(0.50rem * var(--density));
+  --sp-3: calc(0.75rem * var(--density));
+  --sp-4: calc(1.00rem * var(--density));
+  --sp-5: calc(1.25rem * var(--density));
+  --sp-6: calc(1.50rem * var(--density));
+
+  /* ─── Typography ─────────────────────────────────────────────────────────── */
+  --font-scale: 1;
+  --fs-xs:   calc(0.750rem * var(--font-scale));
+  --fs-sm:   calc(0.875rem * var(--font-scale));
+  --fs-base: calc(1.000rem * var(--font-scale));
+  --fs-lg:   calc(1.125rem * var(--font-scale));
+  --fs-xl:   calc(1.250rem * var(--font-scale));
+
+  /* ─── Shadows ────────────────────────────────────────────────────────────── */
+  --shadow-hud:           0 0 0 1px rgba(var(--accent-rgb), 0.12), 0 20px 50px rgba(0,0,0,0.45);
+  --shadow-glow:          0 0 30px rgba(var(--accent-rgb), 0.18);
+  --shadow-glow-strength: 0;               /* 0 = off, 1 = full              */
+
+  /* ─── Effects & transitions ─────────────────────────────────────────────── */
+  --blur-intensity:   8px;
+  --transition-speed: 200ms;
+
+  /* ─── Tab style (classic | pill | flat) ─────────────────────────────────── */
+  --tab-border-radius: 0;
+  --tab-padding-x:     1rem;
+  --tab-active-border: 2px solid rgb(var(--accent-rgb));
+  --tab-active-bg:     transparent;
+}
+
+/* ── Light mode overrides ──────────────────────────────────────────────────── */
+.theme-light {
+  color-scheme: light;
+  --bg-base:     #f8fafc;
+  --bg-primary:  #f1f5f9;
+  --bg-surface:  rgba(255, 255, 255, 0.90);
+  --bg-card:     rgba(255, 255, 255, 0.70);
+  --bg-hover:    rgba(0, 0, 0, 0.04);
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+  --border-subtle:  #e2e8f0;
+  --border-muted:   rgba(0, 0, 0, 0.08);
+}
+
+/* ── Disable all transitions (animations: false) ─────────────────────────── */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  transition-duration: 0ms !important;
+  animation-duration:  0ms !important;
+}

@@ -11,9 +11,9 @@ const gameFolder = computed(() => app.settings?.gameFolder ?? '')
 const activityClass = computed(() => {
   switch (state.value?.activity) {
     case 'hangar':  return 'text-amber-300'
-    case 'space':   return 'text-cyan-300'
+    case 'space':   return 'text-accent'
     case 'quantum': return 'text-violet-300'
-    default:        return 'text-slate-500'
+    default:        return 'text-th-muted'
   }
 })
 
@@ -43,7 +43,7 @@ onMounted(() => {
                 d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
         </svg>
       </div>
-      <span class="text-sm font-bold text-slate-100">Journal de jeu</span>
+      <span class="text-sm font-bold text-th-primary">Journal de jeu</span>
 
       <div class="ml-auto flex items-center gap-2">
         <span
@@ -57,7 +57,7 @@ onMounted(() => {
         <button
           v-if="!gameFolder"
           disabled
-          class="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-500"
+          class="rounded-md border border-th-subtle bg-th-card px-3 py-1.5 text-xs text-th-muted"
           title="Configurez le dossier du jeu dans Paramètres > Jeu"
         >
           Dossier non configuré
@@ -66,7 +66,7 @@ onMounted(() => {
           <button
             v-if="!running"
             @click="start(gameFolder)"
-            class="rounded-md border border-cyan-400/25 bg-cyan-400/8 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-400/15 transition"
+            class="rounded-md border border-accent/25 bg-accent/8 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 transition"
           >
             Démarrer
           </button>
@@ -82,73 +82,73 @@ onMounted(() => {
     </div>
 
     <!-- No folder configured -->
-    <div v-if="!gameFolder" class="rounded-lg border border-dashed border-slate-800 p-6 text-center">
-      <p class="text-sm text-slate-500 mb-1">Dossier du jeu non configuré</p>
-      <p class="text-xs text-slate-600">Allez dans <span class="text-slate-400">Paramètres → Jeu</span> pour sélectionner le dossier d'installation.</p>
+    <div v-if="!gameFolder" class="rounded-lg border border-dashed border-th-subtle p-6 text-center">
+      <p class="text-sm text-th-muted mb-1">Dossier du jeu non configuré</p>
+      <p class="text-xs text-th-muted">Allez dans <span class="text-th-secondary">Paramètres → Jeu</span> pour sélectionner le dossier d'installation.</p>
     </div>
 
     <template v-else>
 
       <!-- State card -->
-      <div class="shrink-0 rounded-lg border border-slate-800 bg-black/20 p-4">
-        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-3">État actuel</p>
+      <div class="shrink-0 rounded-lg border border-th-subtle bg-black/20 p-4">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-th-muted mb-3">État actuel</p>
 
-        <div v-if="!state || !state.player" class="text-xs text-slate-600 italic">
+        <div v-if="!state || !state.player" class="text-xs text-th-muted italic">
           {{ running ? 'En attente de données…' : 'Parser arrêté' }}
         </div>
 
         <div v-else class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
           <div v-if="state.player" class="flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Joueur</span>
-            <span class="font-semibold text-cyan-200 truncate">{{ state.player }}</span>
+            <span class="text-th-muted w-20 shrink-0">Joueur</span>
+            <span class="font-semibold text-accent truncate">{{ state.player }}</span>
           </div>
           <div v-if="state.ship" class="flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Vaisseau</span>
-            <span class="font-semibold text-slate-200 truncate">{{ state.ship }}</span>
+            <span class="text-th-muted w-20 shrink-0">Vaisseau</span>
+            <span class="font-semibold text-th-primary truncate">{{ state.ship }}</span>
           </div>
           <div v-if="state.location" class="flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Position</span>
-            <span class="font-semibold text-slate-200 truncate">{{ state.location }}</span>
+            <span class="text-th-muted w-20 shrink-0">Position</span>
+            <span class="font-semibold text-th-primary truncate">{{ state.location }}</span>
           </div>
           <div v-if="state.destination" class="flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Destination</span>
+            <span class="text-th-muted w-20 shrink-0">Destination</span>
             <span class="font-semibold text-violet-300 truncate">{{ state.destination }}</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Activité</span>
+            <span class="text-th-muted w-20 shrink-0">Activité</span>
             <span class="font-semibold truncate" :class="activityClass">{{ activityLabel(state.activity) }}</span>
           </div>
           <div v-if="state.zone" class="flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Zone</span>
+            <span class="text-th-muted w-20 shrink-0">Zone</span>
             <span class="font-semibold text-amber-300 truncate">{{ state.zone }}</span>
           </div>
           <div v-if="state.shard" class="col-span-2 flex items-center gap-2">
-            <span class="text-slate-600 w-20 shrink-0">Serveur</span>
-            <span class="text-slate-500 font-mono truncate">{{ state.shard }}</span>
+            <span class="text-th-muted w-20 shrink-0">Serveur</span>
+            <span class="text-th-muted font-mono truncate">{{ state.shard }}</span>
           </div>
         </div>
       </div>
 
       <!-- Events feed -->
       <div class="flex-1 min-h-0 flex flex-col">
-        <p class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-2">Événements récents</p>
+        <p class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-th-muted mb-2">Événements récents</p>
         <div class="flex-1 min-h-0 overflow-y-auto space-y-1">
           <div
             v-if="!events.length"
-            class="rounded-lg border border-dashed border-slate-800 p-4 text-center text-xs text-slate-600"
+            class="rounded-lg border border-dashed border-th-subtle p-4 text-center text-xs text-th-muted"
           >
             Aucun événement détecté
           </div>
           <div
             v-for="ev in events"
             :key="ev.id"
-            class="flex items-start gap-2.5 rounded-md border border-slate-800/60 bg-black/15 px-3 py-2"
+            class="flex items-start gap-2.5 rounded-md border border-th-muted bg-black/15 px-3 py-2"
           >
             <span class="shrink-0 text-sm leading-none mt-0.5">{{ EVENT_ICONS[ev.type] ?? '•' }}</span>
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-slate-200">{{ ev.label }}</p>
+              <p class="text-xs text-th-primary">{{ ev.label }}</p>
             </div>
-            <time class="shrink-0 text-[10px] text-slate-600 font-mono">
+            <time class="shrink-0 text-[10px] text-th-muted font-mono">
               {{ new Date(ev.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}
             </time>
           </div>

@@ -181,20 +181,20 @@ defineExpose({
   <div
     v-if="pinnedMapId && !mapError"
     class="relative w-full h-full overflow-hidden rounded-2xl border border-white/[0.12]"
-    style="background-color: rgb(0 0 0 / 0.55);"
+    style="background-color: rgba(var(--accent-rgb), 0.08);"
   >
     <!-- Liseré tactique -->
-    <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-green-400/50 to-transparent z-10 pointer-events-none" />
+    <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-accent/50 to-transparent z-10 pointer-events-none" />
 
     <!-- Coins OTAN -->
-    <div style="position:absolute;top:0;left:0;width:10px;height:10px;border-top:2px solid #00e87a66;border-left:2px solid #00e87a66;z-index:1000;pointer-events:none"/>
-    <div style="position:absolute;top:0;right:0;width:10px;height:10px;border-top:2px solid #00e87a66;border-right:2px solid #00e87a66;z-index:1000;pointer-events:none"/>
-    <div style="position:absolute;bottom:0;left:0;width:10px;height:10px;border-bottom:2px solid #00e87a66;border-left:2px solid #00e87a66;z-index:1000;pointer-events:none"/>
-    <div style="position:absolute;bottom:0;right:0;width:10px;height:10px;border-bottom:2px solid #00e87a66;border-right:2px solid #00e87a66;z-index:1000;pointer-events:none"/>
+    <div :style="`position:absolute;top:0;left:0;width:10px;height:10px;border-top:2px solid rgba(var(--accent-rgb),0.4);border-left:2px solid rgba(var(--accent-rgb),0.4);z-index:1000;pointer-events:none`"/>
+    <div :style="`position:absolute;top:0;right:0;width:10px;height:10px;border-top:2px solid rgba(var(--accent-rgb),0.4);border-right:2px solid rgba(var(--accent-rgb),0.4);z-index:1000;pointer-events:none`"/>
+    <div :style="`position:absolute;bottom:0;left:0;width:10px;height:10px;border-bottom:2px solid rgba(var(--accent-rgb),0.4);border-left:2px solid rgba(var(--accent-rgb),0.4);z-index:1000;pointer-events:none`"/>
+    <div :style="`position:absolute;bottom:0;right:0;width:10px;height:10px;border-bottom:2px solid rgba(var(--accent-rgb),0.4);border-right:2px solid rgba(var(--accent-rgb),0.4);z-index:1000;pointer-events:none`"/>
 
     <!-- Loading -->
     <div v-if="!mapReady" class="absolute inset-0 flex items-center justify-center z-10">
-      <svg class="w-5 h-5 text-green-400/40 animate-spin" fill="none" viewBox="0 0 24 24">
+      <svg class="w-5 h-5 text-accent/40 animate-spin" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
       </svg>
@@ -221,6 +221,6 @@ defineExpose({
     v-else
     class="w-full h-full flex items-center justify-center rounded-2xl border border-dashed border-white/[0.07] bg-black/30"
   >
-    <p class="text-[10px] uppercase tracking-widest text-slate-700">Aucune carte épinglée</p>
+    <p class="text-[10px] uppercase tracking-widest text-th-disabled">Aucune carte épinglée</p>
   </div>
 </template>

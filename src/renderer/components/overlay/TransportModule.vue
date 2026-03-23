@@ -168,34 +168,34 @@ onUnmounted(() => {
   <div
     v-if="order"
     class="relative w-full overflow-hidden rounded-xl border border-white/[0.08] shadow-2xl backdrop-blur-md"
-    style="background-color: rgb(0 0 0 / var(--bg-alpha, 0.65))"
+    style="background-color: rgb(from var(--bg-color, #000000) r g b / var(--bg-alpha, 0.65))"
   >
-    <!-- Liseré cyan en haut -->
-    <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent" />
+    <!-- Liseré accent en haut -->
+    <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
 
     <div class="flex flex-col gap-0 px-3 pb-2.5 pt-2.5">
 
       <!-- ── En-tête ── -->
       <div class="flex items-center gap-2 mb-2">
-        <span class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-500/50 shrink-0">Transport</span>
+        <span class="text-[9px] font-black uppercase tracking-[0.2em] text-accent/50 shrink-0">Transport</span>
         <div class="h-px flex-1 bg-white/[0.05]" />
         <button
           @click="toggleMarketOppsLocal"
           :title="marketOppsEnabled ? 'Désactiver les opportunités de marché' : 'Activer les opportunités de marché'"
           class="shrink-0 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity"
         >
-          <svg class="h-2.5 w-2.5" :class="marketOppsEnabled ? 'text-sky-400' : 'text-slate-600'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="h-2.5 w-2.5" :class="marketOppsEnabled ? 'text-sky-400' : 'text-th-muted'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
           </svg>
         </button>
-        <span class="shrink-0 text-[10px] font-semibold tabular-nums text-slate-600">
-          <span class="text-cyan-400/80">{{ currentStepIndex }}</span>
-          <span class="text-slate-700">/{{ lines.length }}</span>
+        <span class="shrink-0 text-[10px] font-semibold tabular-nums text-th-muted">
+          <span class="text-accent/80">{{ currentStepIndex }}</span>
+          <span class="text-th-disabled">/{{ lines.length }}</span>
         </span>
       </div>
 
       <!-- Nom de l'ordre -->
-      <p class="mb-2.5 truncate text-[11px] font-bold leading-tight text-slate-100">
+      <p class="mb-2.5 truncate text-[11px] font-bold leading-tight text-th-primary">
         {{ order.name ?? `Ordre #${order.id}` }}
       </p>
 
@@ -204,14 +204,14 @@ onUnmounted(() => {
 
         <!-- Pickup -->
         <div class="flex items-center gap-2">
-          <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-slate-600/60 bg-slate-800/70">
-            <svg class="h-2.5 w-2.5 text-slate-400" fill="currentColor" viewBox="0 0 10 10">
+          <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-th-subtle/60 bg-th-card/70">
+            <svg class="h-2.5 w-2.5 text-th-secondary" fill="currentColor" viewBox="0 0 10 10">
               <circle cx="5" cy="5" r="3"/>
             </svg>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-[11px] font-semibold text-slate-200">{{ nextLeg.pickupName ?? '—' }}</p>
-            <p v-if="nextLeg.pickupSystemName" class="text-[9px] uppercase tracking-widest text-slate-600">
+            <p class="truncate text-[11px] font-semibold text-th-primary">{{ nextLeg.pickupName ?? '—' }}</p>
+            <p v-if="nextLeg.pickupSystemName" class="text-[9px] uppercase tracking-widest text-th-muted">
               {{ nextLeg.pickupSystemName }}
             </p>
           </div>
@@ -219,7 +219,7 @@ onUnmounted(() => {
 
         <!-- Ligne verticale + actions cargo -->
         <div class="flex gap-2.5 pl-[9px]">
-          <div class="w-px self-stretch bg-slate-700/50 shrink-0" />
+          <div class="w-px self-stretch bg-th-hover shrink-0" />
           <div class="flex-1 min-w-0 space-y-1 py-0.5">
 
             <!-- CHARGER -->
@@ -259,7 +259,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Aucune marchandise -->
-            <p v-if="!nextLeg.cargos?.length" class="text-[10px] italic text-slate-700 py-0.5 pl-0.5">
+            <p v-if="!nextLeg.cargos?.length" class="text-[10px] italic text-th-disabled py-0.5 pl-0.5">
               Aucun cargo défini
             </p>
           </div>
@@ -267,14 +267,14 @@ onUnmounted(() => {
 
         <!-- Dropoff -->
         <div v-if="nextLeg.dropoffName" class="flex items-center gap-2">
-          <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-cyan-500/30 bg-cyan-900/30">
-            <svg class="h-2.5 w-2.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-accent/30 bg-accent/10">
+            <svg class="h-2.5 w-2.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
             </svg>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-[11px] font-semibold text-cyan-300">{{ nextLeg.dropoffName }}</p>
-            <p v-if="nextLeg.dropoffSystemName" class="text-[9px] uppercase tracking-widest text-slate-600">
+            <p class="truncate text-[11px] font-semibold text-accent">{{ nextLeg.dropoffName }}</p>
+            <p v-if="nextLeg.dropoffSystemName" class="text-[9px] uppercase tracking-widest text-th-muted">
               {{ nextLeg.dropoffSystemName }}
             </p>
           </div>
@@ -294,14 +294,14 @@ onUnmounted(() => {
             class="flex items-center justify-between gap-2 rounded border border-sky-400/10 bg-sky-950/30 px-2 py-1"
           >
             <div class="min-w-0 flex-1">
-              <p class="truncate text-[10px] font-semibold text-slate-200">{{ opp.commodityName ?? '—' }}</p>
-              <p class="truncate text-[9px] text-slate-600">
+              <p class="truncate text-[10px] font-semibold text-th-primary">{{ opp.commodityName ?? '—' }}</p>
+              <p class="truncate text-[9px] text-th-muted">
                 {{ opp.depTerminalName ?? '?' }} → {{ opp.arrTerminalName ?? '?' }}
               </p>
             </div>
             <div class="shrink-0 text-right">
               <p class="text-[10px] font-bold text-emerald-300">+{{ (opp.profitPerUnit ?? 0).toLocaleString('fr-FR') }} cr/u</p>
-              <p v-if="opp.maxQty" class="text-[9px] text-slate-600">{{ opp.maxQty }} SCU</p>
+              <p v-if="opp.maxQty" class="text-[9px] text-th-muted">{{ opp.maxQty }} SCU</p>
             </div>
           </div>
         </div>
@@ -320,20 +320,24 @@ onUnmounted(() => {
       <div class="space-y-1.5 pt-2">
         <!-- Hint prochaine étape -->
         <div v-if="nextNextLeg" class="flex items-center gap-1.5">
-          <span class="shrink-0 text-[9px] uppercase tracking-widest text-slate-700">suivant</span>
-          <div class="h-px flex-1 bg-slate-800/80" />
-          <span class="max-w-[130px] truncate text-[10px] text-slate-600">{{ nextNextLeg.pickupName }}</span>
+          <span class="shrink-0 text-[9px] uppercase tracking-widest text-th-disabled">suivant</span>
+          <div class="h-px flex-1 bg-th-card" />
+          <span class="max-w-[130px] truncate text-[10px] text-th-muted">{{ nextNextLeg.pickupName }}</span>
         </div>
 
         <!-- Barre de progression -->
         <div class="flex items-center gap-2">
-          <div class="relative h-[3px] flex-1 overflow-hidden rounded-full bg-slate-800">
+          <div class="relative h-[3px] flex-1 overflow-hidden rounded-full bg-th-card">
             <div
-              class="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-300 transition-all duration-700 shadow-[0_0_6px_rgba(34,211,238,0.5)]"
-              :style="{ width: progressPercent + '%' }"
+              class="h-full rounded-full transition-all duration-700"
+              :style="{
+                width: progressPercent + '%',
+                background: 'linear-gradient(to right, rgba(var(--accent-rgb), 0.6), rgb(var(--accent-rgb)))',
+                boxShadow: 'var(--shadow-glow)',
+              }"
             />
           </div>
-          <span class="shrink-0 text-[10px] font-bold tabular-nums text-cyan-400/60">{{ progressPercent }}%</span>
+          <span class="shrink-0 text-[10px] font-bold tabular-nums text-accent/60">{{ progressPercent }}%</span>
         </div>
       </div>
 
@@ -343,8 +347,16 @@ onUnmounted(() => {
   <!-- ── Aucun ordre ─────────────────────────────────────────── -->
   <div
     v-else
-    class="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-white/[0.07] bg-black/30 px-3 py-2 text-center"
+    class="w-full rounded-xl border border-white/10 backdrop-blur-sm px-3 py-2.5 shadow-xl"
+    style="background-color: rgb(from var(--bg-color, #000000) r g b / var(--bg-alpha, 0.65))"
   >
-    <p class="text-[10px] uppercase tracking-widest text-slate-700">Aucun ordre actif</p>
+    <div class="flex items-center gap-2">
+      <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-th-muted bg-th-card">
+        <svg class="h-2.5 w-2.5 text-th-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
+        </svg>
+      </div>
+      <span class="text-[11px] font-semibold uppercase tracking-wider text-th-muted">Aucun transport</span>
+    </div>
   </div>
 </template>

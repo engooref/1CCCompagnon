@@ -255,7 +255,7 @@ async function generateItinerary() {
     <div class="shrink-0 flex items-center gap-3">
       <button
         @click="router.push({ name: 'transport' })"
-        class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+        class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-xs font-medium text-th-secondary hover:text-th-primary hover:border-th-subtle transition"
       >
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -264,13 +264,13 @@ async function generateItinerary() {
       </button>
 
       <div class="flex items-center gap-2 min-w-0">
-        <div class="h-7 w-7 shrink-0 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center">
-          <svg class="w-4 h-4 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="h-7 w-7 shrink-0 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center">
+          <svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
           </svg>
         </div>
-        <span class="text-sm font-bold truncate text-slate-100">
+        <span class="text-sm font-bold truncate text-th-primary">
           {{ order?.name ?? `Ordre #${orderId}` }}
         </span>
       </div>
@@ -278,7 +278,7 @@ async function generateItinerary() {
       <div class="ml-auto flex items-center gap-2">
         <button
           @click="router.push({ name: 'transport-edit', params: { id: orderId } })"
-          class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+          class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-xs font-medium text-th-secondary hover:text-th-primary hover:border-th-subtle transition"
           title="Modifier l'ordre"
         >
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -307,8 +307,8 @@ async function generateItinerary() {
           @click="togglePin(orderId)"
           class="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition"
           :class="isPinned(orderId)
-            ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/15'
-            : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-cyan-300 hover:border-cyan-400/30'"
+            ? 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/15'
+            : 'border-th-subtle bg-th-card text-th-secondary hover:text-accent hover:border-accent/30'"
           :title="isPinned(orderId) ? 'Désépingler de l\'overlay' : 'Épingler dans l\'overlay'"
         >
           <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -318,7 +318,7 @@ async function generateItinerary() {
         </button>
         <span
           v-if="loading"
-          class="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-500"
+          class="inline-flex items-center gap-1 rounded-full border border-th-subtle bg-th-card px-2 py-0.5 text-[11px] font-semibold text-th-muted"
         >
           <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -346,7 +346,7 @@ async function generateItinerary() {
     </div>
 
     <!-- Loading / Error -->
-    <div v-if="loading && !order" class="rounded-lg border border-cyan-400/10 bg-black/20 p-4 text-sm text-slate-500">
+    <div v-if="loading && !order" class="rounded-lg border border-accent/10 bg-black/20 p-4 text-sm text-th-muted">
       Chargement…
     </div>
 
@@ -357,12 +357,12 @@ async function generateItinerary() {
     <template v-else-if="order">
 
       <!-- Order summary card -->
-      <div class="shrink-0 rounded-lg border border-cyan-400/20 bg-black/20 p-4">
+      <div class="shrink-0 rounded-lg border border-accent/20 bg-black/20 p-4">
         <div class="flex items-start justify-between gap-3 mb-3">
           <div class="min-w-0">
-            <p v-if="order.originName" class="text-xs text-slate-500">
-              Départ : <span class="text-slate-300">{{ order.originName }}</span>
-              <span v-if="order.originSystemName" class="text-slate-600"> · {{ order.originSystemName }}</span>
+            <p v-if="order.originName" class="text-xs text-th-muted">
+              Départ : <span class="text-th-secondary">{{ order.originName }}</span>
+              <span v-if="order.originSystemName" class="text-th-muted"> · {{ order.originSystemName }}</span>
             </p>
           </div>
           <span
@@ -375,11 +375,11 @@ async function generateItinerary() {
           >Valide</span>
         </div>
 
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mb-3">
-          <span><span class="text-slate-400 font-medium">{{ lines.length }}</span> étape(s)</span>
-          <span><span class="text-slate-400 font-medium">{{ order.ships?.length ?? 0 }}</span> vaisseau(x)</span>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-th-muted mb-3">
+          <span><span class="text-th-secondary font-medium">{{ lines.length }}</span> étape(s)</span>
+          <span><span class="text-th-secondary font-medium">{{ order.ships?.length ?? 0 }}</span> vaisseau(x)</span>
           <div class="ml-auto flex items-center gap-2">
-            <span v-if="order.itinerary?.generatedAt" class="text-slate-600">
+            <span v-if="order.itinerary?.generatedAt" class="text-th-muted">
               Généré : {{ formatDate(order.itinerary.generatedAt) }}
             </span>
             <button
@@ -389,7 +389,7 @@ async function generateItinerary() {
               class="flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition disabled:opacity-40"
               :class="order.itinerary?.obsolete
                 ? 'border-rose-400/30 bg-rose-400/5 text-rose-300 hover:bg-rose-400/10'
-                : 'border-cyan-400/20 bg-cyan-400/5 text-cyan-200 hover:bg-cyan-400/10'"
+                : 'border-accent/20 bg-accent/5 text-accent hover:bg-accent/10'"
             >
               <svg v-if="generatingItinerary" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -408,20 +408,20 @@ async function generateItinerary() {
 
         <!-- Ships list -->
         <div v-if="order.ships?.length" class="mb-3">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">Vaisseaux</p>
+          <p class="text-[10px] font-bold uppercase tracking-wider text-th-muted mb-1.5">Vaisseaux</p>
           <div class="space-y-1">
             <div
               v-for="(ship, i) in order.ships"
               :key="ship.shipId ?? i"
-              class="flex items-start gap-2 rounded-md border border-slate-700/50 bg-slate-800/40 px-2.5 py-1.5"
+              class="flex items-start gap-2 rounded-md border border-th-muted bg-th-card px-2.5 py-1.5"
             >
-              <svg class="w-3.5 h-3.5 mt-0.5 shrink-0 text-cyan-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
               </svg>
               <div class="min-w-0 flex-1">
-                <span class="text-xs font-semibold text-slate-200">{{ ship.shipName ?? '—' }}</span>
-                <p v-if="ship.note" class="mt-0.5 text-[11px] text-slate-500 leading-snug">{{ ship.note }}</p>
+                <span class="text-xs font-semibold text-th-primary">{{ ship.shipName ?? '—' }}</span>
+                <p v-if="ship.note" class="mt-0.5 text-[11px] text-th-muted leading-snug">{{ ship.note }}</p>
               </div>
             </div>
           </div>
@@ -430,15 +430,15 @@ async function generateItinerary() {
         <!-- Progress bar -->
         <div>
           <div class="mb-1 flex items-center justify-between text-xs">
-            <span class="text-slate-500">Progression</span>
-            <span class="font-semibold text-cyan-300">
+            <span class="text-th-muted">Progression</span>
+            <span class="font-semibold text-accent">
               {{ completedCount }}/{{ lines.length }}
-              <span class="text-slate-500 font-normal ml-1">({{ progressPercent }}%)</span>
+              <span class="text-th-muted font-normal ml-1">({{ progressPercent }}%)</span>
             </span>
           </div>
-          <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-th-card">
             <div
-              class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500 shadow-[0_0_6px_rgba(34,211,238,0.35)]"
+              class="h-full rounded-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500 shadow-[0_0_6px_rgba(var(--accent-rgb),0.35)]"
               :style="{ width: progressPercent + '%' }"
             />
           </div>
@@ -449,13 +449,13 @@ async function generateItinerary() {
           <div class="flex items-center justify-between gap-3">
             <label class="flex items-center gap-2 cursor-pointer select-none" @click.prevent="toggleMarketOpp">
               <div class="relative shrink-0 w-8 h-4">
-                <div class="w-8 h-4 rounded-full transition-colors" :class="showMarketOpp ? 'bg-sky-500' : 'bg-slate-700'"/>
+                <div class="w-8 h-4 rounded-full transition-colors" :class="showMarketOpp ? 'bg-sky-500' : 'bg-th-card'"/>
                 <div
                   class="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform"
                   :class="showMarketOpp ? 'translate-x-4' : 'translate-x-0'"
                 />
               </div>
-              <span class="text-xs font-medium" :class="showMarketOpp ? 'text-sky-300' : 'text-slate-500'">
+              <span class="text-xs font-medium" :class="showMarketOpp ? 'text-sky-300' : 'text-th-muted'">
                 Opportunités de marché
               </span>
             </label>
@@ -474,24 +474,24 @@ async function generateItinerary() {
           </div>
 
           <div v-if="showMarketOpp" class="mt-2 flex items-center gap-1.5">
-            <span class="text-[11px] text-slate-500">Budget</span>
+            <span class="text-[11px] text-th-muted">Budget</span>
             <input
               type="number" min="0"
               :value="marketBudget ?? ''"
               @input="marketBudget = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
-              class="w-28 rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-400/50"
+              class="w-28 rounded border border-th-subtle bg-th-card px-2 py-0.5 text-xs text-th-primary focus:outline-none focus:border-emerald-400/50"
               placeholder="optionnel"
             />
-            <span class="text-[11px] text-slate-600">cr</span>
+            <span class="text-[11px] text-th-muted">cr</span>
           </div>
         </div>
       </div>
 
       <!-- Itinerary -->
       <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
-        <p class="text-[11px] font-semibold uppercase tracking-widest text-slate-600 px-0.5">Itinéraire</p>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-th-muted px-0.5">Itinéraire</p>
 
-        <div v-if="!lines.length" class="rounded-lg border border-dashed border-slate-800 p-4 text-center text-sm text-slate-600">
+        <div v-if="!lines.length" class="rounded-lg border border-dashed border-th-subtle p-4 text-center text-sm text-th-muted">
           Aucune étape dans l'itinéraire.
         </div>
 
@@ -499,7 +499,7 @@ async function generateItinerary() {
           v-for="(leg, idx) in lines"
           :key="legKey(leg) ?? idx"
           class="rounded-lg border transition-colors overflow-hidden"
-          :class="leg.completed ? 'border-emerald-400/15 bg-emerald-400/[0.04]' : 'border-cyan-400/15 bg-black/25'"
+          :class="leg.completed ? 'border-emerald-400/15 bg-emerald-400/[0.04]' : 'border-accent/15 bg-black/25'"
         >
           <!-- Leg header -->
           <div
@@ -511,7 +511,7 @@ async function generateItinerary() {
               class="mt-0.5 shrink-0 h-7 w-7 rounded-md flex items-center justify-center text-xs font-extrabold border transition-colors"
               :class="leg.completed
                 ? 'bg-emerald-400/10 border-emerald-400/25 text-emerald-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400'"
+                : 'bg-th-card border-th-subtle text-th-secondary'"
             >
               <svg v-if="leg.completed" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd"
@@ -526,26 +526,26 @@ async function generateItinerary() {
               <div class="flex flex-wrap items-center gap-1.5">
                 <span
                   class="text-sm font-semibold truncate transition-colors"
-                  :class="leg.completed ? 'text-slate-500 line-through' : 'text-slate-100'"
+                  :class="leg.completed ? 'text-th-muted line-through' : 'text-th-primary'"
                 >
                   {{ leg.pickupName ?? '—' }}
                 </span>
-                <span v-if="leg.pickupSystemName" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-500">
+                <span v-if="leg.pickupSystemName" class="text-[10px] px-1.5 py-0.5 rounded-full bg-th-card text-th-muted">
                   {{ leg.pickupSystemName }}
                 </span>
               </div>
 
               <div class="mt-0.5 flex flex-wrap items-center gap-1.5">
-                <svg class="w-3 h-3 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-3 h-3 text-th-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                 </svg>
                 <span
                   class="text-xs truncate"
-                  :class="leg.dropoffName ? 'text-cyan-300/80' : 'text-emerald-400/80 font-semibold'"
+                  :class="leg.dropoffName ? 'text-accent/80' : 'text-emerald-400/80 font-semibold'"
                 >
                   {{ leg.dropoffName ?? '✓ Fin de l\'itinéraire' }}
                 </span>
-                <span v-if="leg.dropoffName && leg.dropoffSystemName" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-500">
+                <span v-if="leg.dropoffName && leg.dropoffSystemName" class="text-[10px] px-1.5 py-0.5 rounded-full bg-th-card text-th-muted">
                   {{ leg.dropoffSystemName }}
                 </span>
               </div>
@@ -581,7 +581,7 @@ async function generateItinerary() {
                 class="flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50"
                 :class="leg.completed
                   ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/15'
-                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-cyan-400/30 hover:text-cyan-300'"
+                  : 'border-th-subtle bg-th-card text-th-secondary hover:border-accent/30 hover:text-accent'"
               >
                 <svg v-if="savingLeg === String(leg.legId)" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -592,7 +592,7 @@ async function generateItinerary() {
               </button>
 
               <svg
-                class="w-3.5 h-3.5 text-slate-600 transition-transform duration-150 hover:text-slate-400"
+                class="w-3.5 h-3.5 text-th-muted transition-transform duration-150 hover:text-th-secondary"
                 :class="{ '-rotate-180': isExpanded(leg) }"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor"
               >
@@ -613,7 +613,7 @@ async function generateItinerary() {
                         d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
                 </svg>
                 <span class="text-[10px] font-bold uppercase tracking-widest text-sky-300/80">Opportunités de marché</span>
-                <span v-if="loadingOpp" class="text-[10px] text-slate-500 italic">chargement…</span>
+                <span v-if="loadingOpp" class="text-[10px] text-th-muted italic">chargement…</span>
                 <span
                   v-else-if="legOpps(leg).length > 0"
                   class="text-[10px] text-sky-400/60"
@@ -633,7 +633,7 @@ async function generateItinerary() {
             <div v-if="!loadingOpp" class="px-3 pb-2">
               <div
                 v-if="!legOpps(leg).length"
-                class="text-[11px] text-slate-600 italic"
+                class="text-[11px] text-th-muted italic"
               >
                 {{ marketFreeScu <= 0 ? 'Définissez un espace libre pour voir les opportunités.' : 'Aucune opportunité trouvée pour ce trajet.' }}
               </div>
@@ -645,13 +645,13 @@ async function generateItinerary() {
                 class="flex items-start justify-between gap-3 py-1.5 text-xs border-t border-sky-400/[0.08] first:border-0"
               >
                 <div class="min-w-0 flex-1">
-                  <p class="font-semibold text-slate-200 truncate">{{ opp.commodityName ?? '—' }}</p>
-                  <p class="text-[11px] text-slate-500 truncate mt-0.5">
+                  <p class="font-semibold text-th-primary truncate">{{ opp.commodityName ?? '—' }}</p>
+                  <p class="text-[11px] text-th-muted truncate mt-0.5">
                     <span class="text-sky-300/70">{{ opp.depTerminalName ?? '?' }}</span>
-                    <span class="mx-1 text-slate-600">→</span>
-                    <span class="text-cyan-300/70">{{ opp.arrTerminalName ?? '?' }}</span>
+                    <span class="mx-1 text-th-muted">→</span>
+                    <span class="text-accent/70">{{ opp.arrTerminalName ?? '?' }}</span>
                   </p>
-                  <p class="text-[11px] text-slate-600 mt-0.5">
+                  <p class="text-[11px] text-th-muted mt-0.5">
                     Achat {{ (opp.buyPrice ?? 0).toLocaleString('fr-FR') }} cr
                     · Vente {{ (opp.sellPrice ?? 0).toLocaleString('fr-FR') }} cr
                   </p>
@@ -660,7 +660,7 @@ async function generateItinerary() {
                   <p class="font-bold text-emerald-300 text-xs">
                     +{{ (opp.profitPerUnit ?? 0).toLocaleString('fr-FR') }} cr/u
                   </p>
-                  <p v-if="opp.maxQty" class="text-[11px] text-slate-500 mt-0.5">
+                  <p v-if="opp.maxQty" class="text-[11px] text-th-muted mt-0.5">
                     max {{ opp.maxQty }} SCU
                   </p>
                   <p v-if="opp.profitTotal" class="text-[11px] text-emerald-400/70 mt-0.5">
@@ -679,15 +679,15 @@ async function generateItinerary() {
               <p class="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-orange-400/70">
                 Décharger <span class="ml-1 font-normal text-orange-400/50">{{ sumScu(unloadOps(leg)) }} SCU</span>
               </p>
-              <div v-if="!unloadOps(leg).length" class="text-xs text-slate-600 italic">— rien —</div>
+              <div v-if="!unloadOps(leg).length" class="text-xs text-th-muted italic">— rien —</div>
               <div
                 v-for="(item, i) in unloadOps(leg)"
                 :key="item.id ?? i"
                 class="flex items-start justify-between gap-2 py-1 text-xs border-t border-orange-400/[0.07] first:border-0"
               >
                 <div class="min-w-0">
-                  <p class="font-medium text-slate-200 truncate">{{ item.commodityName ?? '—' }}</p>
-                  <p v-if="item.dropoffPoiName" class="text-slate-600 truncate">→ {{ item.dropoffPoiName }}</p>
+                  <p class="font-medium text-th-primary truncate">{{ item.commodityName ?? '—' }}</p>
+                  <p v-if="item.dropoffPoiName" class="text-th-muted truncate">→ {{ item.dropoffPoiName }}</p>
                 </div>
                 <span class="shrink-0 font-bold text-orange-300">{{ item.quantity ?? '—' }}</span>
               </div>
@@ -698,15 +698,15 @@ async function generateItinerary() {
               <p class="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400/70">
                 Charger <span class="ml-1 font-normal text-emerald-400/50">{{ sumScu(loadOps(leg)) }} SCU</span>
               </p>
-              <div v-if="!loadOps(leg).length" class="text-xs text-slate-600 italic">— rien —</div>
+              <div v-if="!loadOps(leg).length" class="text-xs text-th-muted italic">— rien —</div>
               <div
                 v-for="(item, i) in loadOps(leg)"
                 :key="item.id ?? i"
                 class="flex items-start justify-between gap-2 py-1 text-xs border-t border-emerald-400/[0.07] first:border-0"
               >
                 <div class="min-w-0">
-                  <p class="font-medium text-slate-200 truncate">{{ item.commodityName ?? '—' }}</p>
-                  <p v-if="item.pickupPoiName" class="text-slate-600 truncate">← {{ item.pickupPoiName }}</p>
+                  <p class="font-medium text-th-primary truncate">{{ item.commodityName ?? '—' }}</p>
+                  <p v-if="item.pickupPoiName" class="text-th-muted truncate">← {{ item.pickupPoiName }}</p>
                 </div>
                 <span class="shrink-0 font-bold text-emerald-300">{{ item.quantity ?? '—' }}</span>
               </div>

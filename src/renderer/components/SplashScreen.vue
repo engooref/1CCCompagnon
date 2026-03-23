@@ -118,7 +118,7 @@ onMounted(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #03070f;
+  background: var(--bg-base, #03070f);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,8 +130,8 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(34,211,238,.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34,211,238,.04) 1px, transparent 1px);
+    linear-gradient(rgba(var(--accent-rgb, 34,211,238),.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--accent-rgb, 34,211,238),.04) 1px, transparent 1px);
   background-size: 48px 48px;
   animation: grid-drift 8s linear infinite;
 }
@@ -145,7 +145,7 @@ onMounted(() => {
   position: absolute;
   left: 0; right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(34,211,238,.35), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb, 34,211,238),.35), transparent);
   animation: scan 3s ease-in-out infinite;
 }
 @keyframes scan {
@@ -181,13 +181,13 @@ onMounted(() => {
 .diamond {
   position: absolute;
   inset: 0;
-  border: 2px solid rgba(34,211,238,.7);
+  border: 2px solid rgba(var(--accent-rgb, 34,211,238),.7);
   transform: rotate(45deg);
   animation: diamond-pulse 2s ease-in-out infinite;
 }
 .diamond--ring {
   inset: -10px;
-  border-color: rgba(34,211,238,.2);
+  border-color: rgba(var(--accent-rgb, 34,211,238),.2);
   animation: diamond-pulse 2s ease-in-out infinite .3s;
 }
 @keyframes diamond-pulse {
@@ -202,7 +202,7 @@ onMounted(() => {
 .label {
   font-size: 10px;
   letter-spacing: .35em;
-  color: rgba(34,211,238,.5);
+  color: rgba(var(--accent-rgb, 34,211,238),.5);
   margin-bottom: 6px;
   text-transform: uppercase;
 }
@@ -210,11 +210,11 @@ onMounted(() => {
   font-size: 36px;
   font-weight: 800;
   letter-spacing: .2em;
-  color: #e2e8f0;
+  color: var(--text-primary, #e2e8f0);
   line-height: 1;
 }
 .title-accent {
-  color: rgb(34,211,238);
+  color: rgb(var(--accent-rgb, 34,211,238));
 }
 .subtitle {
   margin-top: 8px;
@@ -234,11 +234,11 @@ onMounted(() => {
 .bar-track {
   position: relative;
   height: 2px;
-  background: rgba(34,211,238,.12);
+  background: rgba(var(--accent-rgb, 34,211,238),.12);
 }
 .bar-fill {
   height: 100%;
-  background: rgb(34,211,238);
+  background: rgb(var(--accent-rgb, 34,211,238));
   transition: width .05s linear;
 }
 .bar-glow {
@@ -247,7 +247,7 @@ onMounted(() => {
   width: 20px;
   height: 8px;
   margin-left: -10px;
-  background: rgba(34,211,238,.6);
+  background: rgba(var(--accent-rgb, 34,211,238),.6);
   filter: blur(6px);
   transition: left .05s linear;
 }
@@ -258,12 +258,12 @@ onMounted(() => {
 .bar-status {
   font-size: 9px;
   letter-spacing: .2em;
-  color: rgba(34,211,238,.45);
+  color: rgba(var(--accent-rgb, 34,211,238),.45);
 }
 .bar-pct {
   font-size: 9px;
   letter-spacing: .1em;
-  color: rgba(34,211,238,.45);
+  color: rgba(var(--accent-rgb, 34,211,238),.45);
   font-variant-numeric: tabular-nums;
 }
 
@@ -272,7 +272,7 @@ onMounted(() => {
   position: absolute;
   width: 14px;
   height: 14px;
-  border-color: rgba(34,211,238,.4);
+  border-color: rgba(var(--accent-rgb, 34,211,238),.4);
   border-style: solid;
 }
 .corner--tl { top: 12px;  left: 12px;  border-width: 1px 0 0 1px; }

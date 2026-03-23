@@ -115,7 +115,7 @@ onUnmounted(() => {
   <section class="h-full flex flex-col gap-3">
 
     <!-- Not authenticated -->
-    <div v-if="!app.status.authReady" class="flex flex-1 items-center justify-center text-slate-500 text-sm">
+    <div v-if="!app.status.authReady" class="flex flex-1 items-center justify-center text-th-muted text-sm">
       Connexion requise.
     </div>
 
@@ -125,7 +125,7 @@ onUnmounted(() => {
       <div class="shrink-0 flex items-center gap-3">
         <button
           @click="router.push({ name: 'maps' })"
-          class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+          class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-xs font-medium text-th-secondary hover:text-th-primary hover:border-th-subtle transition"
         >
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -134,16 +134,16 @@ onUnmounted(() => {
         </button>
 
         <div class="flex-1 min-w-0">
-          <div v-if="loading" class="h-5 w-40 rounded bg-slate-800 animate-pulse" />
-          <h2 v-else class="text-sm font-bold text-slate-100 truncate">
+          <div v-if="loading" class="h-5 w-40 rounded bg-th-card animate-pulse" />
+          <h2 v-else class="text-sm font-bold text-th-primary truncate">
             {{ mapInfo?.name ?? `Carte #${mapId}` }}
           </h2>
         </div>
 
         <!-- Mercure status -->
         <div v-if="mapReady" class="shrink-0 flex items-center gap-1.5">
-          <span class="h-1.5 w-1.5 rounded-full" :class="liveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'" />
-          <span class="text-[10px] text-slate-600">{{ liveConnected ? 'Temps réel' : 'Hors-ligne' }}</span>
+          <span class="h-1.5 w-1.5 rounded-full" :class="liveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-[rgb(var(--text-muted-rgb,100,116,139))]'" />
+          <span class="text-[10px] text-th-muted">{{ liveConnected ? 'Temps réel' : 'Hors-ligne' }}</span>
         </div>
 
         <!-- Pin button -->
@@ -153,7 +153,7 @@ onUnmounted(() => {
           class="shrink-0 flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition"
           :class="isPinned(mapInfo.id)
             ? 'border-rose-400/30 bg-rose-400/8 text-rose-300 hover:bg-rose-400/15'
-            : 'border-cyan-400/25 bg-cyan-400/8 text-cyan-300 hover:bg-cyan-400/15'"
+            : 'border-accent/25 bg-accent/8 text-accent hover:bg-accent/15'"
         >
           <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -165,7 +165,7 @@ onUnmounted(() => {
 
       <!-- ── Loading ────────────────────────────────────────────────── -->
       <div v-if="loading" class="flex-1 flex items-center justify-center">
-        <svg class="w-6 h-6 text-slate-600 animate-spin" fill="none" viewBox="0 0 24 24">
+        <svg class="w-6 h-6 text-th-muted animate-spin" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
@@ -174,24 +174,24 @@ onUnmounted(() => {
       <!-- ── Carte Leaflet ───────────────────────────────────────────── -->
       <div
         v-else-if="mapInfo"
-        class="flex-1 min-h-0 relative rounded-xl overflow-hidden border border-green-900/40 bg-black/30"
+        class="flex-1 min-h-0 relative rounded-xl overflow-hidden border border-accent/15 bg-black/30"
       >
         <!-- Coins décoratifs style mil -->
-        <div style="position:absolute;top:0;left:0;width:12px;height:12px;border-top:2px solid #00e87a44;border-left:2px solid #00e87a44;z-index:1000;pointer-events:none"/>
-        <div style="position:absolute;top:0;right:0;width:12px;height:12px;border-top:2px solid #00e87a44;border-right:2px solid #00e87a44;z-index:1000;pointer-events:none"/>
-        <div style="position:absolute;bottom:0;left:0;width:12px;height:12px;border-bottom:2px solid #00e87a44;border-left:2px solid #00e87a44;z-index:1000;pointer-events:none"/>
-        <div style="position:absolute;bottom:0;right:0;width:12px;height:12px;border-bottom:2px solid #00e87a44;border-right:2px solid #00e87a44;z-index:1000;pointer-events:none"/>
+        <div :style="`position:absolute;top:0;left:0;width:12px;height:12px;border-top:2px solid rgba(var(--accent-rgb),0.25);border-left:2px solid rgba(var(--accent-rgb),0.25);z-index:1000;pointer-events:none`"/>
+        <div :style="`position:absolute;top:0;right:0;width:12px;height:12px;border-top:2px solid rgba(var(--accent-rgb),0.25);border-right:2px solid rgba(var(--accent-rgb),0.25);z-index:1000;pointer-events:none`"/>
+        <div :style="`position:absolute;bottom:0;left:0;width:12px;height:12px;border-bottom:2px solid rgba(var(--accent-rgb),0.25);border-left:2px solid rgba(var(--accent-rgb),0.25);z-index:1000;pointer-events:none`"/>
+        <div :style="`position:absolute;bottom:0;right:0;width:12px;height:12px;border-bottom:2px solid rgba(var(--accent-rgb),0.25);border-right:2px solid rgba(var(--accent-rgb),0.25);z-index:1000;pointer-events:none`"/>
 
         <!-- Badge épinglée -->
         <div
           v-if="isPinned(mapInfo.id)"
-          class="absolute top-2 left-3 z-[1001] flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-black/70 px-2.5 py-1 backdrop-blur-sm pointer-events-none"
+          class="absolute top-2 left-3 z-[1001] flex items-center gap-1.5 rounded-full border border-accent/30 bg-black/70 px-2.5 py-1 backdrop-blur-sm pointer-events-none"
         >
-          <svg class="w-3 h-3 text-cyan-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <svg class="w-3 h-3 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
           </svg>
-          <span class="text-[10px] font-semibold text-cyan-300">Épinglée</span>
+          <span class="text-[10px] font-semibold text-accent">Épinglée</span>
         </div>
 
         <!-- Conteneur Leaflet -->
@@ -207,7 +207,7 @@ onUnmounted(() => {
       </div>
 
       <!-- ── Carte introuvable ───────────────────────────────────────── -->
-      <div v-else class="flex-1 flex items-center justify-center text-slate-600 text-sm">
+      <div v-else class="flex-1 flex items-center justify-center text-th-muted text-sm">
         Carte introuvable.
       </div>
 

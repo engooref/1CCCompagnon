@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import type { AppSettings, ConnectionState, OverlayProfile } from '@shared/general'
 import type { TransportOrder } from '@shared/deliveries'
+import { applyAppearance, applyDefaultAppearance } from '../services/applyAppearance'
+import { startAgendaPoll, stopAgendaPoll } from '../services/agendaPoll'
 
 const defaultStatus: ConnectionState = {
   connected: false,
@@ -39,6 +41,11 @@ export const useAppStore = defineStore('app', {
         ])
         this.settings = settings
         this.apiKeyPresent = Boolean(apiKey)
+        if (settings.appearance) {
+          applyAppearance(settings.appearance)
+        } else {
+          applyDefaultAppearance()
+        }
         if (this.apiKeyPresent) {
           await this.authenticate()
         } else {
@@ -79,6 +86,12 @@ export const useAppStore = defineStore('app', {
           checkedAt: new Date().toISOString(),
           latencyMs: null
         }
+        // Démarrer le polling agenda en arrière-plan après authentification
+        try {
+          startAgendaPoll(this, this.settings?.agendaPollIntervalMs ?? 5 * 60 * 1000)
+        } catch (e) {
+          // ignore
+        }
       } catch (error: any) {
         this.bearerToken = null
         this.profile = null
@@ -102,6 +115,8 @@ export const useAppStore = defineStore('app', {
       this.bearerToken = null
       this.profile = null
       this.authError = null
+      // Stop le poller quand la clé est supprimée
+      try { stopAgendaPoll() } catch (e) { }
       await this.refreshConnection()
     },
     async reloadMe() {

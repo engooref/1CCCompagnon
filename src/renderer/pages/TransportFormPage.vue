@@ -542,7 +542,7 @@ async function deleteDelivery() {
     <!-- Not authenticated -->
     <div
       v-if="!app.status.authReady"
-      class="flex flex-1 items-center justify-center text-slate-500 text-sm"
+      class="flex flex-1 items-center justify-center text-th-muted text-sm"
     >
       Connexion requise pour accéder au transport.
     </div>
@@ -553,7 +553,7 @@ async function deleteDelivery() {
       <div class="shrink-0 flex items-center gap-3">
         <button
           @click="router.push({ name: 'transport' })"
-          class="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
+          class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-xs font-medium text-th-secondary hover:text-th-primary hover:border-th-subtle transition"
         >
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -564,7 +564,7 @@ async function deleteDelivery() {
           v-if="savedId && !itineraryGenerated"
           @click="generateItinerary"
           :disabled="generatingItinerary || saving || generating"
-          class="shrink-0 flex items-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/5 px-2.5 py-1 text-xs font-medium text-cyan-300/70 hover:bg-cyan-400/10 hover:text-cyan-200 transition disabled:opacity-40"
+          class="shrink-0 flex items-center gap-1 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent/70 hover:bg-accent/10 hover:text-accent transition disabled:opacity-40"
         >
           <svg v-if="generatingItinerary" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -577,13 +577,13 @@ async function deleteDelivery() {
         </button>
 
         <div class="flex items-center gap-2 min-w-0 flex-1">
-          <div class="h-7 w-7 shrink-0 rounded-md bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center">
-            <svg class="w-4 h-4 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="h-7 w-7 shrink-0 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/>
             </svg>
           </div>
-          <span class="text-sm font-bold truncate text-slate-100">
+          <span class="text-sm font-bold truncate text-th-primary">
             {{ isEdit ? (form.name ?? `Ordre #${orderId}`) : 'Nouvel ordre' }}
           </span>
         </div>
@@ -604,7 +604,7 @@ async function deleteDelivery() {
       </div>
 
       <!-- ── Loading ─────────────────────────────────────────────────────── -->
-      <div v-if="loading" class="rounded-lg border border-cyan-400/10 bg-black/20 p-4 text-sm text-slate-500">
+      <div v-if="loading" class="rounded-lg border border-accent/10 bg-black/20 p-4 text-sm text-th-muted">
         Chargement…
       </div>
 
@@ -624,23 +624,23 @@ async function deleteDelivery() {
         <!-- ──────────────────────────────────────────────────────────────── -->
         <!-- General info                                                     -->
         <!-- ──────────────────────────────────────────────────────────────── -->
-        <div class="rounded-lg border border-cyan-400/20 bg-black/20 p-4 space-y-3">
-          <p class="text-[10px] font-bold uppercase tracking-widest text-slate-600">Informations générales</p>
+        <div class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Informations générales</p>
 
           <!-- Name -->
           <div>
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Nom de l'ordre</label>
+            <label class="block text-[11px] font-semibold text-th-muted mb-1">Nom de l'ordre</label>
             <input
               v-model="form.name"
               type="text"
               placeholder="Ex: Run LaGrange → Crusader"
-              class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+              class="w-full rounded-md border border-th-subtle bg-th-card px-3 py-1.5 text-xs text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
             />
           </div>
 
           <!-- Origin POI autocomplete -->
           <div>
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Point de départ</label>
+            <label class="block text-[11px] font-semibold text-th-muted mb-1">Point de départ</label>
             <div class="relative">
               <input
                 :value="getSearch('origin').query"
@@ -648,21 +648,21 @@ async function deleteDelivery() {
                 @blur="hideSearch('origin')"
                 type="text"
                 placeholder="Rechercher un lieu…"
-                class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                class="w-full rounded-md border border-th-subtle bg-th-card px-3 py-1.5 text-xs text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
               />
               <div
                 v-if="getSearch('origin').show || getSearch('origin').loading"
-                class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-48 overflow-y-auto"
+                class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-48 overflow-y-auto"
               >
-                <div v-if="getSearch('origin').loading" class="px-3 py-2 text-xs text-slate-500">Recherche…</div>
+                <div v-if="getSearch('origin').loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
                 <button
                   v-for="poi in getSearch('origin').results"
                   :key="poi.id"
                   @mousedown.prevent="selectPoi('origin', poi)"
-                  class="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
+                  class="w-full text-left px-3 py-2 text-xs text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
                 >
                   {{ poi.name }}
-                  <span v-if="poi.systemName" class="text-slate-500 ml-1">({{ poi.systemName }})</span>
+                  <span v-if="poi.systemName" class="text-th-muted ml-1">({{ poi.systemName }})</span>
                 </button>
               </div>
             </div>
@@ -673,8 +673,8 @@ async function deleteDelivery() {
         <!-- ──────────────────────────────────────────────────────────────── -->
         <!-- Ships                                                            -->
         <!-- ──────────────────────────────────────────────────────────────── -->
-        <div class="rounded-lg border border-cyan-400/20 bg-black/20 p-4 space-y-3">
-          <p class="text-[10px] font-bold uppercase tracking-widest text-slate-600">Vaisseaux</p>
+        <div class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Vaisseaux</p>
 
           <!-- Ship search -->
           <div class="relative">
@@ -684,50 +684,50 @@ async function deleteDelivery() {
               @blur="hideShipSearch"
               type="text"
               placeholder="Ajouter un vaisseau…"
-              class="w-full rounded-md border border-dashed border-cyan-400/20 bg-black/10 px-3 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40"
+              class="w-full rounded-md border border-dashed border-accent/20 bg-black/10 px-3 py-1.5 text-xs text-th-secondary placeholder:text-th-muted focus:outline-none focus:border-accent/40"
             />
             <div
               v-if="showShipDropdown"
-              class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-48 overflow-y-auto"
+              class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-48 overflow-y-auto"
             >
-              <div v-if="!filteredShipModels.length" class="px-3 py-2 text-xs text-slate-600">
+              <div v-if="!filteredShipModels.length" class="px-3 py-2 text-xs text-th-muted">
                 {{ shipSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat.' }}
               </div>
               <button
                 v-for="sm in filteredShipModels"
                 :key="sm.id"
                 @mousedown.prevent="addShip(sm.id)"
-                class="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
+                class="w-full text-left px-3 py-2 text-xs text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
               >
                 {{ sm.name }}
-                <span class="text-slate-500 ml-1">({{ sm.specification?.scu ?? '—' }} SCU)</span>
+                <span class="text-th-muted ml-1">({{ sm.specification?.scu ?? '—' }} SCU)</span>
               </button>
             </div>
           </div>
 
-          <div v-if="!form.ships.length" class="text-xs text-slate-600 italic">Aucun vaisseau ajouté.</div>
+          <div v-if="!form.ships.length" class="text-xs text-th-muted italic">Aucun vaisseau ajouté.</div>
 
           <div v-else class="space-y-2">
             <div
               v-for="(ship, idx) in form.ships"
               :key="ship._k"
-              class="flex items-start gap-2 rounded-md border border-slate-700/50 bg-slate-800/40 px-2.5 py-2"
+              class="flex items-start gap-2 rounded-md border border-th-muted bg-th-card px-2.5 py-2"
             >
-              <svg class="w-3.5 h-3.5 mt-0.5 shrink-0 text-cyan-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
               </svg>
               <div class="flex-1 min-w-0">
-                <p class="text-xs font-semibold text-slate-200">{{ shipDisplayName(ship.shipId) }}</p>
+                <p class="text-xs font-semibold text-th-primary">{{ shipDisplayName(ship.shipId) }}</p>
                 <input
                   v-model="ship.note"
                   type="text"
                   placeholder="Note (optionnelle)"
-                  class="mt-1 w-full rounded border border-slate-700/50 bg-slate-700/30 px-2 py-1 text-[11px] text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/30"
+                  class="mt-1 w-full rounded border border-th-muted bg-th-card/30 px-2 py-1 text-[11px] text-th-secondary placeholder:text-th-muted focus:outline-none focus:border-accent/30"
                 />
               </div>
               <button
                 @click="removeShip(idx)"
-                class="mt-0.5 shrink-0 text-slate-600 hover:text-rose-400 transition"
+                class="mt-0.5 shrink-0 text-th-muted hover:text-rose-400 transition"
               >
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -740,12 +740,12 @@ async function deleteDelivery() {
         <!-- ──────────────────────────────────────────────────────────────── -->
         <!-- Manifest lines                                                   -->
         <!-- ──────────────────────────────────────────────────────────────── -->
-        <div class="rounded-lg border border-cyan-400/20 bg-black/20 p-4 space-y-3">
+        <div class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
           <div class="flex items-center justify-between">
-            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-600">Lignes de chargement</p>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Lignes de chargement</p>
             <button
               @click="addLine"
-              class="flex items-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/5 px-2 py-1 text-[11px] font-medium text-cyan-300/70 hover:bg-cyan-400/10 hover:text-cyan-200 transition"
+              class="flex items-center gap-1 rounded-md border border-accent/20 bg-accent/5 px-2 py-1 text-[11px] font-medium text-accent/70 hover:bg-accent/10 hover:text-accent transition"
             >
               <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -754,7 +754,7 @@ async function deleteDelivery() {
             </button>
           </div>
 
-          <div v-if="!form.manifests.length" class="text-xs text-slate-600 italic">
+          <div v-if="!form.manifests.length" class="text-xs text-th-muted italic">
             Aucune ligne de chargement. Cliquez sur « Ajouter une ligne ».
           </div>
 
@@ -762,14 +762,14 @@ async function deleteDelivery() {
             <div
               v-for="(m, idx) in form.manifests"
               :key="m._k"
-              class="rounded-md border border-slate-700/50 bg-slate-800/20 p-3 space-y-2"
+              class="rounded-md border border-th-muted bg-th-card/20 p-3 space-y-2"
             >
               <!-- Line header -->
               <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-500">Ligne {{ idx + 1 }}</span>
+                <span class="text-[11px] font-bold text-th-muted">Ligne {{ idx + 1 }}</span>
                 <button
                   @click="removeLine(idx)"
-                  class="text-slate-600 hover:text-rose-400 transition"
+                  class="text-th-muted hover:text-rose-400 transition"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -782,7 +782,7 @@ async function deleteDelivery() {
 
                 <!-- Pickup -->
                 <div>
-                  <label class="block text-[10px] text-slate-600 mb-1">Pickup (chargement)</label>
+                  <label class="block text-[10px] text-th-muted mb-1">Pickup (chargement)</label>
                   <div class="relative">
                     <input
                       :value="getSearch(`pickup_${m._k}`).query"
@@ -790,21 +790,21 @@ async function deleteDelivery() {
                       @blur="hideSearch(`pickup_${m._k}`)"
                       type="text"
                       placeholder="Lieu de pickup…"
-                      class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                      class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
                     />
                     <div
                       v-if="getSearch(`pickup_${m._k}`).show || getSearch(`pickup_${m._k}`).loading"
-                      class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-40 overflow-y-auto"
+                      class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
                     >
-                      <div v-if="getSearch(`pickup_${m._k}`).loading" class="px-3 py-2 text-xs text-slate-500">Recherche…</div>
+                      <div v-if="getSearch(`pickup_${m._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
                       <button
                         v-for="poi in getSearch(`pickup_${m._k}`).results"
                         :key="poi.id"
                         @mousedown.prevent="selectPoi(`pickup_${m._k}`, poi)"
-                        class="w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
+                        class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
                       >
                         {{ poi.name }}
-                        <span v-if="poi.systemName" class="text-slate-500 ml-1">({{ poi.systemName }})</span>
+                        <span v-if="poi.systemName" class="text-th-muted ml-1">({{ poi.systemName }})</span>
                       </button>
                     </div>
                   </div>
@@ -812,7 +812,7 @@ async function deleteDelivery() {
 
                 <!-- Dropoff -->
                 <div>
-                  <label class="block text-[10px] text-slate-600 mb-1">Dropoff (livraison)</label>
+                  <label class="block text-[10px] text-th-muted mb-1">Dropoff (livraison)</label>
                   <div class="relative">
                     <input
                       :value="getSearch(`dropoff_${m._k}`).query"
@@ -820,21 +820,21 @@ async function deleteDelivery() {
                       @blur="hideSearch(`dropoff_${m._k}`)"
                       type="text"
                       placeholder="Lieu de dropoff…"
-                      class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                      class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
                     />
                     <div
                       v-if="getSearch(`dropoff_${m._k}`).show || getSearch(`dropoff_${m._k}`).loading"
-                      class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-40 overflow-y-auto"
+                      class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
                     >
-                      <div v-if="getSearch(`dropoff_${m._k}`).loading" class="px-3 py-2 text-xs text-slate-500">Recherche…</div>
+                      <div v-if="getSearch(`dropoff_${m._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
                       <button
                         v-for="poi in getSearch(`dropoff_${m._k}`).results"
                         :key="poi.id"
                         @mousedown.prevent="selectPoi(`dropoff_${m._k}`, poi)"
-                        class="w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
+                        class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
                       >
                         {{ poi.name }}
-                        <span v-if="poi.systemName" class="text-slate-500 ml-1">({{ poi.systemName }})</span>
+                        <span v-if="poi.systemName" class="text-th-muted ml-1">({{ poi.systemName }})</span>
                       </button>
                     </div>
                   </div>
@@ -843,7 +843,7 @@ async function deleteDelivery() {
 
               <!-- Commodity + Quantity (support multiple cargos per line) -->
               <div>
-                <label class="block text-[10px] text-slate-600 mb-1">Marchandises</label>
+                <label class="block text-[10px] text-th-muted mb-1">Marchandises</label>
 
                 <!-- Multiple cargos UI (always shown) -->
                 <div class="space-y-2">
@@ -860,18 +860,18 @@ async function deleteDelivery() {
                           @blur="hideSearch(`commodity_${m._k}_c_${c._k}`)"
                           type="text"
                           placeholder="Rechercher une marchandise…"
-                          class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                          class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
                         />
                         <div
                           v-if="getSearch(`commodity_${m._k}_c_${c._k}`).show || getSearch(`commodity_${m._k}_c_${c._k}`).loading"
-                          class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl max-h-40 overflow-y-auto"
+                          class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
                         >
-                          <div v-if="getSearch(`commodity_${m._k}_c_${c._k}`).loading" class="px-3 py-2 text-xs text-slate-500">Recherche…</div>
+                          <div v-if="getSearch(`commodity_${m._k}_c_${c._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
                           <button
                             v-for="res in getSearch(`commodity_${m._k}_c_${c._k}`).results"
                             :key="res.id"
                             @mousedown.prevent="selectCommodity(`commodity_${m._k}_c_${c._k}`, res)"
-                            class="w-full text-left px-3 py-1.5 text-[11px] text-slate-200 hover:bg-slate-800 border-b border-slate-800/60 last:border-0"
+                            class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
                           >
                             {{ res.name }}
                           </button>
@@ -883,7 +883,7 @@ async function deleteDelivery() {
                         v-model.number="c.quantity"
                         type="number"
                         min="1"
-                        class="w-full rounded-md border border-slate-700 bg-slate-800/50 px-2.5 py-1.5 text-[11px] text-slate-100"
+                        class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary"
                       />
                     </div>
                     <div class="col-span-2 flex items-center justify-end">
@@ -891,7 +891,7 @@ async function deleteDelivery() {
                     </div>
                   </div>
                   <div>
-                    <button @click="addCargo(m._k)" type="button" class="text-xs text-cyan-300 hover:underline">+ Ajouter une cargaison</button>
+                    <button @click="addCargo(m._k)" type="button" class="text-xs text-accent hover:underline">+ Ajouter une cargaison</button>
                   </div>
                 </div>
               </div>
@@ -907,7 +907,7 @@ async function deleteDelivery() {
           <button
             @click="saveAndGoBack"
             :disabled="saving || generating || deleting"
-            class="flex items-center gap-1.5 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-400/15 transition disabled:opacity-40"
+            class="flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-semibold text-accent hover:bg-accent/15 transition disabled:opacity-40"
           >
             <svg v-if="saving" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>

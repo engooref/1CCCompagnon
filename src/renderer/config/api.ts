@@ -34,5 +34,9 @@ export function createOverlayUrls(settings: AppSettings) {
     agendaIndex:         url(base, o, 'agenda', 'index'),
     agendaShow:          (id: number) => url(base, o, 'agenda', 'show').replace('{id}', String(id)),
     agendaStore:         url(base, o, 'agenda', 'store'),
+    inventoryIndex:       url(base, o, 'inventory', 'index'),
+    inventoryShow:        (id: number) => url(base, o, 'inventory', 'show').replace('{id}', String(id)),
+    inventorySearch:      url(base, o, 'inventory', 'search'),
+    inventoryMercureInfo: url(base, o, 'inventory', 'mercureInfo'),
   }
 }
