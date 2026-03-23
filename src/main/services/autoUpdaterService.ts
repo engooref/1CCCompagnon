@@ -48,7 +48,7 @@ export async function installUpdateAndQuit() {
   await initAutoUpdater()
   try {
     // quit and install the downloaded update
-    autoUpdater.quitAndInstall()
+    autoUpdater.quitAndInstall(true, true)
   } catch (e) {
     logger.error('[autoUpdater] quitAndInstall error', e as any)
     throw e
