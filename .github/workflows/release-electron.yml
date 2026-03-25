@@ -51,11 +51,11 @@ jobs:
           if ($tag -match 'draft' -or $tag -match 'preprod') {
             "is_preprod=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             "deploy_subpath=preProd" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "🔶 Mode preProd détecté → ${{ secrets.UPDATE_PATH }}/preProd"
+            Write-Host "Mode preProd detecte"
           } else {
             "is_preprod=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             "deploy_subpath="  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "✅ Mode production → ${{ secrets.UPDATE_PATH }}"
+            Write-Host "Mode production"
           }
 
       - name: Sync package.json and package-lock.json with tag version
@@ -70,9 +70,9 @@ jobs:
 
           if ($currentVersion -ne $targetVersion) {
             npm version $targetVersion --no-git-tag-version
-            Write-Host "✅ package.json et package-lock.json alignés sur $targetVersion"
+            Write-Host "package.json et package-lock.json alignes sur $targetVersion"
           } else {
-            Write-Host "✅ package.json déjà aligné"
+            Write-Host "package.json deja aligne"
           }
 
       - name: Reject if changelog entry is missing
@@ -108,9 +108,9 @@ jobs:
             git add package.json package-lock.json
             git commit -m "chore: align package version with tag ${{ github.ref_name }}"
             git push origin $env:DEFAULT_BRANCH
-            Write-Host "✅ package files poussés sur $env:DEFAULT_BRANCH"
+            Write-Host "package files pousses sur $env:DEFAULT_BRANCH"
           } else {
-            Write-Host "✅ Aucun changement à commit"
+            Write-Host "Aucun changement a commit"
           }
 
       - name: Install dependencies
@@ -151,7 +151,7 @@ jobs:
             -i $env:USERPROFILE\.ssh\id_ed25519 `
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} `
             "mkdir -p ${{ secrets.UPDATE_PATH }}/old && find ${{ secrets.UPDATE_PATH }} -maxdepth 1 \( -name '*.exe' -o -name '*.blockmap' \) -exec mv {} ${{ secrets.UPDATE_PATH }}/old/ \; 2>/dev/null || true"
-          Write-Host "✅ Anciens fichiers archivés dans old/"
+          Write-Host "Anciens fichiers archives dans old/"
 
       - name: Upload update files via SCP
         shell: powershell
@@ -180,4 +180,4 @@ jobs:
             release\*.blockmap `
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$dest/
 
-          Write-Host "✅ Fichiers déployés dans $dest"
+          Write-Host "Fichiers deployes dans $dest"
