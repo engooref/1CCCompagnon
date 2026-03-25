@@ -19,6 +19,22 @@ async function toggleAgendaNotifications() {
   }
 }
 
+// ─── Mode preProd (testers uniquement) ────────────────────────────────────────
+
+const isTester   = computed(() => app.profile?.tester === true)
+const preProd    = computed(() => app.settings?.preProd ?? false)
+const preProdSaving = ref(false)
+
+async function togglePreProd() {
+  if (!app.settings) return
+  preProdSaving.value = true
+  try {
+    await app.saveSettings({ preProd: !preProd.value })
+  } finally {
+    preProdSaving.value = false
+  }
+}
+
 // ─── Résolution de la fenêtre ─────────────────────────────────────────────────
 
 const WINDOW_SIZES = [
@@ -74,6 +90,29 @@ async function applyWindowSize(size: string) {
             class="inline-block h-4 w-4 rounded-full shadow transition-transform duration-200"
             :class="agendaNotificationsEnabled ? 'translate-x-6' : 'translate-x-1 bg-th-muted'"
             :style="agendaNotificationsEnabled ? { backgroundColor: 'rgb(var(--accent-rgb))' } : {}"
+          />
+        </button>
+      </div>
+    </div>
+
+    <!-- Mode preProd (testers uniquement) -->
+    <div v-if="isTester" class="rounded-lg border border-amber-400/20 bg-amber-400/5 p-4">
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-amber-300">Mode pré-production</p>
+          <p class="text-xs text-th-muted mt-0.5">
+            Connecte l'overlay sur l'environnement de pré-production. Réservé aux testeurs.
+          </p>
+        </div>
+        <button
+          @click="togglePreProd"
+          :disabled="preProdSaving"
+          class="shrink-0 relative inline-flex h-6 w-11 items-center rounded-full border transition-colors duration-200 disabled:opacity-50"
+          :class="preProd ? 'bg-amber-400/30 border-amber-400/40' : 'bg-th-card border-th-subtle'"
+        >
+          <span
+            class="inline-block h-4 w-4 rounded-full shadow transition-transform duration-200"
+            :class="preProd ? 'translate-x-6 bg-amber-400' : 'translate-x-1 bg-slate-500'"
           />
         </button>
       </div>

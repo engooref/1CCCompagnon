@@ -43,6 +43,21 @@ jobs:
           Write-Host "Tag détecté : $tag"
           Write-Host "Version cible : $version"
 
+      - name: Detect deploy target
+        id: target
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match 'draft' -or $tag -match 'preprod') {
+            "is_preprod=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "deploy_subpath=preProd" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "🔶 Mode preProd détecté → ${{ secrets.UPDATE_PATH }}/preProd"
+          } else {
+            "is_preprod=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "deploy_subpath="  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "✅ Mode production → ${{ secrets.UPDATE_PATH }}"
+          }
+
       - name: Sync package.json and package-lock.json with tag version
         shell: powershell
         run: |
@@ -128,20 +143,41 @@ jobs:
           ${{ secrets.SSH_KNOWN_HOSTS }}
           "@ | Out-File -FilePath $env:USERPROFILE\.ssh\known_hosts -Encoding ascii
 
+      - name: Archive old prod files before upload
+        if: steps.target.outputs.is_preprod == 'false'
+        shell: powershell
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} `
+            -i $env:USERPROFILE\.ssh\id_ed25519 `
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} `
+            "mkdir -p ${{ secrets.UPDATE_PATH }}/old && find ${{ secrets.UPDATE_PATH }} -maxdepth 1 \( -name '*.exe' -o -name '*.blockmap' \) -exec mv {} ${{ secrets.UPDATE_PATH }}/old/ \; 2>/dev/null || true"
+          Write-Host "✅ Anciens fichiers archivés dans old/"
+
       - name: Upload update files via SCP
         shell: powershell
         run: |
+          $sub = "${{ steps.target.outputs.deploy_subpath }}"
+          $dest = if ($sub) { "${{ secrets.UPDATE_PATH }}/$sub" } else { "${{ secrets.UPDATE_PATH }}" }
+
+          # Créer le répertoire distant si besoin
+          ssh -p ${{ secrets.SSH_PORT }} `
+            -i $env:USERPROFILE\.ssh\id_ed25519 `
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} `
+            "mkdir -p $dest"
+
           scp -P ${{ secrets.SSH_PORT }} `
             -i $env:USERPROFILE\.ssh\id_ed25519 `
             release\latest.yml `
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.UPDATE_PATH }}/
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$dest/
 
           scp -P ${{ secrets.SSH_PORT }} `
             -i $env:USERPROFILE\.ssh\id_ed25519 `
             release\*.exe `
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.UPDATE_PATH }}/
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$dest/
 
           scp -P ${{ secrets.SSH_PORT }} `
             -i $env:USERPROFILE\.ssh\id_ed25519 `
             release\*.blockmap `
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.UPDATE_PATH }}/
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$dest/
+
+          Write-Host "✅ Fichiers déployés dans $dest"

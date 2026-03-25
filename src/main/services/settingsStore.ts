@@ -1,6 +1,9 @@
 import ElectronStore from 'electron-store'
 import type { AppSettings, AppearanceSettings } from '@shared/general'
 
+const PROD_URL    = 'https://www.1ercorpscolonial.fr/compagnon'
+const PREPROD_URL = 'https://www.preprod.1ercorpscolonial.fr/compagnon'
+
 const DEFAULT_APPEARANCE: AppearanceSettings = {
   primaryColor: '#22d3ee',
   accentColor:  '#0e7490',
@@ -10,7 +13,8 @@ const DEFAULT_APPEARANCE: AppearanceSettings = {
 }
 
 const defaults: AppSettings = {
-  siteUrl: 'https://www.preprod.1ercorpscolonial.fr/compagnon',
+  siteUrl: PROD_URL,
+  preProd: false,
   urls: {
     auth: '/auth',
     transports: {
@@ -75,10 +79,11 @@ export const store = createStore()
 
 export function getSettings(): AppSettings {
   const saved = store.get('settings') as Partial<AppSettings> | undefined
+  const preProd = saved?.preProd ?? false
   return {
     ...defaults,
     ...(saved ?? {}),
-    siteUrl: defaults.siteUrl,
+    siteUrl: preProd ? PREPROD_URL : PREPROD_URL,
     urls: defaults.urls,
     overlayLayout: {
       ...(defaults.overlayLayout ?? {}),
@@ -90,10 +95,11 @@ export function getSettings(): AppSettings {
 
 export function setSettings(partial: Partial<AppSettings>): AppSettings {
   const current = getSettings()
+  const preProd = 'preProd' in partial ? (partial.preProd ?? false) : (current.preProd ?? false)
   const next: AppSettings = {
     ...current,
     ...partial,
-    siteUrl: defaults.siteUrl,
+    siteUrl: preProd ? PREPROD_URL : PROD_URL,
     urls: defaults.urls,
     overlayLayout: 'overlayLayout' in partial
       ? (partial.overlayLayout ?? {})

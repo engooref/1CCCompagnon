@@ -86,6 +86,7 @@ export interface AppSettings {
   marketOppsEnabled?: boolean
   marketOppsBudget?: number | null
   agendaNotificationsEnabled?: boolean
+  preProd?: boolean       // activer l'environnement de pré-production (testers uniquement)
   appHue?: number         // hue-rotate deg for app accent (0 = cyan default)
   appScale?: number       // UI zoom scale 0.85–1.15, default 1
   appBrightness?: number  // brightness filter 0.7–1.3, default 1
@@ -127,6 +128,7 @@ export interface OverlayProfile {
   username: string
   avatar: string
   rh: RhMember | null
+  tester: boolean
 }
 
 export interface OverlayAuthResponse {
