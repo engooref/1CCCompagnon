@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.0.1',
+    date: '2026-03-25',
+    changes: [
+      { type: 'fix', text: 'Correction native pour overlay' },
+    ]
+  },
+  {
     version: '1.0.0',
     date: '2026-03-25',
     changes: [
