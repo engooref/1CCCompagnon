@@ -8,8 +8,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.7.0-draft',
+    date: '2026-03-25',
+    changes: [
+      { type: 'feature', text: 'Ajout mode test' },
+    ],
+  },
+  {
     version: '0.6.2',
-    date: '2026-07-01',
+    date: '2026-03-25',
     changes: [
       { type: 'delete', text: 'Suppression du suivi des logs du jeu' },
       { type: 'feature', text: 'Affichage log de l\'overlay' },
@@ -18,14 +25,14 @@ export const changelog: ChangelogEntry[] = [
   },
   {
     version: '0.6.1',
-    date: '2026-06-01',
+    date: '2026-03-25',
     changes: [
       { type: 'improvement', text: 'Amélioration de l\'auto installation de la mise à jour' }
     ],
   },
   {
     version: '0.6.0',
-    date: '2026-05-15',
+    date: '2026-03-25',
     changes: [
       { type: 'feature', text: 'Ajout de la personnalisation de l\'interface' },
       { type: 'feature', text: 'Ajout du système d\'inventaire et synchronisation direct avec le site' },
@@ -36,7 +43,7 @@ export const changelog: ChangelogEntry[] = [
   },
   {
     version: '0.5.0',
-    date: '2026-04-01',
+    date: '2026-03-25',
     changes: [
       { type: 'feature', text: 'Ajout de nouvelles résolutions d\'écran' },
       { type: 'feature', text: 'Ajout de l\'agenda permettant de regarder les événements à venir avec notifications' },
