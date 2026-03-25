@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.8.0-draft',
+    date: '2026-03-25',
+    changes: [
+      { type: 'feature', text: 'Modification de l\'auto-update' },
+    ]
+  },
+  {
     version: '0.7.0-draft',
     date: '2026-03-25',
     changes: [
