@@ -49,7 +49,8 @@ const defaults: AppSettings = {
       search: '/inventory/search',
       mercureInfo: '/inventory/mercure-info',
     },
-    updateUrl: '/update',
+    update: '/latest.yaml',
+    preprod: '/preprod/draft.yaml',
   },
   
   rememberConnection: true,

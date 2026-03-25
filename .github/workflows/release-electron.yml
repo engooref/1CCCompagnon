@@ -156,20 +156,10 @@ jobs:
       - name: Upload update files via SCP
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Stop'
+          $sub     = "${{ steps.target.outputs.deploy_subpath }}"
+          $dest    = if ($sub) { "${{ secrets.UPDATE_PATH }}/$sub" } else { "${{ secrets.UPDATE_PATH }}" }
+          $ymlName = if ($sub) { "draft.yml" } else { "latest.yml" }
 
-          $sub  = "${{ steps.target.outputs.deploy_subpath }}"
-          $dest = if ($sub) { "${{ secrets.UPDATE_PATH }}/$sub" } else { "${{ secrets.UPDATE_PATH }}" }
-
-          # Localiser latest.yml (peut etre a la racine ou dans un sous-dossier)
-          $ymlFile = Get-ChildItem -Recurse release -Filter "latest.yml" | Select-Object -First 1
-          if (-not $ymlFile) {
-            Write-Error "latest.yml introuvable dans release/"
-            exit 1
-          }
-          Write-Host "latest.yml trouve : $($ymlFile.FullName)"
-
-          # Creer le repertoire distant si besoin
           ssh -p ${{ secrets.SSH_PORT }} `
             -i $env:USERPROFILE\.ssh\id_ed25519 `
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} `
@@ -177,7 +167,7 @@ jobs:
 
           scp -P ${{ secrets.SSH_PORT }} `
             -i $env:USERPROFILE\.ssh\id_ed25519 `
-            "$($ymlFile.FullName)" `
+            release\$ymlName `
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$dest/
 
           scp -P ${{ secrets.SSH_PORT }} `
@@ -190,4 +180,4 @@ jobs:
             release\*.blockmap `
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$dest/
 
-          Write-Host "Fichiers deployes dans $dest"
+          Write-Host "Fichiers deployes dans $dest ($ymlName)"

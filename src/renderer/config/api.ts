@@ -30,13 +30,13 @@ export function createOverlayUrls(settings: AppSettings) {
     mapShow:              (id: number) => url(base, o, 'maps', 'show').replace('{id}', String(id)),
     mapFeatures:          (id: number) => url(base, o, 'maps', 'features').replace('{id}', String(id)),
     mapMercureInfo:       (id: number) => url(base, o, 'maps', 'mercureInfo').replace('{id}', String(id)),
-    updateUrl:           url(`https://updates.1ercorpscolonial.fr${settings.preProd ? '/preProd' : ''}`, o, 'updateUrl'),
+    update:           url('https://updates.1ercorpscolonial.fr', o, settings.preProd ? 'preProd' : 'update'),
     agendaIndex:         url(base, o, 'agenda', 'index'),
     agendaShow:          (id: number) => url(base, o, 'agenda', 'show').replace('{id}', String(id)),
     agendaStore:         url(base, o, 'agenda', 'store'),
     inventoryIndex:       url(base, o, 'inventory', 'index'),
     inventoryShow:        (id: number) => url(base, o, 'inventory', 'show').replace('{id}', String(id)),
-    inventorySearch:      url(base, o, 'inventory', 'search'),
+    inventorySearch:      url(base, o, 'inventory', 'search'),    
     inventoryMercureInfo: url(base, o, 'inventory', 'mercureInfo'),
   }
 }

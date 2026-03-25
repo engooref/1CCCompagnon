@@ -151,69 +151,29 @@ export async function checkForUpdates(): Promise<{ available: boolean; latest?: 
   const settings = getSettings()
   if (!settings) return { available: false }
   const urls = createOverlayUrls(settings)
-  const updateUrl = urls.updateUrl
+  const updateUrl = urls.update
   if (!updateUrl) return { available: false }
 
   try {
-    const { data } = await axios.get(updateUrl, { timeout: 10000 })
-    // Manifest formats supported:
-    // 1) { version, notes, url }
-    // 2) { version, notes, assets: [ 'https://.../file.exe', ... ] }
-    let latest = data?.version ?? data?.tag_name ?? null
-    const notes = data?.notes ?? data?.body ?? data?.changelog ?? ''
-    // Prefer explicit url
-    let url = data?.url ?? data?.browser_download_url ?? data?.html_url ?? null
+    const { data: text } = await axios.get(updateUrl, { timeout: 10000, responseType: 'text' })
+    const raw = String(text)
 
-    // If manifest provides assets array, try to pick the right asset for current platform
-    const assets: string[] | undefined = Array.isArray(data?.assets) ? data.assets : undefined
-    if (!url && assets && assets.length) {
-      const platform = process.platform // 'win32' | 'darwin' | 'linux'
-      function pickAsset(list: string[]) {
-        const pickers: Record<string, RegExp[]> = {
-          win32: [/\.exe$/i, /nsis/i, /win/i, /-win/i],
-          darwin: [/\.dmg$/i, /\.zip$/i, /mac/i, /darwin/i],
-          linux: [/\.AppImage$/i, /\.deb$/i, /\.tar\.gz$/i, /linux/i]
-        }
-        const checks = pickers[platform] ?? []
-        // first by extension/keyword
-        for (const rx of checks) {
-          const found = list.find(u => rx.test(u))
-          if (found) return found
-        }
-        // fallback: prefer items with platform name
-        const fallback = list.find(u => /win|mac|linux|x86|amd64|x64/i.test(u))
-        return fallback ?? list[0]
-      }
-      url = pickAsset(assets)
-    }
+    const mver = raw.match(/^version:\s*(.+)$/m)
+    const mpath = raw.match(/^path:\s*(.+)$/m)
+    const mnotes = raw.match(/^releaseNotes:\s*(.+)$/m)
 
-    // If manifest is an index with platform-specific manifests, resolve platform manifest
-    if (!url && data && typeof data === 'object' && data.manifests) {
-      const platform = process.platform
-      const entry = data.manifests[platform] ?? data.manifests[platform === 'win32' ? 'win' : platform]
-      const manifestUrl = entry?.url ?? entry?.manifest ?? null
-      if (manifestUrl) {
-        try {
-          const { data: manifestText } = await axios.get(manifestUrl, { timeout: 10000, responseType: 'text' })
-          const text = String(manifestText)
-          const mver = text.match(/^version:\s*(.+)$/m)
-          const murl = text.match(/^[ \t-]*url:\s*(.+)$/im)
-          const ver = mver ? mver[1].trim() : null
-          const furl = murl ? murl[1].trim() : null
-          if (ver) {
-            // override latest and url
-            latest = ver
-            url = furl ?? null
-          }
-        } catch (e: any) {
-          logger.warn('[overlayService] failed to fetch platform manifest', e?.message ?? e)
-        }
-      }
-    }
-
+    const latest = mver ? mver[1].trim() : null
     if (!latest) return { available: false }
+
+    const notes = mnotes ? mnotes[1].trim() : ''
+
+    // Build download URL from the YAML base URL + path value
+    const base = updateUrl.replace(/[^/]+$/, '')
+    const filePath = mpath ? mpath[1].trim() : null
+    const url = filePath ? `${base}${filePath}` : null
+
     const current = getAppVersion()
-    if (semverCompare(latest, current) > 0) return { available: true, latest, notes, url }
+    if (semverCompare(latest, current) > 0) return { available: true, latest, notes, url: url ?? undefined }
     return { available: false }
   } catch (e: any) {
     logger.warn('[overlayService] checkForUpdates failed:', e?.message ?? e)
