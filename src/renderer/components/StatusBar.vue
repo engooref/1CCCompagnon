@@ -67,6 +67,12 @@ async function installNow() {
   } catch {}
 }
 
+async function checkUpdatesManually() {
+  try {
+    await (window as any).oneCC.nativeCheckForUpdates()
+  } catch {}
+}
+
 function handleNativeUpdateEvent(event: any) {
   const { type, info, progress } = event
   if (type === 'checking') {
@@ -244,11 +250,23 @@ const changeTypeClass: Record<string, string> = {
             <h2 class="text-sm font-bold tracking-widest text-th-primary uppercase">Notes de version</h2>
             <p class="text-[11px] text-th-muted mt-0.5">1CC Compagnon · v{{ version ?? '—' }}</p>
           </div>
-          <button @click="showChangelog = false" class="text-th-muted hover:text-th-secondary transition">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              @click="checkUpdatesManually"
+              :disabled="nativeChecking"
+              class="flex items-center gap-1.5 rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-[11px] font-semibold text-th-secondary hover:border-accent/30 hover:text-accent transition disabled:opacity-50"
+            >
+              <svg class="w-3 h-3" :class="nativeChecking ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Vérifier les mises à jour
+            </button>
+            <button @click="showChangelog = false" class="text-th-muted hover:text-th-secondary transition">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <!-- Bandeau mise à jour dispo -->

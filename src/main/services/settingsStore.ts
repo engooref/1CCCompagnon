@@ -49,8 +49,6 @@ const defaults: AppSettings = {
       search: '/inventory/search',
       mercureInfo: '/inventory/mercure-info',
     },
-    update: '/latest.yaml',
-    preprod: '/preprod/draft.yaml',
   },
   
   rememberConnection: true,
@@ -84,7 +82,7 @@ export function getSettings(): AppSettings {
   return {
     ...defaults,
     ...(saved ?? {}),
-    siteUrl: preProd ? PREPROD_URL : PREPROD_URL,
+    siteUrl: preProd ? PREPROD_URL : PROD_URL,
     urls: defaults.urls,
     overlayLayout: {
       ...(defaults.overlayLayout ?? {}),

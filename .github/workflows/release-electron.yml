@@ -50,7 +50,7 @@ jobs:
           $tag = "${{ github.ref_name }}"
           if ($tag -match 'draft' -or $tag -match 'preprod') {
             "is_preprod=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "deploy_subpath=preProd" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "deploy_subpath=preprod" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             Write-Host "Mode preProd detecte"
           } else {
             "is_preprod=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

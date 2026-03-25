@@ -71,15 +71,13 @@ contextBridge.exposeInMainWorld('oneCC', {
   log: (level: string, message: string) => ipcRenderer.invoke('app:log', level, message),
   // ── Updates ───────────────────────────────────────────────────────────────
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
-  checkForUpdates: () => ipcRenderer.invoke('app:check-updates'),
-  installUpdate: (url: string) => ipcRenderer.invoke('app:install-update', url),
-  onUpdateAvailable: (cb: (d: any) => void) => ipcRenderer.on('app:update-available', (_e, d) => cb(d)),
-  setAutoUpdateEnabled: (enabled: boolean) => ipcRenderer.invoke('app:enable-auto-update', enabled),
   // ── Native auto-updater (electron-updater)
   initAutoUpdater: () => ipcRenderer.invoke('app:init-auto-updater'),
   nativeCheckForUpdates: () => ipcRenderer.invoke('app:auto-check-updates-native'),
   nativeDownloadUpdate: () => ipcRenderer.invoke('app:auto-download-update-native'),
   nativeInstallUpdate: () => ipcRenderer.invoke('app:auto-install-update-native'),
+  onUpdateAvailable: (cb: (info: any) => void) =>
+    ipcRenderer.on('app:auto-update-event', (_e, d) => { if (d?.type === 'update-available') cb(d.info) }),
   onNativeAutoUpdateEvent: (cb: (d: any) => void) => ipcRenderer.on('app:auto-update-event', (_e, d) => cb(d)),
   setUpdateFeed: (url: string) => ipcRenderer.invoke('app:set-update-feed', url),
 })

@@ -9,7 +9,6 @@ import { startGameWatcher, stopGameWatcher, getGameWindowBounds } from './servic
 import { loadNativeTracker } from './services/scTrackerNative'
 import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterService'
 import { getSettings } from './services/settingsStore'
-import { startAutoUpdateChecker } from './services/overlayService'
 import { onLayoutChange } from './services/layoutStore'
 import { uIOhook } from 'uiohook-napi'
 
@@ -164,7 +163,6 @@ app.whenReady().then(async () => {
 
   // Services en arrière-plan (non bloquants)
   setImmediate(() => {
-    try { startAutoUpdateChecker() } catch { /* ignore */ }
     initAutoUpdater()
       .then(() => setTimeout(() => checkForUpdatesNative().catch(() => {}), 5000))
       .catch(() => { /* ignore */ })

@@ -1,27 +1,42 @@
 import { autoUpdater } from 'electron-updater'
 import { logger } from './logger'
 import { sendToMain } from '../windows/mainWindow'
+import { getSettings } from './settingsStore'
 
-let initialized = false
+const UPDATE_BASE_URL = 'https://updates.1ercorpscolonial.fr'
+
+let listenersRegistered = false
 
 function broadcast(payload: unknown) {
   sendToMain('app:auto-update-event', payload)
 }
 
-export async function initAutoUpdater() {
-  if (initialized) return
+function configureUpdater() {
+  const { preProd } = getSettings()
+  if (preProd) {
+    autoUpdater.channel = 'draft'
+    autoUpdater.setFeedURL({ provider: 'generic', url: `${UPDATE_BASE_URL}/preprod/` })
+  } else {
+    autoUpdater.channel = 'latest'
+    autoUpdater.setFeedURL({ provider: 'generic', url: `${UPDATE_BASE_URL}/` })
+  }
+}
 
+export async function initAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.autoDownload = false
 
-  autoUpdater.on('checking-for-update', () => broadcast({ type: 'checking' }))
-  autoUpdater.on('update-available', (info) => broadcast({ type: 'update-available', info }))
-  autoUpdater.on('update-not-available', (info) => broadcast({ type: 'update-not-available', info }))
-  autoUpdater.on('error', (err) => broadcast({ type: 'error', error: err?.message ?? String(err) }))
-  autoUpdater.on('download-progress', (progress) => broadcast({ type: 'progress', progress }))
-  autoUpdater.on('update-downloaded', (info) => broadcast({ type: 'downloaded', info }))
+  configureUpdater()
 
-  initialized = true
+  if (!listenersRegistered) {
+    autoUpdater.on('checking-for-update', () => broadcast({ type: 'checking' }))
+    autoUpdater.on('update-available', (info) => broadcast({ type: 'update-available', info }))
+    autoUpdater.on('update-not-available', (info) => broadcast({ type: 'update-not-available', info }))
+    autoUpdater.on('error', (err) => broadcast({ type: 'error', error: err?.message ?? String(err) }))
+    autoUpdater.on('download-progress', (progress) => broadcast({ type: 'progress', progress }))
+    autoUpdater.on('update-downloaded', (info) => broadcast({ type: 'downloaded', info }))
+    listenersRegistered = true
+  }
 }
 
 export async function checkForUpdatesNative() {
@@ -47,7 +62,6 @@ export async function downloadUpdateNative() {
 export async function installUpdateAndQuit() {
   await initAutoUpdater()
   try {
-    // quit and install the downloaded update
     autoUpdater.quitAndInstall(true, true)
   } catch (e) {
     logger.error('[autoUpdater] quitAndInstall error', e as any)

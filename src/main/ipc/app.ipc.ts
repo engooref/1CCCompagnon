@@ -1,6 +1,6 @@
 import { app as electronApp, ipcMain, dialog, BrowserWindow, screen, Notification } from 'electron'
 import { clearApiKey, getApiKey, setApiKey } from '../services/secureStore'
-import { authenticateOverlay, checkConnection, getAppVersion, checkForUpdates, installUpdate, startAutoUpdateChecker, stopAutoUpdateChecker } from '../services/overlayService'
+import { authenticateOverlay, checkConnection, getAppVersion } from '../services/overlayService'
 import { initAutoUpdater, checkForUpdatesNative, downloadUpdateNative, installUpdateAndQuit, setFeedUrl } from '../services/autoUpdaterService'
 import { getSettings, setSettings } from '../services/settingsStore'
 import { startMercureSse, stopMercureSse } from '../services/mercureService'
@@ -66,14 +66,6 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
 
   ipcMain.handle('app:get-api-key', async () => getApiKey())
   ipcMain.handle('app:get-version', async () => getAppVersion())
-  ipcMain.handle('app:check-updates', async () => checkForUpdates())
-  ipcMain.handle('app:install-update', async (_e, url: string) => installUpdate(url))
-  ipcMain.handle('app:enable-auto-update', async (_e, enabled: boolean) => {
-    if (enabled) startAutoUpdateChecker()
-    else stopAutoUpdateChecker()
-    return true
-  })
-
   // Native auto-updater (electron-updater)
   ipcMain.handle('app:init-auto-updater', async () => { await initAutoUpdater(); return true })
   ipcMain.handle('app:auto-check-updates-native', async () => { return await checkForUpdatesNative() })

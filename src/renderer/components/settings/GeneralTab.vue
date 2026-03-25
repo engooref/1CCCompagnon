@@ -24,12 +24,14 @@ async function toggleAgendaNotifications() {
 const isTester   = computed(() => app.profile?.tester === true)
 const preProd    = computed(() => app.settings?.preProd ?? false)
 const preProdSaving = ref(false)
+const preProdChanged = ref(false)
 
 async function togglePreProd() {
   if (!app.settings) return
   preProdSaving.value = true
   try {
     await app.saveSettings({ preProd: !preProd.value })
+    preProdChanged.value = true
   } finally {
     preProdSaving.value = false
   }
@@ -116,6 +118,9 @@ async function applyWindowSize(size: string) {
           />
         </button>
       </div>
+      <p v-if="preProdChanged" class="text-xs text-amber-300/80 mt-2">
+        ⚠ Redémarrez l'application pour appliquer ce changement.
+      </p>
     </div>
 
     <!-- Résolution de la fenêtre -->

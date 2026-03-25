@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
+    "prerelease": "taskkill /F /IM \"1CC Compagnon.exe\" /T 2>nul & exit /b 0",
     "release": "npm run build && npm run build:native && electron-builder --win nsis",
     "build:native": "node scripts/build-native.js"
   },

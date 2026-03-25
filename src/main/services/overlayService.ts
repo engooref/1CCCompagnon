@@ -1,11 +1,9 @@
 import axios from 'axios'
-import { app as electronApp, shell } from 'electron'
+import { app as electronApp } from 'electron'
 import type { ConnectionState, OverlayAuthResponse, OverlayProfile } from '@shared/general'
 import { getApiKey } from './secureStore'
 import { getSettings } from './settingsStore'
 import { logger } from './logger'
-import { sendToOverlay } from '../windows/overlayWindow'
-import { createOverlayUrls } from '../../renderer/config/api'
 
 type RawOverlayAuthResponse = {
   token?: string
@@ -127,85 +125,6 @@ export async function checkConnection(): Promise<ConnectionState> {
   }
 }
 
-// ─── Updates support ───────────────────────────────────────────────────────
-
-let autoUpdateInterval: NodeJS.Timeout | null = null
-
 export function getAppVersion(): string {
   try { return electronApp.getVersion() } catch { return '0.0.0' }
-}
-
-function semverCompare(a: string, b: string): number {
-  const pa = a.split('.').map(n => parseInt(n || '0', 10))
-  const pb = b.split('.').map(n => parseInt(n || '0', 10))
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] || 0
-    const nb = pb[i] || 0
-    if (na > nb) return 1
-    if (na < nb) return -1
-  }
-  return 0
-}
-
-export async function checkForUpdates(): Promise<{ available: boolean; latest?: string; notes?: string; url?: string }> {
-  const settings = getSettings()
-  if (!settings) return { available: false }
-  const urls = createOverlayUrls(settings)
-  const updateUrl = urls.update
-  if (!updateUrl) return { available: false }
-
-  try {
-    const { data: text } = await axios.get(updateUrl, { timeout: 10000, responseType: 'text' })
-    const raw = String(text)
-
-    const mver = raw.match(/^version:\s*(.+)$/m)
-    const mpath = raw.match(/^path:\s*(.+)$/m)
-    const mnotes = raw.match(/^releaseNotes:\s*(.+)$/m)
-
-    const latest = mver ? mver[1].trim() : null
-    if (!latest) return { available: false }
-
-    const notes = mnotes ? mnotes[1].trim() : ''
-
-    // Build download URL from the YAML base URL + path value
-    const base = updateUrl.replace(/[^/]+$/, '')
-    const filePath = mpath ? mpath[1].trim() : null
-    const url = filePath ? `${base}${filePath}` : null
-
-    const current = getAppVersion()
-    if (semverCompare(latest, current) > 0) return { available: true, latest, notes, url: url ?? undefined }
-    return { available: false }
-  } catch (e: any) {
-    logger.warn('[overlayService] checkForUpdates failed:', e?.message ?? e)
-    return { available: false }
-  }
-}
-
-export async function installUpdate(url?: string): Promise<boolean> {
-  if (!url) return false
-  try {
-    await shell.openExternal(url)
-    return true
-  } catch (e: any) {
-    logger.error('[overlayService] installUpdate error', e?.message ?? e)
-    return false
-  }
-}
-
-export function startAutoUpdateChecker(intervalMs?: number) {
-  stopAutoUpdateChecker()
-  const settings = getSettings()
-  const ms = typeof intervalMs === 'number' ? intervalMs : (settings?.updateCheckInterval ?? 3600000)
-  autoUpdateInterval = setInterval(async () => {
-    try {
-      const result = await checkForUpdates()
-      if (result.available) sendToOverlay('app:update-available', result)
-    } catch (e) {
-      logger.debug('[overlayService] auto update check failed')
-    }
-  }, ms)
-}
-
-export function stopAutoUpdateChecker() {
-  if (autoUpdateInterval) { clearInterval(autoUpdateInterval); autoUpdateInterval = null }
 }
