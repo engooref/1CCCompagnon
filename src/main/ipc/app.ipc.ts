@@ -1,20 +1,19 @@
-import path from 'node:path'
 import { app as electronApp, ipcMain, dialog, BrowserWindow, screen, Notification } from 'electron'
 import { clearApiKey, getApiKey, setApiKey } from '../services/secureStore'
 import { authenticateOverlay, checkConnection, getAppVersion, checkForUpdates, installUpdate, startAutoUpdateChecker, stopAutoUpdateChecker } from '../services/overlayService'
 import { initAutoUpdater, checkForUpdatesNative, downloadUpdateNative, installUpdateAndQuit, setFeedUrl } from '../services/autoUpdaterService'
 import { getSettings, setSettings } from '../services/settingsStore'
 import { startMercureSse, stopMercureSse } from '../services/mercureService'
-import { logParser } from '../services/logParserService'
 import { getLayout, saveLayout } from '../services/layoutStore'
 import type { OverlayContext } from '../../shared/general'
+import type { LogEntry } from '../services/logger'
 import { sendToOverlay } from '../windows/overlayWindow'
 import { openOverlayEditor, sendToEditor, closeOverlayEditor } from '../windows/overlayEditorWindow'
 import { logger } from '../services/logger'
 
 type GetGameBounds = () => { x: number; y: number; width: number; height: number } | null
 
-let gamelogListener: ((state: unknown, event: unknown) => void) | null = null
+let logSubscriberCb: ((entry: LogEntry) => void) | null = null
 
 export function registerAppIpc(getGameBounds: GetGameBounds) {
   ipcMain.handle('app:get-settings', async () => getSettings())
@@ -103,31 +102,20 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  // -- Game log --------------------------------------------------------------
-  logParser.on((state, gameEvent) => {
-    sendToOverlay('overlay:state', state)
-    sendToOverlay('overlay:event', gameEvent)
-    sendToEditor('editor:game-state', state)
-  })
-
-  ipcMain.handle('gamelog:start', (_event, folderPath: string) => {
-    if (gamelogListener) { logParser.off(gamelogListener as any); gamelogListener = null }
-    const sender = _event.sender
-    gamelogListener = (state, event) => {
-      if (!sender.isDestroyed()) {
-        sender.send('gamelog:state', state)
-        sender.send('gamelog:event', event)
-      }
+  // -- Logs overlay ----------------------------------------------------------
+  ipcMain.handle('app:get-logs', () => logger.getLogs())
+  ipcMain.handle('app:subscribe-logs', (event) => {
+    if (logSubscriberCb) logger.offLog(logSubscriberCb)
+    const sender = event.sender
+    logSubscriberCb = (entry: LogEntry) => {
+      if (!sender.isDestroyed()) sender.send('app:log-entry', entry)
     }
-    logParser.on(gamelogListener as any)
-    const targetPath = folderPath.endsWith('Game.log') ? folderPath : path.join(folderPath, 'Game.log')
-    if (!logParser.isRunning() || logParser.getFilePath() !== targetPath) logParser.start(folderPath)
-    return logParser.getState()
+    logger.onLog(logSubscriberCb)
+    return logger.getLogs()
   })
-
-  ipcMain.handle('gamelog:stop', () => logParser.stop())
-  ipcMain.handle('gamelog:state', () => logParser.getState())
-  ipcMain.handle('overlay:subscribe', () => logParser.getState())
+  ipcMain.handle('app:unsubscribe-logs', () => {
+    if (logSubscriberCb) { logger.offLog(logSubscriberCb); logSubscriberCb = null }
+  })
 
   // -- Overlay layout API ----------------------------------------------------
   ipcMain.handle('overlay:get-layout', () => getLayout())

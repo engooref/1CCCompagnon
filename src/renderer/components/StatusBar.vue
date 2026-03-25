@@ -155,7 +155,7 @@ const changeTypeLabel: Record<string, string> = {
   feature:     'Nouveau',
   fix:         'Correctif',
   improvement: 'Amélioration',
-  breaking:    'Rupture',
+  delete:      'Suppression',
 }
 const changeTypeClass: Record<string, string> = {
   feature:     'bg-accent/15 text-accent border-accent/30',

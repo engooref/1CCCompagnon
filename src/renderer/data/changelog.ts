@@ -1,4 +1,4 @@
-export type ChangeType = 'feature' | 'fix' | 'improvement' | 'breaking'
+export type ChangeType = 'feature' | 'fix' | 'improvement' | 'delete'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 }
 
 export const changelog: ChangelogEntry[] = [
+  {
+    version: '0.6.2',
+    date: '2026-07-01',
+    changes: [
+      { type: 'delete', text: 'Suppression du suivi des logs du jeu' },
+      { type: 'feature', text: 'Affichage log de l\'overlay' },
+      { type: 'improvement', text: 'correction de bugs sur les ordres de transports' },
+    ],
+  },
   {
     version: '0.6.1',
     date: '2026-06-01',

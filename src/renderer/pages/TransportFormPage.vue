@@ -86,7 +86,6 @@ const showShipDropdown = ref(false)
 const filteredShipModels = computed(() => {
   const q = shipSearch.value.trim().toLowerCase()
   if (!q) return shipModels.value.slice(0, 15)
-  console.log(`Filtering ships with query "${q}"`, shipModels.value)
   return shipModels.value.filter(s => s.name.toLowerCase().includes(q)).slice(0, 15)
 })
 

@@ -54,7 +54,7 @@ export interface TransportOrder {
   startingCredits?: number
   autoFillCargo?: boolean
   shipsCount?: number
-  ships?: Array<{ shipId?: string; shipName?: string; note?: string }>
+  ships?: Array<{ shipId?: string; shipName?: string; note?: string; cargo?: number | null }>
   manifests?: ManifestItem[]
   itinerary?: {
     id?: number

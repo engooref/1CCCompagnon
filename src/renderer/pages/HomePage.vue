@@ -1,19 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { usePinnedTransport } from '../composables/usePinnedTransport'
-import { useGameLog } from '../composables/useGameLog'
-import { http } from '../services/http'
-import { createOverlayUrls } from '../config/api'
-import type { TransportOrder } from '../../shared/deliveries'
 
 // ─── Stores & composables ─────────────────────────────────────────────────────
 
 const app = useAppStore()
 const { pinnedId, isPinned } = usePinnedTransport()
-const { running } = useGameLog()
-
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
 const profile = computed(() => app.profile)
@@ -54,64 +48,19 @@ const connLabel = computed(() => {
 
 // ─── Transport orders ─────────────────────────────────────────────────────────
 
-const orders      = ref<TransportOrder[]>([])
-const loadingOrds = ref(false)
+const orders      = computed(() => app.transports)
+const loadingOrds = computed(() => app.transportsLoading)
 
-const urls = computed(() => app.settings ? createOverlayUrls(app.settings) : null)
-
-function orderProgress(order: TransportOrder): number {
+function orderProgress(order: (typeof orders.value)[number]): number {
   const lines = order.itinerary?.lines ?? []
   if (!lines.length) return 0
   return Math.round((lines.filter(l => l.completed).length / lines.length) * 100)
 }
 
-async function fetchOrders() {
-  const url = urls.value?.transports
-  if (!url || !app.bearerToken) return
-  loadingOrds.value = true
-  try {
-    const { data } = await http.get(url, { headers: { Authorization: `Bearer ${app.bearerToken}` } })
-    const raw = data?.data ?? data
-    orders.value = (Array.isArray(raw) ? raw.filter(Boolean) : [raw].filter(Boolean)) as TransportOrder[]
-    app.transports = orders.value
-    app.transportsLoaded = true
-  } catch {
-    orders.value = []
-    app.transports = []
-    app.transportsLoaded = true
-  } finally {
-    loadingOrds.value = false
-  }
-}
-
 // ─── Agenda ───────────────────────────────────────────────────────────────────
 
-interface AgendaEvent {
-  id: number
-  name: string
-  type: { name: string; color: string | null } | null
-  start: string | null
-}
-
-const agendaEvents  = ref<AgendaEvent[]>([])
-const loadingAgenda = ref(false)
-
-async function fetchAgenda() {
-  const url = urls.value?.agendaIndex
-  if (!url || !app.bearerToken) return
-  loadingAgenda.value = true
-  try {
-    const { data } = await http.get(url, {
-      headers: { Authorization: `Bearer ${app.bearerToken}` },
-      params: { limit: 5 },
-    })
-    agendaEvents.value = (data?.events ?? []).slice(0, 3)
-  } catch {
-    agendaEvents.value = []
-  } finally {
-    loadingAgenda.value = false
-  }
-}
+const agendaEvents  = computed(() => app.agendaEvents.slice(0, 3))
+const loadingAgenda = computed(() => !app.agendaLoaded && app.status.authReady)
 
 function formatEventDate(iso: string | null): string {
   if (!iso) return '—'
@@ -139,15 +88,6 @@ const pinnedOrder = computed(() =>
 
 const recentOrders = computed(() => orders.value.slice(0, 3))
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-
-onMounted(() => {
-  if (app.status.authReady) { fetchOrders(); fetchAgenda() }
-})
-
-watch(() => app.status.authReady, (v) => {
-  if (v) { fetchOrders(); fetchAgenda() }
-})
 </script>
 
 <template>
@@ -243,25 +183,6 @@ watch(() => app.status.authReady, (v) => {
             <span v-else>{{ activeOrdersCount }}</span>
           </p>
           <p class="text-[10px] text-th-muted mt-0.5 truncate">Ordres actifs</p>
-        </div>
-      </div>
-
-      <!-- Journal jeu -->
-      <div class="rounded-lg border border-violet-400/15 bg-black/20 p-3 flex items-center gap-3">
-        <div class="h-8 w-8 rounded-md bg-violet-400/10 border border-violet-400/20 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4 text-violet-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
-          </svg>
-        </div>
-        <div class="min-w-0">
-          <div class="flex items-center gap-1.5">
-            <span v-if="running" class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"/>
-            <p class="text-[11px] font-semibold" :class="running ? 'text-emerald-300' : 'text-th-muted'">
-              {{ running ? 'EN DIRECT' : 'Inactif' }}
-            </p>
-          </div>
-          <p class="text-[10px] text-th-muted mt-0.5 truncate">Journal de jeu</p>
         </div>
       </div>
 

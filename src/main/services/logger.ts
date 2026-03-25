@@ -2,9 +2,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+export interface LogEntry {
+  timestamp: string
+  level: LogLevel
+  message: string
+}
 
 const MAX_LOG_FILES = 7
+const MAX_BUFFER = 500
 
 function pad(n: number, len = 2): string {
   return String(n).padStart(len, '0')
@@ -35,6 +42,8 @@ class Logger {
   private logDir: string | null = null
   private currentDate = ''
   private stream: fs.WriteStream | null = null
+  private buffer: LogEntry[] = []
+  private listeners: ((entry: LogEntry) => void)[] = []
 
   private getLogDir(): string {
     if (!this.logDir) {
@@ -72,11 +81,21 @@ class Logger {
 
   write(level: LogLevel, ...args: unknown[]): void {
     try {
+      if (level === 'debug' && app.isPackaged) return
       const msg = args.map(formatArg).join(' ')
-      const line = `[${timestamp()}] [${level.toUpperCase().padEnd(5)}] ${msg}\n`
+      const ts = timestamp()
+      const line = `[${ts}] [${level.toUpperCase().padEnd(5)}] ${msg}\n`
       this.getStream().write(line)
+      const entry: LogEntry = { timestamp: ts, level, message: msg }
+      this.buffer.push(entry)
+      if (this.buffer.length > MAX_BUFFER) this.buffer.shift()
+      for (const cb of this.listeners) { try { cb(entry) } catch { /* ignore */ } }
     } catch { /* ignore */ }
   }
+
+  getLogs(): LogEntry[] { return [...this.buffer] }
+  onLog(cb: (entry: LogEntry) => void): void { this.listeners.push(cb) }
+  offLog(cb: (entry: LogEntry) => void): void { this.listeners = this.listeners.filter(l => l !== cb) }
 
   debug(...args: unknown[]): void { this.write('debug', ...args) }
   info(...args:  unknown[]): void { this.write('info',  ...args) }

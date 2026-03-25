@@ -1,5 +1,5 @@
 import type { AppSettings, ConnectionState, OverlayAuthResponse, OverlayProfile, LayoutState, OverlayContext } from '@shared/general'
-import type { GameState, GameEvent } from '../../main/services/logParserService'
+import type { LogEntry } from '../../main/services/logger'
 
 declare global {
   interface Window {
@@ -22,18 +22,15 @@ declare global {
       setWindowSize: (size: string) => Promise<boolean>
       setToggleKey:    (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
       setMapToggleKey: (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
-      gamelogStart:    (folder: string) => Promise<GameState>
-      gamelogStop:     () => Promise<void>
-      gamelogGetState: () => Promise<GameState>
-      onGamelogState:  (cb: (s: GameState) => void) => void
-      onGamelogEvent:  (cb: (e: GameEvent) => void) => void
-      offGamelog:      () => void
+      // Overlay logs
+      getLogs:         () => Promise<LogEntry[]>
+      subscribeLogs:   () => Promise<LogEntry[]>
+      unsubscribeLogs: () => Promise<void>
+      onLogEntry:      (cb: (entry: LogEntry) => void) => void
+      offLogEntry:     () => void
 
       // Passive overlay
-      overlaySubscribe:      () => Promise<GameState>
       overlayGetLayout:      () => Promise<LayoutState>
-      onOverlayState:        (cb: (s: GameState) => void) => void
-      onOverlayEvent:        (cb: (e: GameEvent) => void) => void
       onOverlayLayoutUpdate: (cb: (l: LayoutState) => void) => void
       onMapToggle:           (cb: () => void) => void
       offMapToggle:          () => void
@@ -45,7 +42,6 @@ declare global {
       editorGetContext:  () => Promise<OverlayContext>
       editorSave:        (layout: LayoutState) => Promise<boolean>
       editorPreview:     (layout: LayoutState) => Promise<boolean>
-      onEditorGameState: (cb: (s: GameState) => void) => void
       offEditor:         () => void
       closeEditor:      () => Promise<void>
       getPerfMetrics:   () => Promise<unknown>

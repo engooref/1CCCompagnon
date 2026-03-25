@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { http } from '../services/http'
 import { createOverlayUrls } from '../config/api'
 import { TransportOrder } from '../../shared/deliveries'
 import { usePinnedTransport } from '../composables/usePinnedTransport'
-import { logger } from '../services/logger'
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -14,10 +13,9 @@ const app    = useAppStore()
 const router = useRouter()
 const { isPinned, toggle: togglePin } = usePinnedTransport()
 
-const orders      = ref<TransportOrder[]>([])
-const loading     = ref(false)
-const error       = ref<string | null>(null)
-const deletingId  = ref<number | null>(null)
+const orders     = computed(() => app.transports)
+const loading    = computed(() => app.transportsLoading)
+const deletingId = ref<number | null>(null)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,53 +41,11 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
   deletingId.value = order.id
   try {
     await http.delete(url, { headers: authHeaders() })
-    orders.value = orders.value.filter(o => o.id !== order.id)
-  } catch {
-    // silently ignore — list refresh will show correct state
-    await fetchAll(true)
   } finally {
     deletingId.value = null
+    await app.fetchTransports()
   }
 }
-
-async function fetchAll(force = false) {
-  if (!force && app.transportsLoaded) {
-    orders.value = app.transports
-    return
-  }
-  if (!app.bearerToken) {
-    logger.warn('[Transport] fetchAll annulé : pas de bearerToken')
-    return
-  }
-  const url = urls.value?.transports
-  if (!url) {
-    logger.warn('[Transport] fetchAll annulé : settings non chargés')
-    return
-  }
-  loading.value = true
-  error.value = null
-  try {
-    logger.info('[Transport] GET', url)
-    const { data, status } = await http.get(url, { headers: authHeaders() })
-    logger.info('[Transport] réponse', status, data)
-    const raw = data?.data ?? data
-    orders.value = (Array.isArray(raw) ? raw.filter(Boolean) : [raw].filter(Boolean)) as TransportOrder[]
-    logger.info('[Transport] ordres chargés :', orders.value.length)
-  } catch (e: any) {
-    logger.error('[Transport] erreur :', {
-      message: e?.message, code: e?.code,
-      status: e?.response?.status, body: e?.response?.data,
-    })
-    error.value = `${e?.response?.status ? `HTTP ${e.response.status} – ` : ''}${e?.response?.data?.message ?? e?.message ?? 'Erreur de chargement'}`
-    orders.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  if (app.status.authReady) fetchAll()
-})
 </script>
 
 <template>
@@ -121,7 +77,7 @@ onMounted(() => {
         </div>
 
         <button
-          @click="fetchAll(true)"
+          @click="app.fetchTransports()"
           :disabled="loading"
           class="flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent/70 hover:bg-accent/10 hover:text-accent transition disabled:opacity-40"
         >
@@ -149,10 +105,6 @@ onMounted(() => {
       <!-- ── Loading / Error / Empty ────────────────────────────────────── -->
       <div v-if="loading && !orders.length" class="rounded-lg border border-accent/10 bg-black/20 p-4 text-sm text-th-muted">
         Chargement des ordres…
-      </div>
-
-      <div v-else-if="error" class="rounded-lg border border-rose-400/20 bg-rose-400/5 p-4 text-sm text-rose-300">
-        <span class="font-semibold">Erreur :</span> {{ error }}
       </div>
 
       <div

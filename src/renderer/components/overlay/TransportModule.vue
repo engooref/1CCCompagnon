@@ -74,11 +74,29 @@ function sumScu(items: CargoItem[]): number {
   return items.reduce((s, c) => s + (Number(c.quantity) || 0), 0)
 }
 
+/** Capacité totale = somme du champ cargo de chaque vaisseau de l'ordre. */
+const shipCapacity = computed(() =>
+  (order.value?.ships ?? []).reduce((s, ship) => s + (Number(ship.cargo) || 0), 0)
+)
+
+/** Espace libre réel au pickup du leg : capacité des vaisseaux − cargo à bord avant ce leg. */
+function freespaceForLeg(targetLeg: ItineraryLine): number {
+  const capacity = shipCapacity.value
+  const targetIdx = targetLeg.orderIndex ?? 0
+  let onBoard = 0
+  for (const leg of lines.value) {
+    if ((leg.orderIndex ?? 0) >= targetIdx) break
+    onBoard += sumScu(loadOps(leg))
+    onBoard -= sumScu(unloadOps(leg))
+  }
+  return Math.max(0, capacity - onBoard)
+}
+
 async function fetchMarketOpps() {
   if (!marketOppsEnabled.value) { marketOpps.value = []; return }
   const leg = nextLeg.value
   if (!token || !urls || !leg?.pickup || !leg?.dropoff) { marketOpps.value = []; return }
-  const freeScu = order.value?.cargoTot ?? 0
+  const freeScu = freespaceForLeg(leg)
   if (freeScu <= 0) { marketOpps.value = []; return }
   try {
     const { data } = await http.post(

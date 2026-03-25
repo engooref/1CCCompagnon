@@ -26,7 +26,7 @@ export interface OverlayElementPos {
   yPct: number
 }
 
-export type OverlayModuleType = 'status' | 'transport' | 'quantum' | 'zone'
+export type OverlayModuleType = 'transport'
 export type OverlayAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
 
 export interface OverlayModuleConfig {
@@ -46,10 +46,7 @@ export interface OverlayModuleConfig {
 }
 
 export const DEFAULT_OVERLAY_MODULES: OverlayModuleConfig[] = [
-  { id: 'status',    type: 'status',    title: 'Statut',    visible: true, minimized: false, width: 240, height: 110, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-left' },
-  { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 20, fontSize: 1, bgColor: '', anchor: 'top-right' },
-  { id: 'quantum',   type: 'quantum',   title: 'Quantum',   visible: true, minimized: false, width: 320, height: 88,  opacity: 0.65, locked: false, zIndex: 30, fontSize: 1, bgColor: '', anchor: 'bottom-left' },
-  { id: 'zone',      type: 'zone',      title: 'Zone',      visible: true, minimized: false, width: 240, height: 84,  opacity: 0.65, locked: false, zIndex: 40, fontSize: 1, bgColor: '', anchor: 'bottom-right' },
+  { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-right' },
 ]
 
 export type OverlayLayoutKey = string

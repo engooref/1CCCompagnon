@@ -307,8 +307,6 @@ async function confirmAdd() {
 onMounted(() => {
   if (!app.status.authReady) return
   fetchAll()
-  console.log('[Inventory] mounted, connecting Mercure…');
-  console.log(urls.value?.inventoryMercureInfo);
   if (urls.value?.inventoryMercureInfo) {
     connectMercure(
       urls.value.inventoryMercureInfo,

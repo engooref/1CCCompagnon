@@ -1,22 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { GameState, GameEvent } from '../../main/services/logParserService'
 import type { LayoutState } from '@shared/general'
-import StatusModule from '../components/overlay/StatusModule.vue'
 import TransportModule from '../components/overlay/TransportModule.vue'
-import QuantumModule from '../components/overlay/QuantumModule.vue'
-import ZoneToast from '../components/overlay/ZoneToast.vue'
 import MapModule from '../components/overlay/MapModule.vue'
 import { useOverlayLayout } from '../composables/useOverlayLayout'
 import { usePinnedMap } from '../composables/usePinnedMap'
 
-const gameState = ref<GameState | null>(null)
-const zoneEvent = ref<GameEvent | null>(null)
 const scBounds  = ref<{ x: number; y: number; width: number; height: number } | null>(null)
 const mapVisible        = ref(false)
 const mapOverlayOpacity = ref(0.85)
 const mapModuleRef      = ref<{ refresh: () => void } | null>(null)
-let zoneTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(mapVisible, (visible) => {
   if (visible) nextTick(() => mapModuleRef.value?.refresh())
@@ -40,18 +33,7 @@ const scContainerStyle = computed(() => {
 
 function isVisible(mod: (typeof modules)[number]): boolean {
   if (!mod.visible) return false
-  switch (mod.type) {
-    case 'status':
-      return true
-    case 'transport':
-      return true
-    case 'quantum':
-      return gameState.value?.activity === 'quantum'
-    case 'zone':
-      return !!zoneEvent.value
-    default:
-      return true
-  }
+  return mod.type === 'transport'
 }
 
 onMounted(async () => {
@@ -59,22 +41,6 @@ onMounted(async () => {
   mapOverlayOpacity.value = settings.mapOverlayOpacity ?? 0.85
 
   await loadLayout()
-  const initial = await window.oneCC.overlaySubscribe()
-  if (initial?.player) gameState.value = initial
-
-  window.oneCC.onOverlayState((s) => {
-    gameState.value = s
-  })
-
-  window.oneCC.onOverlayEvent((e) => {
-    if (e.type === 'zone') {
-      zoneEvent.value = e
-      if (zoneTimer) clearTimeout(zoneTimer)
-      zoneTimer = setTimeout(() => {
-        zoneEvent.value = null
-      }, 5000)
-    }
-  })
 
   window.oneCC.onOverlayLayoutUpdate((l: LayoutState) => applyLayout(l))
 
@@ -92,7 +58,6 @@ onMounted(async () => {
 onUnmounted(() => {
   window.oneCC.offOverlay()
   window.oneCC.offSettingsUpdate()
-  if (zoneTimer) clearTimeout(zoneTimer)
 })
 </script>
 
@@ -112,10 +77,7 @@ onUnmounted(() => {
           >
             <template v-if="!mod.minimized">
               <div class="w-full overflow-hidden rounded-2xl" :style="{ zoom: mod.fontSize ?? 1 }">
-                <StatusModule v-if="mod.type === 'status'" :state="gameState" />
-                <TransportModule v-else-if="mod.type === 'transport'" />
-                <QuantumModule v-else-if="mod.type === 'quantum' && gameState" :state="gameState" />
-                <ZoneToast v-else-if="mod.type === 'zone' && zoneEvent" :event="zoneEvent" />
+                <TransportModule v-if="mod.type === 'transport'" />
               </div>
             </template>
             <div v-else class="rounded-xl border border-white/10 bg-black/60 px-3 py-1 text-[10px] text-th-muted backdrop-blur-sm">

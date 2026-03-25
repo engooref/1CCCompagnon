@@ -1,15 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { GameState, GameEvent } from '../../main/services/logParserService'
-import type { OverlayModuleType } from '@shared/general'
 import type { TransportOrder } from '../../shared/deliveries'
-import StatusModule from '../components/overlay/StatusModule.vue'
 import TransportModule from '../components/overlay/TransportModule.vue'
-import QuantumModule from '../components/overlay/QuantumModule.vue'
-import ZoneToast from '../components/overlay/ZoneToast.vue'
 import { useOverlayEditor } from '../composables/useOverlayEditor'
 
-const liveState = ref<GameState | null>(null)
 const previewRef = ref<HTMLElement | null>(null)
 const previewScale = ref(1)
 
@@ -27,12 +21,6 @@ function updatePreviewScale() {
   previewScale.value = (Number.isFinite(s) && s > 0) ? s : 1
 }
 
-const MODULE_LABELS: Record<OverlayModuleType, string> = {
-  status: 'Statut',
-  transport: 'Transport',
-  quantum: 'Quantum',
-  zone: 'Zone',
-}
 
 const {
   GRID_SIZE,
@@ -56,17 +44,6 @@ const {
 } = useOverlayEditor()
 
 const selectedModule = computed(() => getModule(selectedId.value))
-
-const FAKE_ZONE_EVENT: GameEvent = { type: 'zone', label: 'Zone', payload: { zone: 'Armistice', notification: 'Prévisualisation' }, at: '' }
-const FAKE_QUANTUM_STATE: GameState = {
-  activity: 'quantum',
-  shard: 'preview',
-  player: 'Pilote 1CC',
-  location: 'Crusader',
-  destination: 'microTech',
-  ship: 'RSI Zeus CL',
-  zone: 'Monitored Space',
-} as GameState
 
 const FAKE_TRANSPORT_ORDER: TransportOrder = {
   id: 999,
@@ -105,21 +82,6 @@ const FAKE_TRANSPORT_ORDER: TransportOrder = {
   },
 } as TransportOrder
 
-const FAKE_STATUS_STATE: GameState = {
-  activity: 'space',
-  shard: 'preview',
-  player: 'Pilote 1CC',
-  location: 'ARC-L1',
-  ship: 'Anvil C1 Spirit',
-  zone: 'Armistice',
-} as GameState
-
-function renderStateFor(type: OverlayModuleType) {
-  if (type === 'quantum') return liveState.value ?? FAKE_QUANTUM_STATE
-  if (type === 'status') return liveState.value ?? FAKE_STATUS_STATE
-  return liveState.value ?? FAKE_STATUS_STATE
-}
-
 function handleKeydown(event: KeyboardEvent) {
   if (!selectedModule.value) return
   const step = event.shiftKey ? GRID_SIZE : 1
@@ -147,7 +109,6 @@ onMounted(async () => {
   updatePreviewScale()
   window.addEventListener('resize', updatePreviewScale)
   window.addEventListener('keydown', handleKeydown)
-  window.oneCC.onEditorGameState((s) => { liveState.value = s })
 })
 
 onUnmounted(() => {
@@ -190,15 +151,13 @@ function closeEditor() {
           <div>
             <div class="mb-3 flex flex-wrap items-center gap-2">
               <button
-                v-for="type in (['status', 'transport', 'quantum', 'zone'] as OverlayModuleType[])"
-                :key="type"
                 class="rounded-full border px-3 py-1.5 text-xs transition"
-                :class="isTypeVisible(type)
+                :class="isTypeVisible('transport')
                   ? 'border-accent/30 bg-accent/10 text-accent'
                   : 'border-white/10 bg-white/5 text-th-secondary hover:bg-white/10'"
-                @click="toggleModuleType(type)"
+                @click="toggleModuleType('transport')"
               >
-                {{ MODULE_LABELS[type] }}
+                Transport
               </button>
             </div>
 
@@ -286,10 +245,7 @@ function closeEditor() {
                     zoom: selectedModule.fontSize ?? 1,
                   }"
                 >
-                  <StatusModule    v-if="selectedModule.type === 'status'"    :state="renderStateFor('status')" />
-                  <TransportModule v-else-if="selectedModule.type === 'transport'" :preview="true" :preview-order="FAKE_TRANSPORT_ORDER" />
-                  <QuantumModule   v-else-if="selectedModule.type === 'quantum'"   :state="renderStateFor('quantum')" />
-                  <ZoneToast       v-else-if="selectedModule.type === 'zone'"      :event="FAKE_ZONE_EVENT" />
+                  <TransportModule v-if="selectedModule.type === 'transport'" :preview="true" :preview-order="FAKE_TRANSPORT_ORDER" />
                 </div>
               </div>
             </div>

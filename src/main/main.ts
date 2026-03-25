@@ -8,7 +8,6 @@ import { getOverlayEditorWindow } from './windows/overlayEditorWindow'
 import { startGameWatcher, stopGameWatcher, getGameWindowBounds } from './services/gameWatcher'
 import { loadNativeTracker } from './services/scTrackerNative'
 import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterService'
-import { logParser } from './services/logParserService'
 import { getSettings } from './services/settingsStore'
 import { startAutoUpdateChecker } from './services/overlayService'
 import { onLayoutChange } from './services/layoutStore'
@@ -30,6 +29,28 @@ const DOM_TO_UIOHOOK: Record<number, number> = {
   45: 338, 46: 339, 36: 327, 35: 335, 33: 329, 34: 337,
   96: 82, 97: 79, 98: 80, 99: 81, 100: 75, 101: 76,
   102: 77, 103: 71, 104: 72, 105: 73,
+}
+
+// Correspondance accelerator Electron (nom de touche) → code uIOhook
+const ACCEL_TO_UIOHOOK: Record<string, number> = {
+  F1: 59, F2: 60, F3: 61, F4: 62, F5: 63, F6: 64,
+  F7: 65, F8: 66, F9: 67, F10: 68, F11: 87, F12: 88,
+  A: 30, B: 48, C: 46, D: 32, E: 18, F: 33, G: 34,
+  H: 35, I: 23, J: 36, K: 37, L: 38, M: 50, N: 49,
+  O: 24, P: 25, Q: 16, R: 19, S: 31, T: 20, U: 22,
+  V: 47, W: 17, X: 45, Y: 21, Z: 44,
+  '0': 11, '1': 2, '2': 3, '3': 4, '4': 5, '5': 6,
+  '6': 7, '7': 8, '8': 9, '9': 10,
+  Space: 57, Backspace: 14, Tab: 15, Return: 28, Escape: 1,
+  Insert: 338, Delete: 339, Home: 327, End: 335, PageUp: 329, PageDown: 337,
+  Left: 331, Up: 328, Right: 333, Down: 336,
+  Num0: 82, Num1: 79, Num2: 80, Num3: 81, Num4: 75,
+  Num5: 76, Num6: 77, Num7: 71, Num8: 72, Num9: 73,
+}
+
+function accelToUiohook(accel: string): number | null {
+  const key = accel.split('+').pop() ?? accel
+  return ACCEL_TO_UIOHOOK[key] ?? null
 }
 
 function domKeyCodeToUiohook(domCode: number): number {
@@ -154,16 +175,6 @@ app.whenReady().then(async () => {
     sendToOverlay('overlay:layout-update', layout)
   })
 
-  // Propagation des événements de jeu à l'overlay + logique show/hide
-  logParser.on((state, event) => {
-    sendToOverlay('overlay:state', state)
-    sendToOverlay('overlay:event', event)
-
-    if (!manuallyHidden) {
-      if (event.type === 'shard' && isGameFocused) showOverlay()
-      else if (event.type === 'activity' && event.payload.activity === 'hangar') hideOverlay()
-    }
-  })
 
   // ── Watcher de jeu (natif, poll 250 ms) ─────────────────────────────────────
   setImmediate(() => startGameWatcher({
@@ -172,9 +183,6 @@ app.whenReady().then(async () => {
       logger.info('[overlay] SC détecté — bounds physiques', JSON.stringify(bounds))
       isGameFocused = focused
       sendGameBounds(bounds)
-
-      const { gameFolder } = getSettings()
-      if (gameFolder) logParser.start(gameFolder)
 
       if (!manuallyHidden && focused) {
         showOverlay()
@@ -187,7 +195,6 @@ app.whenReady().then(async () => {
     onStop() {
       logger.info('[overlay] SC fermé — hide overlay')
       isGameFocused = false
-      logParser.stop()
       sendGameBounds(null)
       hideOverlay()
       manuallyHidden = false
@@ -342,6 +349,16 @@ app.whenReady().then(async () => {
       const ok2 = globalShortcut.register('F10', toggleOverlay)
       if (ok2) _registeredToggleKey = 'F10'
     }
+    // Fallback uIOhook via table accel (fonctionne même quand le jeu a le focus)
+    const uiCode = accelToUiohook(key)
+    if (uiCode !== null) registerIoHook2(uiCode)
+  }
+
+  /** Enregistre uIOhook sans toucher au keyCode persisté (utilisé par registerToggleKey). */
+  function registerIoHook2(uiCode: number) {
+    if (ioHookHandler) { uIOhook.off('keydown', ioHookHandler); ioHookHandler = null }
+    ioHookHandler = (event: any) => { if (event?.keycode === uiCode) toggleOverlay() }
+    uIOhook.on('keydown', ioHookHandler)
   }
 
   registerToggleKey(currentKey)
@@ -351,7 +368,6 @@ app.whenReady().then(async () => {
     if (typeof newKey === 'string') {
       currentKey = newKey
       registerToggleKey(newKey)
-      unregisterIoHook()
     } else if (newKey && typeof newKey === 'object') {
       if (newKey.accel) { currentKey = newKey.accel; registerToggleKey(newKey.accel) }
       if (typeof newKey.keyCode === 'number') { unregisterIoHook(); registerIoHook(newKey.keyCode) }

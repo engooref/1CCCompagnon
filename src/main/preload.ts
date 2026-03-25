@@ -23,21 +23,15 @@ contextBridge.exposeInMainWorld('oneCC', {
   setToggleKey: (payload: any) => ipcRenderer.invoke('app:set-toggle-key', payload),
   setMapToggleKey: (payload: any) => ipcRenderer.invoke('app:set-map-toggle-key', payload),
 
-  gamelogStart:    (folder: string) => ipcRenderer.invoke('gamelog:start', folder),
-  gamelogStop:     () => ipcRenderer.invoke('gamelog:stop'),
-  gamelogGetState: () => ipcRenderer.invoke('gamelog:state'),
-  onGamelogState:  (cb: (s: unknown) => void) => ipcRenderer.on('gamelog:state', (_e, s) => cb(s)),
-  onGamelogEvent:  (cb: (e: unknown) => void) => ipcRenderer.on('gamelog:event', (_e, e) => cb(e)),
-  offGamelog:      () => {
-    ipcRenderer.removeAllListeners('gamelog:state')
-    ipcRenderer.removeAllListeners('gamelog:event')
-  },
+  // ── Logs overlay ─────────────────────────────────────────────────────────
+  getLogs:         () => ipcRenderer.invoke('app:get-logs'),
+  subscribeLogs:   () => ipcRenderer.invoke('app:subscribe-logs'),
+  unsubscribeLogs: () => ipcRenderer.invoke('app:unsubscribe-logs'),
+  onLogEntry:      (cb: (entry: unknown) => void) => ipcRenderer.on('app:log-entry', (_e, entry) => cb(entry)),
+  offLogEntry:     () => ipcRenderer.removeAllListeners('app:log-entry'),
 
   // ── Overlay passif ────────────────────────────────────────────────────────
-  overlaySubscribe:   () => ipcRenderer.invoke('overlay:subscribe'),
   overlayGetLayout:   () => ipcRenderer.invoke('overlay:get-layout'),
-  onOverlayState:     (cb: (s: unknown) => void) => ipcRenderer.on('overlay:state',         (_e, s)  => cb(s)),
-  onOverlayEvent:     (cb: (e: unknown) => void) => ipcRenderer.on('overlay:event',         (_e, e)  => cb(e)),
   onOverlayLayoutUpdate: (cb: (l: unknown) => void) => ipcRenderer.on('overlay:layout-update', (_e, l) => cb(l)),
   onMapToggle:  (cb: () => void) => ipcRenderer.on('overlay:map-toggle', () => cb()),
   offMapToggle: () => ipcRenderer.removeAllListeners('overlay:map-toggle'),
@@ -59,7 +53,6 @@ contextBridge.exposeInMainWorld('oneCC', {
   editorGetContext:   () => ipcRenderer.invoke('editor:get-context'),
   editorSave:         (layout: unknown) => ipcRenderer.invoke('editor:save', layout),
   editorPreview:      (layout: unknown) => ipcRenderer.invoke('editor:preview', layout),
-  onEditorGameState:  (cb: (s: unknown) => void) => ipcRenderer.on('editor:game-state', (_e, s) => cb(s)),
   offEditor: () => {
     ipcRenderer.removeAllListeners('editor:game-state')
   },

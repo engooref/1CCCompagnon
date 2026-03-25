@@ -31,8 +31,6 @@ const marketBudget     = ref<number | null>(app.settings?.marketOppsBudget ?? nu
 const legOpportunities = ref(new Map<string | number, any[]>())
 const loadingOpp       = ref(false)
 
-const marketFreeScu = computed(() => order.value?.cargoTot ?? 0)
-
 const orderId = computed(() => Number(route.params.id))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,6 +49,24 @@ function getOps(leg: ItineraryLine): CargoItem[] { return leg.cargos ?? [] }
 function loadOps(leg: ItineraryLine):   CargoItem[] { return getOps(leg).filter(m => !m.action || m.action === 'load') }
 function unloadOps(leg: ItineraryLine): CargoItem[] { return getOps(leg).filter(m => m.action === 'unload') }
 function sumScu(items: CargoItem[]): number { return items.reduce((s, m) => s + (Number(m.quantity) || 0), 0) }
+
+/** Capacité totale de cargaison = somme du champ cargo de chaque vaisseau de l'ordre. */
+const shipCapacity = computed(() =>
+  (order.value?.ships ?? []).reduce((s, ship) => s + (Number(ship.cargo) || 0), 0)
+)
+
+/** Espace libre réel au pickup du leg : capacité des vaisseaux − cargo à bord avant ce leg. */
+function freespaceForLeg(targetLeg: ItineraryLine): number {
+  const capacity = shipCapacity.value
+  const targetIdx = targetLeg.orderIndex ?? 0
+  let onBoard = 0
+  for (const leg of lines.value) {
+    if ((leg.orderIndex ?? 0) >= targetIdx) break
+    onBoard += sumScu(loadOps(leg))
+    onBoard -= sumScu(unloadOps(leg))
+  }
+  return Math.max(0, capacity - onBoard)
+}
 
 function isExpanded(leg: ItineraryLine): boolean {
   const k = legKey(leg)
@@ -74,7 +90,7 @@ function toggleExpand(leg: ItineraryLine) {
 
 async function fetchAllOpportunities() {
   if (!app.bearerToken || !urls.value) return
-  if (marketFreeScu.value <= 0) { legOpportunities.value.clear(); return }
+  if (shipCapacity.value <= 0) { legOpportunities.value.clear(); return }
 
   // Build ordered list of valid legs (with pickup + dropoff) and retain their keys
   const indexed = lines.value
@@ -93,7 +109,7 @@ async function fetchAllOpportunities() {
           legIndex:        leg.orderIndex,
           fromPoi:         leg.pickup,
           toPoi:           leg.dropoff,
-          freeSpace:       marketFreeScu.value,
+          freeSpace:       freespaceForLeg(leg),
           budgetRemaining: marketBudget.value,
         })),
         limit: 20,
@@ -122,7 +138,7 @@ function toggleMarketOpp() {
   }
 }
 
-watch([order, marketFreeScu, marketBudget], () => {
+watch([order, marketBudget], () => {
   if (!showMarketOpp.value) return
   fetchAllOpportunities()
 })
@@ -620,8 +636,8 @@ async function generateItinerary() {
                 >{{ legOpps(leg).length }} option(s)</span>
               </div>
               <div class="flex items-center gap-2">
-                <span v-if="marketFreeScu > 0" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
-                  Libre : <strong class="text-sky-300 ml-1">{{ marketFreeScu }} SCU</strong>
+                <span v-if="freespaceForLeg(leg) > 0" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
+                  Libre : <strong class="text-sky-300 ml-1">{{ freespaceForLeg(leg) }} SCU</strong>
                 </span>
                 <span v-if="marketBudget != null" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
                   Budget : <strong class="text-emerald-300 ml-1">{{ marketBudget.toLocaleString('fr-FR') }} cr</strong>
@@ -635,7 +651,7 @@ async function generateItinerary() {
                 v-if="!legOpps(leg).length"
                 class="text-[11px] text-th-muted italic"
               >
-                {{ marketFreeScu <= 0 ? 'Définissez un espace libre pour voir les opportunités.' : 'Aucune opportunité trouvée pour ce trajet.' }}
+                {{ shipCapacity <= 0 ? 'Aucun vaisseau avec cargaison définie.' : 'Aucune opportunité trouvée pour ce trajet.' }}
               </div>
 
               <!-- Opportunity rows -->

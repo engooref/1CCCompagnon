@@ -7,7 +7,7 @@ import TransportFormPage from '../pages/TransportFormPage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
 import MapPage from '../pages/MapPage.vue'
 import MapDetailPage from '../pages/MapDetailPage.vue'
-import GameLogPage from '../pages/GameLogPage.vue'
+import OverlayLogsPage from '../pages/OverlayLogsPage.vue'
 import OverlayPage from '../pages/OverlayPage.vue'
 import OverlayEditorPage from '../pages/OverlayEditorPage.vue'
 import AgendaPage from '../pages/AgendaPage.vue'
@@ -28,7 +28,7 @@ export const router = createRouter({
     { path: '/agenda', name: 'agenda', component: AgendaPage },
     { path: '/agenda/:id', name: 'agenda-detail', component: AgendaDetailPage },
     { path: '/inventory', name: 'inventory', component: InventoryPage },
-    { path: '/gamelog', name: 'gamelog', component: GameLogPage },
+    { path: '/logs', name: 'logs', component: OverlayLogsPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/overlay', name: 'overlay', component: OverlayPage },
     { path: '/overlay-editor', name: 'overlay-editor', component: OverlayEditorPage },

@@ -1,38 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useAppStore } from '../../stores/app'
 
 const app = useAppStore()
-
-// ─── Dossier du jeu ───────────────────────────────────────────────────────────
-
-const gameFolderSaving = ref(false)
-const gameFolderError  = ref<string | null>(null)
-
-const gameFolder = computed(() => app.settings?.gameFolder ?? '')
-
-async function pickGameFolder() {
-  gameFolderError.value = null
-  const folder = await window.oneCC.pickFolder()
-  if (!folder) return
-  gameFolderSaving.value = true
-  try {
-    await app.saveSettings({ gameFolder: folder })
-  } catch (e: any) {
-    gameFolderError.value = e?.message ?? 'Impossible de sauvegarder'
-  } finally {
-    gameFolderSaving.value = false
-  }
-}
-
-async function clearGameFolder() {
-  gameFolderError.value = null
-  try {
-    await app.saveSettings({ gameFolder: '' })
-  } catch (e: any) {
-    gameFolderError.value = e?.message ?? 'Impossible de supprimer'
-  }
-}
 
 // ─── Notifications agenda ─────────────────────────────────────────────────────
 
@@ -84,56 +54,6 @@ async function applyWindowSize(size: string) {
 
 <template>
   <div class="space-y-4">
-
-    <!-- Dossier du jeu -->
-    <div class="rounded-lg border border-th-subtle bg-black/20 p-4">
-      <p class="text-xs font-bold uppercase tracking-wider text-th-muted mb-1">Dossier du jeu</p>
-      <p class="text-xs text-th-muted mb-4">
-        Chemin vers le dossier d'installation de Star Citizen. Utilisé pour accéder aux fichiers de log du jeu.
-      </p>
-
-      <div
-        v-if="gameFolder"
-        class="flex items-center gap-3 rounded-md border border-th-muted bg-th-surface px-3 py-2.5 mb-3"
-      >
-        <svg class="w-4 h-4 shrink-0 text-accent/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
-        </svg>
-        <span class="flex-1 min-w-0 text-xs text-th-secondary font-mono truncate" :title="gameFolder">{{ gameFolder }}</span>
-        <button @click="clearGameFolder" class="shrink-0 text-th-muted hover:text-rose-400 transition" title="Supprimer">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-
-      <div v-else class="flex items-center gap-2 rounded-md border border-dashed border-th-subtle px-3 py-2.5 mb-3">
-        <svg class="w-4 h-4 shrink-0 text-th-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
-        </svg>
-        <span class="text-xs text-th-muted italic">Aucun dossier sélectionné</span>
-      </div>
-
-      <p v-if="gameFolderError" class="text-xs text-rose-300 mb-3">{{ gameFolderError }}</p>
-
-      <button
-        @click="pickGameFolder"
-        :disabled="gameFolderSaving"
-        class="flex items-center gap-2 rounded-md border border-accent/25 bg-accent/[0.08] px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 transition disabled:opacity-50"
-      >
-        <svg v-if="gameFolderSaving" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-        </svg>
-        <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
-        </svg>
-        {{ gameFolder ? 'Changer le dossier' : 'Choisir un dossier' }}
-      </button>
-    </div>
 
     <!-- Notifications agenda -->
     <div class="rounded-lg border border-th-subtle bg-black/20 p-4">
