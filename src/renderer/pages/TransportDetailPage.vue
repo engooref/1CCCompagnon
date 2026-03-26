@@ -55,15 +55,19 @@ const shipCapacity = computed(() =>
   (order.value?.ships ?? []).reduce((s, ship) => s + (Number(ship.cargo) || 0), 0)
 )
 
-/** Espace libre réel au pickup du leg : capacité des vaisseaux − cargo à bord avant ce leg. */
+/** Espace libre pendant le trajet du leg : capacité − cargo chargé à bord (y compris le chargement de ce leg). */
 function freespaceForLeg(targetLeg: ItineraryLine): number {
   const capacity = shipCapacity.value
   const targetIdx = targetLeg.orderIndex ?? 0
   let onBoard = 0
   for (const leg of lines.value) {
-    if ((leg.orderIndex ?? 0) >= targetIdx) break
+    const legIdx = leg.orderIndex ?? 0
+    if (legIdx > targetIdx) break
     onBoard += sumScu(loadOps(leg))
-    onBoard -= sumScu(unloadOps(leg))
+    // Les déchargements se font à l'arrivée, donc après le trajet — ne pas les compter pour la leg cible
+    if (legIdx < targetIdx) {
+      onBoard -= sumScu(unloadOps(leg))
+    }
   }
   return Math.max(0, capacity - onBoard)
 }

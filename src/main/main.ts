@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, screen, globalShortcut, Menu } from 'electron'
+import { app, BrowserWindow, shell, screen, globalShortcut, Menu, session } from 'electron'
 import path from 'node:path'
 import { logger } from './services/logger'
 import { registerAppIpc } from './ipc/app.ipc'
@@ -151,6 +151,21 @@ function createMainWindow() {
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
+
+  // ── Referrer policy : inject Referer + Origin for all requests to the API domain
+  // so that servers configured with strict-origin-when-cross-origin get a valid referrer.
+  const _siteUrl = (getSettings().siteUrl ?? 'https://www.1ercorpscolonial.fr').replace(/\/$/, '')
+  try {
+    const _apiOrigin = new URL(_siteUrl).origin
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      { urls: [`${_apiOrigin}/*`] },
+      (details, callback) => {
+        details.requestHeaders['Referer'] = `${_apiOrigin}/`
+        details.requestHeaders['Origin']  = _apiOrigin
+        callback({ requestHeaders: details.requestHeaders })
+      }
+    )
+  } catch { /* invalid siteUrl – skip */ }
 
   // Charger l'addon natif en premier — synchrone, < 5 ms
   loadNativeTracker()

@@ -13,6 +13,7 @@ import OverlayEditorPage from '../pages/OverlayEditorPage.vue'
 import AgendaPage from '../pages/AgendaPage.vue'
 import AgendaDetailPage from '../pages/AgendaDetailPage.vue'
 import InventoryPage from '../pages/InventoryPage.vue'
+import FabricatorPage from '../pages/FabricatorPage.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -28,6 +29,7 @@ export const router = createRouter({
     { path: '/agenda', name: 'agenda', component: AgendaPage },
     { path: '/agenda/:id', name: 'agenda-detail', component: AgendaDetailPage },
     { path: '/inventory', name: 'inventory', component: InventoryPage },
+    { path: '/fabricator', name: 'fabricator', component: FabricatorPage },
     { path: '/logs', name: 'logs', component: OverlayLogsPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/overlay', name: 'overlay', component: OverlayPage },

@@ -36,7 +36,13 @@ export function createOverlayUrls(settings: AppSettings) {
     agendaStore:         url(base, o, 'agenda', 'store'),
     inventoryIndex:       url(base, o, 'inventory', 'index'),
     inventoryShow:        (id: number) => url(base, o, 'inventory', 'show').replace('{id}', String(id)),
-    inventorySearch:      url(base, o, 'inventory', 'search'),    
+    inventorySearch:      url(base, o, 'inventory', 'search'),
     inventoryMercureInfo: url(base, o, 'inventory', 'mercureInfo'),
+    fabricatorIndex:          url(base, o, 'fabricator', 'index'),
+    fabricatorItems:          url(base, o, 'fabricator', 'items'),
+    fabricatorItemSearch:     url(base, o, 'fabricator', 'itemSearch'),
+    fabricatorCatalog:        url(base, o, 'fabricator', 'catalog'),
+    fabricatorDetail:         (id: number) => url(base, o, 'fabricator', 'detail').replace('{id}', String(id)),
+    fabricatorBlueprintToggle:(id: number) => url(base, o, 'fabricator', 'blueprintToggle').replace('{id}', String(id)),
   }
 }

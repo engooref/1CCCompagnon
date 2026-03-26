@@ -80,6 +80,7 @@ const itineraryGenerated = ref(false)
 // ─── Ship models ──────────────────────────────────────────────────────────────
 
 const shipModels      = ref<ShipModel[]>([])
+const shipModelsError = ref(false)
 const shipSearch      = ref('')
 const showShipDropdown = ref(false)
 
@@ -123,8 +124,10 @@ async function loadReference() {
     const { data } = await http.get(urls.value.shipModels, { headers: authHeaders() })
     const raw = data?.data ?? data
     shipModels.value = (Array.isArray(raw) ? raw.filter(Boolean) : []) as ShipModel[]
-  } catch {
+  } catch (e: any) {
     shipModels.value = []
+    shipModelsError.value = true
+    logger.error('[TransportForm] loadReference error:', e?.response?.data ?? e?.message ?? e)
   }
 }
 
@@ -264,7 +267,7 @@ function removeLine(idx: number) {
     delete searches[`dropoff_${m._k}`]
     delete searches[`commodity_${m._k}`]
     // remove cargo search keys
-    (m.cargos ?? []).forEach(c => {
+    ;(m.cargos ?? []).forEach(c => {
       delete searches[`commodity_${m._k}_c_${c._k}`]
     })
   }
@@ -689,8 +692,8 @@ async function deleteDelivery() {
               v-if="showShipDropdown"
               class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-48 overflow-y-auto"
             >
-              <div v-if="!filteredShipModels.length" class="px-3 py-2 text-xs text-th-muted">
-                {{ shipSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat.' }}
+              <div v-if="!filteredShipModels.length" class="px-3 py-2 text-xs" :class="shipModelsError ? 'text-rose-400' : 'text-th-muted'">
+                {{ shipModelsError ? 'Erreur de chargement des vaisseaux.' : (shipSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat.') }}
               </div>
               <button
                 v-for="sm in filteredShipModels"

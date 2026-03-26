@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.0.2',
+    date: '2026-03-26',
+    changes: [
+      { type: 'fix', text: 'Correction des opportunités de marché dans le module Transport' },
+      { type: 'feature', text: 'Ajout du module Fabricator' },   
+    ]
+  },
+  {
     version: '1.0.1',
     date: '2026-03-25',
     changes: [

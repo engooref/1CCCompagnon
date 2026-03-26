@@ -49,6 +49,14 @@ const defaults: AppSettings = {
       search: '/inventory/search',
       mercureInfo: '/inventory/mercure-info',
     },
+    fabricator: {
+      index:           '/fabricator',
+      items:           '/fabricator/items',
+      itemSearch:      '/fabricator/item-search',
+      catalog:         '/fabricator/catalog',
+      detail:          '/fabricator/detail/{id}',
+      blueprintToggle: '/fabricator/blueprint/toggle/{id}',
+    },
   },
   
   rememberConnection: true,
