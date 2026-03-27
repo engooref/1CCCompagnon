@@ -1,8 +1,19 @@
 import ElectronStore from 'electron-store'
-import type { AppSettings, AppearanceSettings } from '@shared/general'
+import type { AppSettings, AppearanceSettings, RadioSettings } from '@shared/general'
 
 const PROD_URL    = 'https://www.1ercorpscolonial.fr/compagnon'
 const PREPROD_URL = 'https://www.preprod.1ercorpscolonial.fr/compagnon'
+
+const DEFAULT_RADIO: RadioSettings = {
+  enabled: false,
+  serverUrl: '',
+  tokenUrl: '',
+  pttKey: '',
+  pttKeyCode: null,
+  channels: [],
+  activeChannelId: null,
+  inputDeviceId: undefined,
+}
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
   primaryColor: '#22d3ee',
@@ -69,6 +80,7 @@ const defaults: AppSettings = {
   mapOverlayOpacity: 0.85,
   overlayLayout: {},
   appearance: { ...DEFAULT_APPEARANCE },
+  radio: { ...DEFAULT_RADIO },
 }
 
 function createStore() {
@@ -97,6 +109,7 @@ export function getSettings(): AppSettings {
       ...(saved?.overlayLayout ?? {})
     },
     appearance: { ...DEFAULT_APPEARANCE, ...(saved?.appearance ?? {}) },
+    radio: { ...DEFAULT_RADIO, ...(saved?.radio ?? {}) },
   }
 }
 
@@ -117,6 +130,9 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
     appearance: 'appearance' in partial
       ? { ...DEFAULT_APPEARANCE, ...(current.appearance ?? {}), ...(partial.appearance ?? {}) }
       : current.appearance,
+    radio: 'radio' in partial
+      ? { ...DEFAULT_RADIO, ...(current.radio ?? {}), ...(partial.radio ?? {}) }
+      : current.radio,
   }
 
   store.set('settings', next)

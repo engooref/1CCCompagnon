@@ -92,7 +92,29 @@ export interface AppSettings {
   appBrightness?: number  // brightness filter 0.7–1.3, default 1
   defaultPage?: string    // route path shown on startup e.g. '/transport'
   appearance?: AppearanceSettings
+  radio?: RadioSettings
 }
+
+// ─── Système Radio ────────────────────────────────────────────────────────────
+
+export interface RadioChannel {
+  id: string
+  name: string
+  roomName: string  // Nom de la room LiveKit
+}
+
+export interface RadioSettings {
+  enabled: boolean
+  serverUrl: string       // wss://livekit.example.com
+  tokenUrl: string        // URL backend qui génère les tokens JWT LiveKit
+  pttKey: string          // Nom de touche Electron accelerator (ex: "CapsLock")
+  pttKeyCode?: number | null  // Code uIOhook (fonctionne jeu au focus)
+  channels: RadioChannel[]
+  activeChannelId: string | null
+  inputDeviceId?: string  // ID du microphone sélectionné
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type ConnectionLevel = 'idle' | 'loading' | 'connected' | 'auth_error' | 'network_error' | 'missing_api_key'
 

@@ -177,6 +177,24 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
     return true
   })
 
+  // -- Radio PTT key ---------------------------------------------------------
+  ipcMain.handle('radio:set-ptt-key', async (_e, payload: { accel?: string; keyCode?: number } | null) => {
+    const setPtt = (global as any).__setPttKey
+    if (payload) {
+      setSettings({
+        radio: {
+          ...(getSettings().radio ?? {}),
+          pttKey:     payload.accel    ?? getSettings().radio?.pttKey    ?? '',
+          pttKeyCode: typeof payload.keyCode === 'number' ? payload.keyCode : (getSettings().radio?.pttKeyCode ?? null),
+        } as any,
+      })
+    } else {
+      setSettings({ radio: { ...(getSettings().radio ?? {}), pttKey: '', pttKeyCode: null } as any })
+    }
+    setPtt?.(payload)
+    return true
+  })
+
   // -- Performance metrics ---------------------------------------------------
   ipcMain.handle('perf:get-metrics', () => ({
     processes:    electronApp.getAppMetrics(),

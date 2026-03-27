@@ -61,9 +61,11 @@ function domKeyCodeToUiohook(domCode: number): number {
 const APP_ROOT      = app.getAppPath()
 const RENDERER_DIST = path.join(APP_ROOT, 'out/renderer')
 
-let mainWindow:       BrowserWindow | null = null
-let ioHookHandler:    ((e: any) => void) | null = null
-let mapIoHookHandler: ((e: any) => void) | null = null
+let mainWindow:          BrowserWindow | null = null
+let ioHookHandler:       ((e: any) => void) | null = null
+let mapIoHookHandler:    ((e: any) => void) | null = null
+let pttIoHookDownHandler: ((e: any) => void) | null = null
+let pttIoHookUpHandler:   ((e: any) => void) | null = null
 let ioHookStarted  = false
 let manuallyHidden = false
 let isGameFocused  = false
@@ -427,6 +429,54 @@ app.whenReady().then(async () => {
   }
 
   uIOhook.on('keydown', (_e: any) => { /* debug hook */ })
+
+  // ── PTT Radio key ─────────────────────────────────────────────────────────
+
+  function registerPttIoHook(uiCode: number) {
+    if (pttIoHookDownHandler) { uIOhook.off('keydown', pttIoHookDownHandler); pttIoHookDownHandler = null }
+    if (pttIoHookUpHandler)   { uIOhook.off('keyup',   pttIoHookUpHandler);   pttIoHookUpHandler   = null }
+
+    pttIoHookDownHandler = (event: any) => {
+      if (event?.keycode === uiCode) {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('radio:ptt-start')
+      }
+    }
+    pttIoHookUpHandler = (event: any) => {
+      if (event?.keycode === uiCode) {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('radio:ptt-end')
+      }
+    }
+    uIOhook.on('keydown', pttIoHookDownHandler)
+    uIOhook.on('keyup',   pttIoHookUpHandler)
+  }
+
+  function unregisterPttIoHook() {
+    if (pttIoHookDownHandler) { uIOhook.off('keydown', pttIoHookDownHandler); pttIoHookDownHandler = null }
+    if (pttIoHookUpHandler)   { uIOhook.off('keyup',   pttIoHookUpHandler);   pttIoHookUpHandler   = null }
+  }
+
+  ;(global as any).__setPttKey = (payload: { accel?: string; keyCode?: number } | null) => {
+    unregisterPttIoHook()
+    if (!payload) return
+    // Essayer via keyCode uIOhook en priorité (fonctionne jeu au focus)
+    if (typeof payload.keyCode === 'number') {
+      registerPttIoHook(payload.keyCode)
+    } else if (payload.accel) {
+      const uiCode = accelToUiohook(payload.accel)
+      if (uiCode !== null) registerPttIoHook(uiCode)
+    }
+  }
+
+  // Initialiser PTT depuis les settings persistés
+  const initialRadio = getSettings().radio
+  if (initialRadio?.pttKey || typeof initialRadio?.pttKeyCode === 'number') {
+    if (typeof initialRadio.pttKeyCode === 'number') {
+      registerPttIoHook(domKeyCodeToUiohook(initialRadio.pttKeyCode))
+    } else if (initialRadio.pttKey) {
+      const uiCode = accelToUiohook(initialRadio.pttKey)
+      if (uiCode !== null) registerPttIoHook(uiCode)
+    }
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

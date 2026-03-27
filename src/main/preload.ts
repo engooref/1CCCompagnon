@@ -74,6 +74,15 @@ contextBridge.exposeInMainWorld('oneCC', {
   // ── Notifications ─────────────────────────────────────────────────────────
   showNotification: (title: string, body: string) => ipcRenderer.invoke('app:show-notification', title, body),
 
+  // ── Radio ─────────────────────────────────────────────────────────────────
+  radioSetPttKey: (payload: { accel?: string; keyCode?: number } | null) => ipcRenderer.invoke('radio:set-ptt-key', payload),
+  onRadioPttStart: (cb: () => void) => ipcRenderer.on('radio:ptt-start', () => cb()),
+  onRadioPttEnd:   (cb: () => void) => ipcRenderer.on('radio:ptt-end',   () => cb()),
+  offRadioPtt: () => {
+    ipcRenderer.removeAllListeners('radio:ptt-start')
+    ipcRenderer.removeAllListeners('radio:ptt-end')
+  },
+
   // ── Logging ───────────────────────────────────────────────────────────────
   log: (level: string, message: string) => ipcRenderer.invoke('app:log', level, message),
   // ── Updates ───────────────────────────────────────────────────────────────
