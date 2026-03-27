@@ -39,12 +39,15 @@ contextBridge.exposeInMainWorld('oneCC', {
   onOverlayGameBounds: (cb: (b: { x: number; y: number; width: number; height: number } | null) => void) =>
     ipcRenderer.on('overlay:game-bounds', (_e, b) => cb(b)),
 
+  onMapOnlyMode: (cb: (v: boolean) => void) => ipcRenderer.on('overlay:map-only-mode', (_e, v) => cb(v)),
+
   offOverlay: () => {
     ipcRenderer.removeAllListeners('overlay:state')
     ipcRenderer.removeAllListeners('overlay:event')
     ipcRenderer.removeAllListeners('overlay:layout-update')
     ipcRenderer.removeAllListeners('overlay:map-toggle')
     ipcRenderer.removeAllListeners('overlay:game-bounds')
+    ipcRenderer.removeAllListeners('overlay:map-only-mode')
   },
 
   // ── Editeur overlay ───────────────────────────────────────────────────────
@@ -60,6 +63,10 @@ contextBridge.exposeInMainWorld('oneCC', {
 
   onSettingsUpdate: (cb: (s: unknown) => void) => ipcRenderer.on('overlay:settings-update', (_e, s) => cb(s)),
   offSettingsUpdate: () => ipcRenderer.removeAllListeners('overlay:settings-update'),
+
+  refreshOverlayTransport: () => ipcRenderer.invoke('overlay:refresh-transport'),
+  onTransportRefresh: (cb: () => void) => ipcRenderer.on('overlay:transport-refresh', () => cb()),
+  offTransportRefresh: () => ipcRenderer.removeAllListeners('overlay:transport-refresh'),
 
   // ── Performances ─────────────────────────────────────────────────────────
   getPerfMetrics: () => ipcRenderer.invoke('perf:get-metrics'),

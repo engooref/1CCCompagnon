@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.0.3',
+    date: '2026-03-27',
+    changes: [
+      { type: 'fix', text: 'Correction de la map qui s\'ouvrait qu\'avec l\'overlay actif' },
+      { type: 'fix', text: 'Correction de l\'overlay transport sur le raffraichissement' },
+    ]
+  },
+  {
     version: '1.0.2',
     date: '2026-03-26',
     changes: [

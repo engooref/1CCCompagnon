@@ -233,6 +233,7 @@ async function toggleLeg(leg: ItineraryLine) {
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
     )
     leg.completed = next
+    window.oneCC.refreshOverlayTransport()
   } catch {
     // silently ignore
   } finally {

@@ -171,6 +171,12 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
     else                        logger.info('[renderer]', message)
   })
 
+  // -- Overlay transport refresh ---------------------------------------------
+  ipcMain.handle('overlay:refresh-transport', () => {
+    sendToOverlay('overlay:transport-refresh')
+    return true
+  })
+
   // -- Performance metrics ---------------------------------------------------
   ipcMain.handle('perf:get-metrics', () => ({
     processes:    electronApp.getAppMetrics(),

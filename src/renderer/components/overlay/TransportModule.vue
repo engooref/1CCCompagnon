@@ -176,11 +176,14 @@ onMounted(async () => {
     marketOppsBudget = s.marketOppsBudget ?? null
     fetchMarketOpps()
   })
+
+  window.oneCC.onTransportRefresh(() => fetchActiveOrder())
 })
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
   window.oneCC.offSettingsUpdate()
+  window.oneCC.offTransportRefresh()
 })
 </script>
 

@@ -34,6 +34,7 @@ declare global {
       onOverlayLayoutUpdate: (cb: (l: LayoutState) => void) => void
       onMapToggle:           (cb: () => void) => void
       offMapToggle:          () => void
+      onMapOnlyMode:         (cb: (v: boolean) => void) => void
       offOverlay:            () => void
 
       // Overlay editor
@@ -47,6 +48,10 @@ declare global {
       getPerfMetrics:   () => Promise<unknown>
       onSettingsUpdate: (cb: (s: AppSettings) => void) => void
       offSettingsUpdate: () => void
+
+      refreshOverlayTransport: () => Promise<boolean>
+      onTransportRefresh: (cb: () => void) => void
+      offTransportRefresh: () => void
 
       // Notifications
       showNotification: (title: string, body: string) => Promise<void>

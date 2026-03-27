@@ -67,6 +67,8 @@ let mapIoHookHandler: ((e: any) => void) | null = null
 let ioHookStarted  = false
 let manuallyHidden = false
 let isGameFocused  = false
+let mapOnlyMode         = false
+let mapCurrentlyVisible = false
 
 // ─── Helpers overlay ──────────────────────────────────────────────────────────
 
@@ -208,6 +210,8 @@ app.whenReady().then(async () => {
     onStop() {
       logger.info('[overlay] SC fermé — hide overlay')
       isGameFocused = false
+      mapOnlyMode = false
+      mapCurrentlyVisible = false
       sendGameBounds(null)
       hideOverlay()
       manuallyHidden = false
@@ -216,6 +220,8 @@ app.whenReady().then(async () => {
     onMinimize() {
       logger.info('[overlay] SC minimisé — hide overlay')
       isGameFocused = false
+      mapOnlyMode = false
+      mapCurrentlyVisible = false
       sendGameBounds(null)
       hideOverlay()
     },
@@ -243,6 +249,8 @@ app.whenReady().then(async () => {
     onUnfocus() {
       logger.info('[overlay] SC perd le focus — hide overlay')
       isGameFocused = false
+      mapOnlyMode = false
+      mapCurrentlyVisible = false
       sendGameBounds(null)
       hideOverlay()
     },
@@ -259,7 +267,31 @@ app.whenReady().then(async () => {
   // ── Map toggle key ────────────────────────────────────────────────────────────
 
   const toggleMapVisibility = () => {
+    if (!isGameFocused) return
+    const ow = getOverlayWindow()
+    if (!ow) return
+
+    if (!ow.isVisible()) {
+      // Overlay caché → entrer en map-only mode
+      mapOnlyMode = true
+      mapCurrentlyVisible = false
+      manuallyHidden = false
+      const b = getGameWindowBounds()
+      if (b) sendGameBounds(b)
+      showOverlay()
+      sendToOverlay('overlay:map-only-mode', true)
+    }
+
+    mapCurrentlyVisible = !mapCurrentlyVisible
     sendToOverlay('overlay:map-toggle', undefined)
+
+    // Fermeture carte en map-only → cacher l'overlay
+    if (mapOnlyMode && !mapCurrentlyVisible) {
+      mapOnlyMode = false
+      sendToOverlay('overlay:map-only-mode', false)
+      manuallyHidden = true
+      hideOverlay()
+    }
   }
 
   let _registeredMapKey: string | null = null
@@ -311,16 +343,23 @@ app.whenReady().then(async () => {
   const currentKeyCode = getSettings().toggleKeyCode
 
   const toggleOverlay = () => {
+    if (mapCurrentlyVisible) return
     const ow = getOverlayWindow()
     if (!ow) return
 
     if (ow.isVisible()) {
       logger.info('[overlay] toggle → hide (manuallyHidden)')
+      mapOnlyMode = false
+      mapCurrentlyVisible = false
+      sendToOverlay('overlay:map-only-mode', false)
       hideOverlay()
       manuallyHidden = true
       return
     }
 
+    mapOnlyMode = false
+    mapCurrentlyVisible = false
+    sendToOverlay('overlay:map-only-mode', false)
     manuallyHidden = false
 
     const b = getGameWindowBounds()

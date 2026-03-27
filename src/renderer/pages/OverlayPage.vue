@@ -10,6 +10,7 @@ const scBounds  = ref<{ x: number; y: number; width: number; height: number } | 
 const mapVisible        = ref(false)
 const mapOverlayOpacity = ref(0.85)
 const mapModuleRef      = ref<{ refresh: () => void } | null>(null)
+const mapOnlyMode       = ref(false)
 
 watch(mapVisible, (visible) => {
   if (visible) nextTick(() => mapModuleRef.value?.refresh())
@@ -32,6 +33,7 @@ const scContainerStyle = computed(() => {
 })
 
 function isVisible(mod: (typeof modules)[number]): boolean {
+  if (mapOnlyMode.value) return false
   if (!mod.visible) return false
   return mod.type === 'transport'
 }
@@ -49,6 +51,8 @@ onMounted(async () => {
   window.oneCC.onMapToggle(() => {
     mapVisible.value = !mapVisible.value
   })
+
+  window.oneCC.onMapOnlyMode((v) => { mapOnlyMode.value = v })
 
   window.oneCC.onSettingsUpdate((s: any) => {
     if (s?.mapOverlayOpacity != null) mapOverlayOpacity.value = s.mapOverlayOpacity
