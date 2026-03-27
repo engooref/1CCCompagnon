@@ -69,6 +69,11 @@ const defaults: AppSettings = {
   mapOverlayOpacity: 0.85,
   overlayLayout: {},
   appearance: { ...DEFAULT_APPEARANCE },
+  radioLivekitUrl: 'ws://localhost:7880',
+  radioServerUrl:  'http://localhost:3200',
+  radioPttKeyCode: null,
+  radioPttKey:     '',
+  radioVolume:     1.0,
 }
 
 function createStore() {
