@@ -92,6 +92,12 @@ export interface AppSettings {
   appBrightness?: number  // brightness filter 0.7–1.3, default 1
   defaultPage?: string    // route path shown on startup e.g. '/transport'
   appearance?: AppearanceSettings
+  // ── Radio settings ──────────────────────────────────────────────
+  radioLivekitUrl?: string
+  radioServerUrl?: string
+  radioPttKeyCode?: number | null
+  radioPttKey?: string
+  radioVolume?: number
 }
 
 export type ConnectionLevel = 'idle' | 'loading' | 'connected' | 'auth_error' | 'network_error' | 'missing_api_key'

@@ -10,6 +10,8 @@ import { loadNativeTracker } from './services/scTrackerNative'
 import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterService'
 import { getSettings } from './services/settingsStore'
 import { onLayoutChange } from './services/layoutStore'
+import { registerRadioIpc } from './ipc/radio.ipc'
+import { registerPttKey, setPttTargetWindow } from './services/radioService'
 import { uIOhook } from 'uiohook-napi'
 
 interface ToggleKeyObject { accel?: string; keyCode?: number }
@@ -154,6 +156,14 @@ function createMainWindow() {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
 
+  // ── Permission micro : nécessaire pour getUserMedia (WebRTC LiveKit) ──────────
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media')
+  })
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    return permission === 'media'
+  })
+
   // ── Referrer policy : inject Referer + Origin for all requests to the API domain
   // so that servers configured with strict-origin-when-cross-origin get a valid referrer.
   const _siteUrl = (getSettings().siteUrl ?? 'https://www.1ercorpscolonial.fr').replace(/\/$/, '')
@@ -174,9 +184,18 @@ app.whenReady().then(async () => {
 
   // L'IPC utilise getGameWindowBounds() (synchrone, cache mis à jour par le watcher)
   registerAppIpc(getGameWindowBounds)
+  registerRadioIpc()
 
   createMainWindow()
   createOverlayWindow()
+
+  // Initialiser le PTT radio sur la mainWindow
+  if (mainWindow) {
+    setPttTargetWindow(mainWindow)
+    const radioSettings = getSettings()
+    const pttCode = radioSettings.radioPttKeyCode ?? 20 // CapsLock par défaut
+    registerPttKey(pttCode)
+  }
 
   // Services en arrière-plan (non bloquants)
   setImmediate(() => {

@@ -87,4 +87,17 @@ contextBridge.exposeInMainWorld('oneCC', {
     ipcRenderer.on('app:auto-update-event', (_e, d) => { if (d?.type === 'update-available') cb(d.info) }),
   onNativeAutoUpdateEvent: (cb: (d: any) => void) => ipcRenderer.on('app:auto-update-event', (_e, d) => cb(d)),
   setUpdateFeed: (url: string) => ipcRenderer.invoke('app:set-update-feed', url),
+
+  // ── Radio ────────────────────────────────────────────────────────────────
+  radioGetSettings: () => ipcRenderer.invoke('radio:get-settings'),
+  radioUpdateSettings: (partial: unknown) => ipcRenderer.invoke('radio:update-settings', partial),
+  radioSetPttKey: (payload: { keyCode: number | null; key: string }) =>
+    ipcRenderer.invoke('radio:set-ptt-key', payload),
+  radioStopPtt: () => ipcRenderer.invoke('radio:stop-ptt'),
+  onRadioPttStart: (cb: () => void) => ipcRenderer.on('radio:ptt-start', () => cb()),
+  onRadioPttStop: (cb: () => void) => ipcRenderer.on('radio:ptt-stop', () => cb()),
+  offRadioPtt: () => {
+    ipcRenderer.removeAllListeners('radio:ptt-start')
+    ipcRenderer.removeAllListeners('radio:ptt-stop')
+  },
 })

@@ -1,5 +1,6 @@
 import type { AppSettings, ConnectionState, OverlayAuthResponse, OverlayProfile, LayoutState, OverlayContext } from '@shared/general'
 import type { LogEntry } from '../../main/services/logger'
+import type { RadioSettings } from '@shared/radio'
 
 declare global {
   interface Window {
@@ -58,6 +59,28 @@ declare global {
 
       // Logging
       log: (level: string, message: string) => Promise<void>
+
+      // Radio
+      radioGetSettings: () => Promise<RadioSettings>
+      radioUpdateSettings: (partial: Partial<RadioSettings>) => Promise<boolean>
+      radioSetPttKey: (payload: { keyCode: number | null; key: string }) => Promise<boolean>
+      radioStopPtt: () => Promise<boolean>
+      onRadioPttStart: (cb: () => void) => void
+      onRadioPttStop: (cb: () => void) => void
+      offRadioPtt: () => void
+
+      // App version & updates
+      getAppVersion: () => Promise<string>
+      initAutoUpdater: () => Promise<void>
+      nativeCheckForUpdates: () => Promise<void>
+      nativeDownloadUpdate: () => Promise<void>
+      nativeInstallUpdate: () => Promise<void>
+      onUpdateAvailable: (cb: (info: unknown) => void) => void
+      onNativeAutoUpdateEvent: (cb: (d: unknown) => void) => void
+      setUpdateFeed: (url: string) => Promise<void>
+
+      // Game bounds
+      onOverlayGameBounds: (cb: (b: { x: number; y: number; width: number; height: number } | null) => void) => void
     }
   }
 }
