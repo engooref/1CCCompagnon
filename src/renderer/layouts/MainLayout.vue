@@ -19,7 +19,7 @@ watch(() => app.settings, (s) => {
   }
 }, { immediate: true })
 
-const NAV_ORDER = ['/', '/transport', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
+const NAV_ORDER = ['/', '/radio', '/transport', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
 
 function isActive(path: string): boolean {
   if (path === '/') return route.path === '/'
@@ -63,7 +63,7 @@ function toggleGroup(key: string) {
 
 // Un groupe est "actif" si une de ses routes est active
 const groupRoutes: Record<string, string[]> = {
-  operations: ['/transport', '/inventory', '/fabricator'],
+  operations: ['/radio', '/transport', '/inventory', '/fabricator'],
   outils:     ['/maps', '/agenda'],
   admin:      ['/profils', '/logs'],
 }
@@ -190,6 +190,10 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
             </svg>
           </button>
           <div v-if="openDropdown === 'operations'" class="nav-dropdown">
+            <RouterLink to="/radio"      class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/radio') }">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+              Radio
+            </RouterLink>
             <RouterLink to="/transport"  class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/transport') }">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
               Transport
@@ -314,6 +318,10 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
                 <span v-if="isGroupActive('operations') && !groupsOpen.operations" class="group-dot" />
               </button>
               <div v-show="groupsOpen.operations" class="group-items">
+                <RouterLink to="/radio"       class="nav-v" :class="{ 'nav-v-active': isActive('/radio') }">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+                  Radio
+                </RouterLink>
                 <RouterLink to="/transport"  class="nav-v" :class="{ 'nav-v-active': isActive('/transport') }">
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
                   Transport
@@ -370,6 +378,9 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
 
             <!-- ══ MODE RÉDUIT : toutes les icônes à plat ════════════ -->
             <template v-else>
+              <RouterLink to="/radio"       class="nav-v nav-v-icon" :class="{ 'nav-v-active': isActive('/radio') }"       title="Radio">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+              </RouterLink>
               <RouterLink to="/transport"  class="nav-v nav-v-icon" :class="{ 'nav-v-active': isActive('/transport') }"  title="Transport">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
               </RouterLink>

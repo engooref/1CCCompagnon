@@ -57,6 +57,10 @@ const defaults: AppSettings = {
       detail:          '/fabricator/detail/{id}',
       blueprintToggle: '/fabricator/blueprint/toggle/{id}',
     },
+    radio: {
+      token:    '/radio/token',
+      channels: '/radio/channels',
+    },
   },
   
   rememberConnection: true,
@@ -69,11 +73,10 @@ const defaults: AppSettings = {
   mapOverlayOpacity: 0.85,
   overlayLayout: {},
   appearance: { ...DEFAULT_APPEARANCE },
-  radioLivekitUrl: 'ws://localhost:7880',
-  radioServerUrl:  'http://localhost:3200',
   radioPttKeyCode: null,
   radioPttKey:     '',
   radioVolume:     1.0,
+  radioPttBindings: [],
 }
 
 function createStore() {

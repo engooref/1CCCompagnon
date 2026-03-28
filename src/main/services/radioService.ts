@@ -1,5 +1,6 @@
 // ─── Radio Service (main process) ─────────────────────────────────────────────
 // Gère la détection PTT via uIOhook et dispatch les événements IPC au renderer.
+// Supporte plusieurs liaisons canal → touche (système murmure TeamSpeak).
 
 import { BrowserWindow } from 'electron'
 import { uIOhook } from 'uiohook-napi'
@@ -20,69 +21,88 @@ const DOM_TO_UIOHOOK: Record<number, number> = {
   160: 42, 161: 54,  // LShift, RShift
   162: 29, 163: 3613, // LCtrl, RCtrl
   164: 56, 165: 3640, // LAlt, RAlt
+  // Pavé numérique
+  96: 82, 97: 79, 98: 80, 99: 81, 100: 75, 101: 76, 102: 77, 103: 71, 104: 72, 105: 73,
+  106: 55, 107: 78, 109: 74, 110: 83, 111: 53,
 }
 
-let pttUiCode: number | null = null
-let pttKeyDownHandler: ((e: any) => void) | null = null
-let pttKeyUpHandler: ((e: any) => void) | null = null
-let pttPressed = false
+interface BindingEntry {
+  channelId: string
+  uiCode: number
+  pressed: boolean
+  keyDown: (e: any) => void
+  keyUp: (e: any) => void
+}
+
+// Bindings actifs : un par canal
+const activeBindings: Map<string, BindingEntry> = new Map()
+
 let targetWindow: BrowserWindow | null = null
 
-function sendPttEvent(event: 'radio:ptt-start' | 'radio:ptt-stop') {
+function sendPttEvent(event: 'radio:ptt-start' | 'radio:ptt-stop', channelId: string) {
   if (!targetWindow || targetWindow.isDestroyed()) return
-  targetWindow.webContents.send(event)
+  targetWindow.webContents.send(event, channelId)
 }
 
 export function setPttTargetWindow(win: BrowserWindow) {
   targetWindow = win
 }
 
-export function registerPttKey(domKeyCode: number | null) {
-  // Nettoyer les anciens handlers
-  unregisterPttKey()
+export function registerPttBindings(bindings: Array<{ channelId: string; keyCode: number | null }>) {
+  unregisterAllPttBindings()
 
-  if (domKeyCode === null) return
+  for (const { channelId, keyCode } of bindings) {
+    if (!keyCode) continue
 
-  const uiCode = DOM_TO_UIOHOOK[domKeyCode]
-  if (uiCode === undefined) {
-    logger.warn(`[radio] PTT keyCode ${domKeyCode} non mappé vers uIOhook`)
-    return
+    const uiCode = DOM_TO_UIOHOOK[keyCode]
+    if (uiCode === undefined) {
+      logger.warn(`[radio] PTT keyCode ${keyCode} (canal ${channelId}) non mappé vers uIOhook`)
+      continue
+    }
+
+    const entry: BindingEntry = {
+      channelId,
+      uiCode,
+      pressed: false,
+      keyDown: null!,
+      keyUp: null!,
+    }
+
+    entry.keyDown = (event: any) => {
+      logger.debug(`[radio][uIOhook] keydown keycode=${event?.keycode} attendu=${entry.uiCode} canal=${channelId} déjàPress=${entry.pressed}`)
+      if (event?.keycode !== entry.uiCode) return
+      if (entry.pressed) return
+      entry.pressed = true
+      sendPttEvent('radio:ptt-start', channelId)
+    }
+
+    entry.keyUp = (event: any) => {
+      logger.debug(`[radio][uIOhook] keyup keycode=${event?.keycode} attendu=${entry.uiCode} canal=${channelId} pressed=${entry.pressed}`)
+      if (event?.keycode !== entry.uiCode) return
+      if (!entry.pressed) return
+      entry.pressed = false
+      sendPttEvent('radio:ptt-stop', channelId)
+    }
+
+    uIOhook.on('keydown', entry.keyDown)
+    uIOhook.on('keyup', entry.keyUp)
+    activeBindings.set(channelId, entry)
+
+    logger.info(`[radio] PTT enregistré: canal=${channelId} DOM=${keyCode} → uIOhook=${uiCode}`)
   }
-
-  pttUiCode = uiCode
-  logger.info(`[radio] PTT enregistré: DOM=${domKeyCode} → uIOhook=${uiCode}`)
-
-  pttKeyDownHandler = (event: any) => {
-    if (event?.keycode !== pttUiCode) return
-    if (pttPressed) return // éviter repeat
-    pttPressed = true
-    sendPttEvent('radio:ptt-start')
-  }
-
-  pttKeyUpHandler = (event: any) => {
-    if (event?.keycode !== pttUiCode) return
-    if (!pttPressed) return
-    pttPressed = false
-    sendPttEvent('radio:ptt-stop')
-  }
-
-  uIOhook.on('keydown', pttKeyDownHandler)
-  uIOhook.on('keyup', pttKeyUpHandler)
 }
 
-export function unregisterPttKey() {
-  if (pttKeyDownHandler) {
-    uIOhook.off('keydown', pttKeyDownHandler)
-    pttKeyDownHandler = null
+export function unregisterAllPttBindings() {
+  logger.debug(`[radio] unregisterAllPttBindings — ${activeBindings.size} binding(s) actifs`, new Error('trace').stack)
+  for (const entry of activeBindings.values()) {
+    uIOhook.off('keydown', entry.keyDown)
+    uIOhook.off('keyup', entry.keyUp)
   }
-  if (pttKeyUpHandler) {
-    uIOhook.off('keyup', pttKeyUpHandler)
-    pttKeyUpHandler = null
-  }
-  pttPressed = false
-  pttUiCode = null
+  activeBindings.clear()
 }
 
-export function isPttPressed(): boolean {
-  return pttPressed
+export function isPttPressed(channelId?: string): boolean {
+  if (channelId) return activeBindings.get(channelId)?.pressed ?? false
+  return Array.from(activeBindings.values()).some(b => b.pressed)
 }
+

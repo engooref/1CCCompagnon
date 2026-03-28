@@ -29,24 +29,22 @@ export interface RadioSpeaker {
   audioLevel: number
 }
 
+/** Association canal ↔ touche PTT (système murmure TeamSpeak) */
+export interface PttBinding {
+  channelId: string
+  keyCode: number | null
+  key: string
+}
+
 export interface RadioSettings {
-  /** URL WebSocket du serveur LiveKit */
-  livekitUrl: string
-  /** URL HTTP du serveur radio (tokens) */
-  radioServerUrl: string
-  /** Code clavier DOM du PTT */
-  pttKeyCode: number | null
-  /** Nom accelerator du PTT (pour affichage) */
-  pttKey: string
+  /** Liste des associations canal → touche PTT */
+  pttBindings: PttBinding[]
   /** Volume audio entrant 0.0 – 1.0 */
   radioVolume: number
 }
 
 export const DEFAULT_RADIO_SETTINGS: RadioSettings = {
-  livekitUrl: 'ws://localhost:7880',
-  radioServerUrl: 'http://localhost:3200',
-  pttKeyCode: 20, // CapsLock (DOM keyCode)
-  pttKey: 'CapsLock',
+  pttBindings: [],
   radioVolume: 1.0,
 }
 

@@ -1,0 +1,1764 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Marché · Ordres de transport{% endblock %}
+
+{% block jsAlpine %}
+  <script>
+    window.TRANSPORT_MERCURE = {
+      hubUrl: {{ mercureHubUrl|json_encode|raw }},
+      topic:  {{ mercureTopic|json_encode|raw }},
+    };
+  </script>
+  {{ encore_entry_script_tags('transport') }}
+{% endblock %}
+
+{% block body %}
+<section class="max-w-[100rem] w-full mx-auto py-10 px-6 lg:px-10">
+
+  <!-- Header -->
+  <div class="mb-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-3xl font-extrabold tracking-tight text-white">
+          Ordres de transport
+          <span class="text-sky-300">·</span>
+          <span class="text-white/70">Transport</span>
+        </h1>
+        <p class="mt-1 text-sm text-white/55">
+          Console logistique 1CC — création, édition, lignes de livraison et génération de routes.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Main HUD container -->
+  <div
+    x-data="deliveryPage()"
+    x-cloak
+    @keydown.ctrl.enter.window="if (tab === 'edit') saveDelivery()"
+    class="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#0b1422]/90 to-[#070c14]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_80px_rgba(0,0,0,0.55)]"
+  >
+    <!-- Scanline / glow -->
+    <div class="pointer-events-none absolute inset-0 opacity-[0.12] bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[length:100%_22px]"></div>
+    <div class="pointer-events-none absolute -top-24 -right-24 w-80 h-80 rounded-full bg-sky-400/10 blur-3xl"></div>
+    <div class="pointer-events-none absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-emerald-400/10 blur-3xl"></div>
+
+    <div class="relative p-6 md:p-7">
+
+      <!-- Top strip -->
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-sky-500/10 border border-sky-400/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-sky-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17H3V5h10v4m-4 8a2 2 0 104 0 2 2 0 00-4 0m8 0a2 2 0 104 0 2 2 0 00-4 0m1-4h-5V9h3l3 4z" />
+            </svg>
+          </div>
+          <div>
+            <div class="text-sm text-white/55">Module</div>
+            <div class="font-semibold tracking-wide">LOGISTICS / TRANSPORT ORDERS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs + actions -->
+      <div class="mb-6 flex flex-wrap items-center gap-2">
+        <button
+          @click="goToList()"
+          :class="tab==='list' ? 'bg-sky-400/15 border-sky-400/30 text-sky-100' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'"
+          class="px-4 py-2 rounded-xl border text-sm font-semibold transition"
+        >Ordres</button>
+
+        <button
+          x-show="showResultsTab"
+          @click="tab='results'"
+          :class="tab==='results' ? 'bg-sky-400/15 border-sky-400/30 text-sky-100' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'"
+          class="px-4 py-2 rounded-xl border text-sm font-semibold transition"
+        >Ordre généré (lecture)</button>
+
+        <button
+          x-show="allowEditTab || tab==='edit'"
+          @click="tab='edit'"
+          :class="tab==='edit' ? 'bg-sky-400/15 border-sky-400/30 text-sky-100' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'"
+          class="px-4 py-2 rounded-xl border text-sm font-semibold transition"
+        >Créer / Modifier</button>
+
+        <div class="flex-1"></div>
+
+        <button
+          x-show="tab==='list'"
+          @click="refreshAll()"
+          class="px-4 py-2 rounded-xl font-semibold text-white/90 bg-white/5 border border-white/10 hover:bg-white/10"
+        >Rafraîchir</button>
+
+        <button
+          x-show="tab==='list'"
+          @click="newDelivery()"
+          class="inline-flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-[#071018]
+                 bg-gradient-to-r from-sky-400 to-emerald-300 hover:brightness-110 active:brightness-95
+                 shadow-[0_10px_30px_rgba(56,189,248,0.15)]"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Nouvel ordre
+        </button>
+      </div>
+
+      <!-- LIST TAB -->
+      <div x-show="tab==='list'" x-transition>
+        <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]">
+          <div class="flex items-center justify-between mb-4 gap-3">
+            <h3 class="font-semibold tracking-wide">Liste des ordres de transport</h3>
+
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                x-model="filters.q"
+                placeholder="Rechercher…"
+                class="w-56 max-w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30"
+              >
+              <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/70"
+                    x-text="(filteredDeliveries ? filteredDeliveries().length : 0) + ' item(s)'"></span>
+            </div>
+          </div>
+
+          <div x-show="loading.deliveries" class="text-white/60 text-sm mb-3">
+            Chargement des ordres…
+          </div>
+          <div x-show="errors.deliveries" class="text-red-200 text-sm mb-3">
+            <span class="font-semibold">Erreur:</span> <span x-text="errors.deliveries"></span>
+          </div>
+
+          <div class="max-h-[75vh] overflow-y-auto pr-2 space-y-2">
+            <template x-for="d in (filteredDeliveries ? filteredDeliveries() : [])" :key="d.id">
+              <div class="group rounded-xl border border-white/10 bg-[#070c14]/60 px-4 py-3 flex items-center justify-between gap-3 hover:border-sky-400/30 hover:bg-[#070c14]/75 transition">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <div class="font-semibold truncate" x-text="d.name || ('Ordre #' + d.id)"></div>
+                  </div>
+
+                  <div class="mt-1 text-xs text-white/55 flex flex-wrap gap-x-4 gap-y-1">
+                    <span class="inline-flex items-center gap-1">
+                      <span class="text-white/35">Départ:</span>
+                      <span class="text-white/75" x-text="d.originNameDisplay || d.originName || '—'"></span>
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                      <span class="text-white/35">Vaisseaux:</span>
+                      <span class="text-white/75" x-text="(d.shipModelIds?.length || d.ships?.length || 0)"></span>
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                      <span class="text-white/35">Lignes:</span>
+                      <span class="text-white/75" x-text="(d.manifests?.length || 0)"></span>
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                      <span class="text-white/35">Généré:</span>
+                      <span class="text-white/75" x-text="d.itinerary?.generatedAt || d.generatedAt || '—'"></span>
+                      <span x-show="d.itinerary?.obsolete" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-red-600/10 border border-red-600/20 text-red-300">
+                        Obsolète
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                  <template x-if="!d.itinerary">
+                    <div class="flex items-center gap-2">
+                      <button
+                        @click="editDelivery(d)"
+                        class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-white/5 border border-white/10 hover:bg-white/10"
+                      >Modifier</button>
+
+                      <button
+                        @click="duplicateDelivery(d)"
+                        class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-sky-400/10 border border-sky-400/20 hover:bg-sky-400/15"
+                        title="Créer une copie de cet ordre"
+                      >Dupliquer</button>
+
+                      <button
+                        @click="editDelivery(d); generateDelivery()"
+                        class="px-3 py-1.5 rounded-lg font-semibold text-[#071018] bg-emerald-300 hover:brightness-110 active:brightness-95"
+                      >Générer</button>
+                    </div>
+                    <div class="flex items-center justify-end">
+                      <button
+                        @click="removeManifest(idx)"
+                        class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-red-600/80 hover:bg-red-600 active:bg-red-700"
+                      >Suppr</button>
+                    </div>
+                  </template>
+
+                  <template x-if="d.itinerary">
+                    <div class="flex items-center gap-2">
+                      <button
+                        @click="duplicateDelivery(d)"
+                        class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-sky-400/10 border border-sky-400/20 hover:bg-sky-400/15"
+                        title="Créer une copie de cet ordre comme brouillon"
+                      >Dupliquer</button>
+                      <button
+                        @click="viewDelivery(d)"
+                        class="px-3 py-1.5 rounded-lg font-semibold text-[#071018] bg-emerald-300 hover:brightness-110 active:brightness-95"
+                      >Consulter</button>
+                    </div>
+                  </template>
+
+                  <button
+                    @click="deleteDelivery(d.id)"
+                    class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-red-600/80 hover:bg-red-600 active:bg-red-700"
+                  >Suppr</button>
+                </div>
+              </div>
+            </template>
+
+            <div x-show="!loading.deliveries && (filteredDeliveries ? filteredDeliveries().length === 0 : true)"
+                 class="text-white/55 italic border border-dashed border-white/10 rounded-xl p-4 bg-white/[0.02]">
+              Aucun ordre de transport.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULTS TAB -->
+<div x-show="tab==='results'" x-transition>
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]">
+    <div class="flex items-start justify-between gap-3 mb-4">
+      <div>
+        <h3 class="font-semibold tracking-wide">Ordre généré (lecture seule)</h3>
+        <div class="text-xs text-white/50">Exécution guidée : ordre global par défaut, regroupements optionnels.</div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          @click="goToList()"
+          class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-white/5 border border-white/10 hover:bg-white/10"
+        >Retour</button>
+
+        <button
+          @click="editFromView()"
+          class="px-3 py-1.5 rounded-lg font-semibold text-[#071018] bg-sky-300 hover:brightness-110 active:brightness-95"
+          title="Basculer en modification"
+        >Modifier</button>
+      </div>
+    </div>
+
+    <div x-show="loading.view" class="text-white/60 text-sm mb-3">Chargement de l'ordre…</div>
+    <div x-show="errors.view" class="text-red-200 text-sm mb-3">
+      <span class="font-semibold">Erreur:</span> <span x-text="errors.view"></span>
+    </div>
+
+    <!-- Meta -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+      <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3 text-center">
+        <div class="text-[11px] text-white/45 uppercase tracking-wider">Ordre</div>
+        <div class="mt-2 text-2xl font-semibold truncate" x-text="viewModel.name || ('Ordre #' + (viewModel.id ?? '—'))"></div>
+      </div>
+
+      <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3 text-center">
+        <div class="text-[11px] text-white/45 uppercase tracking-wider">Départ</div>
+        <div class="mt-2 text-2xl font-semibold truncate" x-text="viewModel.originName || '—'"></div>
+        <div class="mt-1 text-xs text-white/55">
+          Généré: <span class="text-white/75" x-text="viewModel.itinerary?.generatedAt || viewModel.generatedAt || '—'"></span>
+          <span x-show="viewModel.itinerary?.obsolete" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-red-600/10 border border-red-600/20 text-red-300">
+            Génération obsolète
+          </span>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3 text-center">
+        <div class="text-[11px] text-white/45 uppercase tracking-wider">Résumé itinéraire</div>
+        <div class="mt-2 text-xs text-white/60 grid grid-cols-2 gap-2">
+          <div>Vaisseaux:<br><span class="text-white/80 font-semibold" x-text="(viewModel.ships?.length || 0)"></span></div>
+          <div>Trajets:<br><span class="text-white/80 font-semibold" x-text="(viewModel.manifests?.length || 0)"></span></div>
+
+          <div>Opérations:<br>
+            <span class="text-white/80 font-semibold"
+                  x-text="(viewModel.itinerary?.lines || []).reduce((acc,l)=> acc + ((l.manifests || l.cargos || []).length), 0)"></span>
+          </div>
+
+          <div>Quantités:<br>
+            <span class="text-white/80 font-semibold" x-text="viewModel.cargoTot + ' SCU'"></span>
+          </div>
+
+          <div class="col-span-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border"
+                  :class="viewModel.itinerary?.obsolete
+                    ? 'bg-red-600/10 border-red-600/20 text-red-300'
+                    : 'bg-emerald-600/10 border-emerald-400/20 text-emerald-300'"
+                  x-text="viewModel.itinerary?.obsolete ? 'Obsolète' : 'Valide'"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick ops -->
+    <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-4 mb-5">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm font-semibold text-white/85">Points à faire</div>
+          <div class="text-xs text-white/45">Checklist courte avant exécution.</div>
+        </div>
+        <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/70">OPS</span>
+      </div>
+
+      <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+        <div class="flex items-start gap-3 rounded-xl border border-white/10 bg-[#070c14]/45 p-3">
+          <div class="mt-0.5 h-6 w-6 rounded-lg bg-sky-500/10 border border-sky-400/20 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-sky-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="font-semibold text-white/85">Préparer la flotte</div>
+            <div class="text-xs text-white/55">Équipages, capacité, config.</div>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 rounded-xl border border-white/10 bg-[#070c14]/45 p-3">
+          <div class="mt-0.5 h-6 w-6 rounded-lg bg-emerald-500/10 border border-emerald-400/20 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="font-semibold text-white/85">Exécuter dans l'ordre</div>
+            <div class="text-xs text-white/55">Étape 1 → 2 → 3…</div>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 rounded-xl border border-white/10 bg-[#070c14]/45 p-3">
+          <div class="mt-0.5 h-6 w-6 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="font-semibold text-white/85">Tracer incidents</div>
+            <div class="text-xs text-white/55">Stock, danger, détour.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flotte -->
+    <div class="rounded-2xl border border-white/10 bg-[#070c14]/55 p-3 mb-5">
+      <div class="text-xs text-white/45 uppercase tracking-wider">Flotte</div>
+      <div class="mt-2 max-h-[30vh] overflow-y-auto pr-2 space-y-2">
+        <template x-for="(ship, idx) in (viewModel.ships || [])" :key="idx + '_' + ship.shipId">
+          <div class="text-sm text-white/65 border border-white/10 rounded-lg p-2 bg-white/[0.02]">
+            <div class="font-semibold text-white/80" x-text="shipModelName(ship.shipId)"></div>
+            <div x-show="ship.note" class="mt-1 text-white/55 italic" x-text="'Note: ' + ship.note"></div>
+          </div>
+        </template>
+        <div x-show="(viewModel.ships || []).length === 0" class="text-white/55 italic">
+          — aucun vaisseau —
+        </div>
+      </div>
+    </div>
+
+    <!-- Itinerary -->
+    <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+      <!-- Itinéraire ruban -->
+      <div class="mb-3 rounded-xl border border-white/10 bg-[#070c14]/55 px-3 py-2">
+        <div class="text-[11px] text-white/45 uppercase tracking-wider mb-1">Itinéraire</div>
+        <div class="flex items-center gap-2 overflow-x-auto whitespace-nowrap pr-2 justify-center">
+          <template x-for="(p, i) in routeList()" :key="'rt_'+i">
+            <div class="inline-flex items-center gap-2">
+              <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/75" x-text="p"></span>
+              <span x-show="i < routeList().length-1" class="text-white/25">→</span>
+            </div>
+          </template>
+          <span x-show="routeList().length === 0" class="text-xs text-white/45 italic">— aucun trajet —</span>
+        </div>
+      </div>
+
+      <!-- Header + modes -->
+      <div class="mb-3 space-y-2">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <h4 class="text-sm font-semibold text-white/80">Étapes de l'itinéraire</h4>
+
+          <div class="flex items-center gap-2 shrink-0 flex-wrap">
+            <!-- Opportunités de commerce -->
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <span class="text-[11px] text-white/50">Opportunités</span>
+              <span class="relative inline-flex h-4 w-8 shrink-0">
+                <input type="checkbox" class="sr-only peer"
+                  x-model="viewModel.autoFillCargo"
+                  @change="viewModel.autoFillCargo ? fetchTradeSuggestionsForView(viewModel.itinerary) : (viewModel.itinerary?.lines || []).forEach(l => l.tradeSuggestions = [])"
+                >
+                <span class="absolute inset-0 rounded-full bg-white/15 peer-checked:bg-sky-400 transition-colors"></span>
+                <span class="absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4"></span>
+              </span>
+            </label>
+
+            <div x-show="viewModel.autoFillCargo" class="flex items-center gap-2">
+                <div class="flex items-center gap-1">
+                  <input
+                    type="number" min="0" step="1000"
+                    x-model.number="viewModel.startingCredits"
+                    @input="debounceFetchTradeOpp()"
+                    class="w-32 rounded-lg bg-[#070c14]/70 border border-white/10 px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sky-400/40"
+                    placeholder="Budget cr"
+                  >
+                  <span class="text-[10px] text-white/35">cr</span>
+                </div>
+
+                <button
+                  @click="fetchTradeSuggestionsForView(viewModel.itinerary)"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-sky-500/15 border border-sky-400/25 text-sky-200 hover:bg-sky-500/20"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  Calc.
+                </button>
+
+                <button
+                  @click="showTradeOpp = !showTradeOpp"
+                  :class="showTradeOpp ? 'text-sky-300 border-sky-400/20 bg-sky-500/10' : 'text-white/35 border-white/10 bg-white/5'"
+                  class="px-2 py-1 rounded-lg text-[11px] border"
+                  x-text="showTradeOpp ? 'Visible' : 'Masqué'"
+                ></button>
+              </div>
+
+            <div class="inline-flex rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+              <button @click="viewMode='order'"
+                      :class="viewMode==='order' ? 'bg-sky-400/15 text-sky-100' : 'text-white/70 hover:bg-white/5'"
+                      class="px-3 py-1.5 text-xs font-semibold">Ordre</button>
+              <button @click="viewMode='from'"
+                      :class="viewMode==='from' ? 'bg-sky-400/15 text-sky-100' : 'text-white/70 hover:bg-white/5'"
+                      class="px-3 py-1.5 text-xs font-semibold">Par escale</button>
+              <button @click="viewMode='to'"
+                      :class="viewMode==='to' ? 'bg-sky-400/15 text-sky-100' : 'text-white/70 hover:bg-white/5'"
+                      class="px-3 py-1.5 text-xs font-semibold">Par destination</button>
+            </div>
+
+            <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/70"
+                  x-text="sortedLines().length + ' trajet(s)'"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+
+        <!-- ORDER VIEW -->
+        <template x-if="viewMode==='order'">
+          <div class="space-y-2">
+            <template x-for="(line, idx) in sortedLines()" :key="line.legId || line.id || line._k || idx">
+              <div class="rounded-xl border border-white/10 bg-white/[0.01] overflow-hidden">
+                <div x-data="{
+                       fromName(){ return line.fromName || line.pickupNameDisplay || line.pickupName || '—' },
+                       fromSystem(){ return line.fromSystemName || line.pickupSystemName || '' },
+                       toName(){ return line.toName || line.dropoffNameDisplay || line.dropoffName || null },
+                       toSystem(){ return line.toSystemName || line.dropoffSystemName || '' },
+                       step(){ return line.orderIndex ?? '—' },
+
+                       ops(){ return (line.cargos || line.manifests || []) },
+                       unloadOps(){ return this.ops().filter(m => m.action === 'unload') },
+                       loadOps(){ return this.ops().filter(m => !m.action || m.action === 'load') },
+                       sum(arr){ return (arr||[]).reduce((s,m)=> s + (Number(m.quantity)||0), 0) },
+                     }"
+                >
+                  <div
+                    @click="line.expanded = !line.expanded"
+                    :class="line.completed ? 'bg-emerald-700/[0.06] hover:bg-emerald-700/10 rounded-xl border border-white/10 transition-colors cursor-pointer' : 'bg-white/[0.02] hover:bg-white/[0.025] rounded-xl border border-white/10 transition-colors cursor-pointer'"
+                  >
+                    <div class="flex items-start gap-3 p-3">
+                      <!-- Step -->
+                      <div class="shrink-0 pt-0.5">
+                        <div class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                          <span class="text-xs font-extrabold text-white/70" x-text="step()"></span>
+                        </div>
+                      </div>
+
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-[10px] uppercase tracking-widest text-white/35 shrink-0">À</span>
+                          <span class="text-sm font-semibold truncate"
+                                :class="line.completed ? 'text-white/30 line-through decoration-white/15' : 'text-white/90'"
+                                x-text="fromName()"></span>
+                          <span class="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-white/60"
+                                x-show="fromSystem()" x-text="fromSystem()"></span>
+
+                          <svg class="w-3 h-3 shrink-0 text-white/20 ml-auto transition-transform duration-200"
+                               :class="line.expanded ? '-rotate-180' : ''"
+                               xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+
+                        <div class="mt-1 flex items-center gap-2 min-w-0">
+                          <span class="text-[10px] uppercase tracking-widest text-white/30 shrink-0">Ensuite</span>
+                          <span class="text-sm font-extrabold truncate"
+                                :class="toName() ? 'text-sky-200' : 'text-emerald-300'"
+                                x-text="toName() ? ('➡ ' + toName()) : '✅ Fin (livraison terminée)'"></span>
+                          <span class="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-white/50"
+                                x-show="toName() && toSystem()" x-text="toSystem()"></span>
+                        </div>
+
+                        <div class="mt-2 flex flex-wrap gap-2">
+                          <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-orange-400/10 border border-orange-400/20 text-orange-300"
+                                x-show="unloadOps().length"
+                                x-text="'Décharger ici · ' + sum(unloadOps()) + ' SCU'"></span>
+
+                          <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-400/20 text-emerald-300"
+                                x-show="loadOps().length"
+                                x-text="'Charger ici · ' + sum(loadOps()) + ' SCU'"></span>
+                        </div>
+                      </div>
+
+                      <div class="shrink-0" @click.stop>
+                        <button
+                          @click="handleToggleLeg(line)"
+                          :class="line.completed
+                            ? 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/10 border border-emerald-400/20 text-emerald-300 text-xs font-medium hover:bg-emerald-600/15'
+                            : 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/55 hover:bg-white/10 text-xs font-medium'"
+                          class="transition-colors"
+                        >
+                          <svg x-show="line.completed" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 00-1.408-1.418l-7.057 6.99L4.704 8.29A1 1 0 003.296 9.71l4 3.96a1 1 0 001.408 0l7-6.38z" clip-rule="evenodd" />
+                          </svg>
+                          <svg x-show="!line.completed" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <rect x="3" y="3" width="18" height="18" rx="3" ry="3" stroke-width="1.5" />
+                          </svg>
+                          <span x-text="line.completed ? 'Faite' : 'Faire'"></span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      x-show="line.expanded"
+                      x-transition:enter="transition ease-out duration-150"
+                      x-transition:enter-start="opacity-0"
+                      x-transition:enter-end="opacity-100"
+                      x-transition:leave="transition ease-in duration-100"
+                      x-transition:leave-start="opacity-100"
+                      x-transition:leave-end="opacity-0"
+                      class="px-3 pb-3"
+                    >
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <!-- Décharger -->
+                        <div class="rounded-xl border border-orange-400/15 bg-orange-950/20 overflow-hidden">
+                          <div class="px-3 py-2 border-b border-orange-400/10 flex items-center justify-between">
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-orange-300/80">Décharger ici</div>
+                            <div class="text-[11px] text-orange-400/60" x-text="sum(unloadOps()) + ' SCU'"></div>
+                          </div>
+
+                          <div class="divide-y divide-orange-400/[0.08]">
+                            <template x-for="(m, midx) in unloadOps()" :key="'u_'+(m.id||midx)">
+                              <div class="px-3 py-2 flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                  <div class="flex flex-wrap items-center gap-2">
+                                    <div class="text-sm font-semibold text-white/85 truncate" x-text="m.commodityName || '—'"></div>
+
+                                    <span
+                                      class="inline-flex px-2 py-0.5 rounded-full text-[11px] border"
+                                      :class="m.cargoType === 'market'
+                                        ? 'bg-sky-400/10 border-sky-400/20 text-sky-200'
+                                        : 'bg-white/5 border-white/10 text-white/65'"
+                                      x-text="m.cargoType === 'market' ? 'Marché' : 'Livraison'"
+                                    ></span>
+                                  </div>
+
+                                  <div class="text-xs text-white/35"
+                                       x-text="'Provenance: ' + ((m.pickupPoiName || '—') + (m.pickupSystemName ? ' (' + m.pickupSystemName + ')' : ''))"></div>
+
+                                  <div class="text-xs text-white/35"
+                                       x-text="'Déchargé à: ' + ((m.dropoffPoiName || '—') + (m.dropoffSystemName ? ' (' + m.dropoffSystemName + ')' : ''))"></div>
+
+                                  <div class="text-xs text-white/40 mt-1"
+                                       x-show="m.cargoType === 'market' && (m.buyPrice || m.sellPrice || m.profitPerUnit)">
+                                    <span x-show="m.buyPrice">
+                                      Achat:
+                                      <strong class="text-emerald-300"><span x-text="m.buyPrice"></span> cr</strong>
+                                    </span>
+
+                                    <span x-show="m.sellPrice" class="ml-3">
+                                      Vente:
+                                      <strong class="text-orange-300"><span x-text="m.sellPrice"></span> cr</strong>
+                                    </span>
+
+                                    <span x-show="m.profitPerUnit" class="ml-3">
+                                      Profit/u:
+                                      <strong class="text-sky-200"><span x-text="m.profitPerUnit"></span> cr</strong>
+                                    </span>
+                                  </div>
+
+                                  <div class="text-xs text-white/40 mt-1"
+                                       x-show="m.cargoType === 'market' && m.profitPerUnit && m.quantity">
+                                    Profit total:
+                                    <strong class="text-sky-200" x-text="((Number(m.profitPerUnit)||0) * (Number(m.quantity)||0)) + ' cr'"></strong>
+                                  </div>
+
+                                  <div class="text-xs text-white/40 mt-1"
+                                       x-show="m.cargoType === 'market' && (m.depTerminalName || m.arrTerminalName)">
+                                    <span x-show="m.depTerminalName">
+                                      Terminal achat:
+                                      <strong class="text-emerald-300" x-text="m.depTerminalName"></strong>
+                                    </span>
+                                    <span x-show="m.arrTerminalName" class="ml-3">
+                                      Terminal vente:
+                                      <strong class="text-orange-300" x-text="m.arrTerminalName"></strong>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div class="shrink-0 text-sm font-bold text-orange-300" x-text="(m.quantity ?? '—') + ' SCU'"></div>
+                              </div>
+                            </template>
+
+                            <div x-show="!unloadOps().length" class="px-3 py-2 text-sm text-white/35 italic">— rien à décharger —</div>
+                          </div>
+                        </div>
+
+                        <!-- Charger -->
+                        <div class="rounded-xl border border-emerald-400/15 bg-emerald-950/20 overflow-hidden">
+                          <div class="px-3 py-2 border-b border-emerald-400/10 flex items-center justify-between">
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-emerald-300/80">Charger ici</div>
+                            <div class="text-[11px] text-emerald-400/60" x-text="sum(loadOps()) + ' SCU'"></div>
+                          </div>
+
+                          <div class="divide-y divide-emerald-400/[0.08]">
+                            <template x-for="(m, midx) in loadOps()" :key="'l_'+(m.id||midx)">
+                              <div class="px-3 py-2 flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                  <div class="flex flex-wrap items-center gap-2">
+                                    <div class="text-sm font-semibold text-white/85 truncate" x-text="m.commodityName || '—'"></div>
+
+                                    <span
+                                      class="inline-flex px-2 py-0.5 rounded-full text-[11px] border"
+                                      :class="m.cargoType === 'market'
+                                        ? 'bg-sky-400/10 border-sky-400/20 text-sky-200'
+                                        : 'bg-white/5 border-white/10 text-white/65'"
+                                      x-text="m.cargoType === 'market' ? 'Marché' : 'Livraison'"
+                                    ></span>
+                                  </div>
+
+                                  <div class="text-xs text-white/35"
+                                       x-text="'Chargé à: ' + ((m.pickupPoiName || '—') + (m.pickupSystemName ? ' (' + m.pickupSystemName + ')' : ''))"></div>
+
+                                  <div class="text-xs text-white/35"
+                                       x-text="'Destination: ' + ((m.dropoffPoiName || '—') + (m.dropoffSystemName ? ' (' + m.dropoffSystemName + ')' : ''))"></div>
+
+                                  <div class="text-xs text-white/40 mt-1"
+                                       x-show="m.cargoType === 'market' && (m.buyPrice || m.sellPrice || m.profitPerUnit)">
+                                    <span x-show="m.buyPrice">
+                                      Achat:
+                                      <strong class="text-emerald-300"><span x-text="m.buyPrice"></span> cr</strong>
+                                    </span>
+
+                                    <span x-show="m.sellPrice" class="ml-3">
+                                      Vente:
+                                      <strong class="text-orange-300"><span x-text="m.sellPrice"></span> cr</strong>
+                                    </span>
+
+                                    <span x-show="m.profitPerUnit" class="ml-3">
+                                      Profit/u:
+                                      <strong class="text-sky-200"><span x-text="m.profitPerUnit"></span> cr</strong>
+                                    </span>
+                                  </div>
+
+                                  <div class="text-xs text-white/40 mt-1"
+                                       x-show="m.cargoType === 'market' && m.profitPerUnit && m.quantity">
+                                    Profit total:
+                                    <strong class="text-sky-200" x-text="((Number(m.profitPerUnit)||0) * (Number(m.quantity)||0)) + ' cr'"></strong>
+                                  </div>
+
+                                  <div class="text-xs text-white/40 mt-1"
+                                       x-show="m.cargoType === 'market' && (m.depTerminalName || m.arrTerminalName)">
+                                    <span x-show="m.depTerminalName">
+                                      Terminal achat:
+                                      <strong class="text-emerald-300" x-text="m.depTerminalName"></strong>
+                                    </span>
+                                    <span x-show="m.arrTerminalName" class="ml-3">
+                                      Terminal vente:
+                                      <strong class="text-orange-300" x-text="m.arrTerminalName"></strong>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div class="shrink-0 text-sm font-bold text-emerald-300" x-text="(m.quantity ?? '—') + ' SCU'"></div>
+                              </div>
+                            </template>
+
+                            <div x-show="!loadOps().length" class="px-3 py-2 text-sm text-white/35 italic">— rien à charger —</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Opportunités de commerce -->
+                    <div x-show="viewModel.autoFillCargo && showTradeOpp && (line.tradeSuggestions || []).length > 0" class="mt-2 rounded-xl border border-sky-400/15 bg-sky-950/20 overflow-hidden">
+                      <div class="px-3 py-2 border-b border-sky-400/10 flex items-center justify-between gap-3 flex-wrap">
+                        <div class="flex items-center gap-2">
+                          <div class="text-[10px] font-bold uppercase tracking-widest text-sky-300/80">Opportunités de commerce</div>
+                          <span class="text-[10px] text-white/35 italic">— choisir 1 parmi</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span x-show="line.tradeBudget != null" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/55">
+                            Budget T :
+                            <strong class="text-emerald-300" x-text="(line.tradeBudget ?? 0).toLocaleString('fr-FR') + ' cr'"></strong>
+                          </span>
+                          <span x-show="line.tradeFreeScu" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/55">
+                            Espace libre :
+                            <strong class="text-sky-300" x-text="line.tradeFreeScu + ' SCU'"></strong>
+                          </span>
+                          <span class="text-[11px] text-sky-400/60" x-text="(line.tradeSuggestions || []).length + ' option(s)'"></span>
+                        </div>
+                      </div>
+                      <div class="divide-y divide-sky-400/[0.08]">
+                        <template x-for="(s, sidx) in (line.tradeSuggestions || [])" :key="'sv_'+(s.commodityId||sidx)">
+                          <div class="px-3 py-2 flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                              <div class="flex flex-wrap items-center gap-2">
+                                <div class="text-sm font-semibold text-white/85 truncate" x-text="s.commodityName || '—'"></div>
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] border bg-sky-400/10 border-sky-400/20 text-sky-200">Marché</span>
+                              </div>
+                              <div class="text-xs text-white/40 mt-1">
+                                <span x-show="s.depTerminalName">
+                                  Achat: <strong class="text-emerald-300" x-text="s.depTerminalName"></strong>
+                                </span>
+                                <span x-show="s.arrTerminalName" class="ml-3">
+                                  Vente: <strong class="text-orange-300" x-text="s.arrTerminalName"></strong>
+                                </span>
+                              </div>
+                              <div class="text-xs text-white/40 mt-1" x-show="s.buyPrice || s.sellPrice || s.profitPerUnit">
+                                <span x-show="s.buyPrice">Achat: <strong class="text-emerald-300" x-text="s.buyPrice + ' cr'"></strong></span>
+                                <span x-show="s.sellPrice" class="ml-3">Vente: <strong class="text-orange-300" x-text="s.sellPrice + ' cr'"></strong></span>
+                                <span x-show="s.profitPerUnit" class="ml-3">Profit/u: <strong class="text-sky-200" x-text="s.profitPerUnit + ' cr'"></strong></span>
+                              </div>
+                              <div class="text-xs text-white/40 mt-0.5" x-show="s.profitTotal">
+                                Profit total: <strong class="text-sky-200" x-text="s.profitTotal + ' cr'"></strong>
+                              </div>
+                            </div>
+                            <div class="shrink-0 flex flex-col items-end gap-1">
+                              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-400/25 text-sky-200 text-xs font-bold">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                                <span x-text="(s.maxQty ?? '—') + ' SCU'"></span>
+                              </span>
+                              <span class="text-[10px] uppercase tracking-wider text-white/35">à prendre</span>
+                              <span
+                                class="text-[10px] px-1.5 py-0.5 rounded-full border"
+                                :class="(s.maxQty < line.tradeFreeScu) ? 'bg-amber-500/10 border-amber-400/20 text-amber-300' : 'bg-sky-500/10 border-sky-400/20 text-sky-400'"
+                                x-text="(s.maxQty < line.tradeFreeScu) ? '⚠ budget' : 'espace'"
+                              ></span>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- GROUPED VIEW -->
+        <template x-if="viewMode!=='order'">
+          <div class="space-y-2">
+            <template x-for="(group, gidx) in (viewMode==='from' ? grouped('from') : grouped('to'))" :key="group.key || gidx">
+              <div class="overflow-hidden rounded-xl border border-white/10">
+                <div class="flex items-center justify-between px-4 py-2.5 bg-white/[0.04] border-b border-white/[0.08]">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <svg class="w-3.5 h-3.5 shrink-0 text-sky-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+                    </svg>
+                    <span class="text-[11px] text-white/35 uppercase tracking-wider shrink-0" x-text="viewMode==='from' ? 'Escale' : 'Prochain arrêt'"></span>
+                    <span class="font-semibold text-sky-200/90 truncate" x-text="group.label"></span>
+                    <span class="ml-2 text-xs text-white/40" x-show="group.sys" x-text="group.sys"></span>
+                  </div>
+
+                  <div class="flex items-center gap-2 shrink-0 ml-3">
+                    <span class="text-[11px] text-white/40" x-text="group.legs.length + ' trajet(s)'"></span>
+
+                    <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-orange-400/10 border border-orange-400/20 text-orange-300"
+                          x-show="group.unloadScu > 0"
+                          x-text="'Décharger · ' + group.unloadScu + ' SCU'"></span>
+
+                    <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-400/20 text-emerald-300"
+                          x-show="group.loadScu > 0"
+                          x-text="'Charger · ' + group.loadScu + ' SCU'"></span>
+                  </div>
+                </div>
+
+                <div class="divide-y divide-white/[0.05]">
+                  <template x-for="(line, idx) in group.legs" :key="line.legId || line.id || line._k || idx">
+                    <div class="px-4 py-3"
+                         x-data="{
+                           fromName(){ return line.fromName || line.pickupNameDisplay || line.pickupName || '—' },
+                           fromSystem(){ return line.fromSystemName || line.pickupSystemName || '' },
+                           toName(){ return line.toName || line.dropoffNameDisplay || line.dropoffName || null },
+                           toSystem(){ return line.toSystemName || line.dropoffSystemName || '' },
+                           step(){ return line.orderIndex ?? '—' },
+
+                           ops(){ return (line.cargos || line.manifests || []) },
+                           unloadOps(){ return this.ops().filter(m => m.action === 'unload') },
+                           loadOps(){ return this.ops().filter(m => !m.action || m.action === 'load') },
+                           sum(arr){ return (arr||[]).reduce((s,m)=> s + (Number(m.quantity)||0), 0) },
+                         }"
+                    >
+                      <div
+                        @click="line.expanded = !line.expanded"
+                        :class="line.completed ? 'bg-emerald-700/[0.06] hover:bg-emerald-700/10 rounded-xl border border-white/10 transition-colors cursor-pointer' : 'bg-white/[0.02] hover:bg-white/[0.025] rounded-xl border border-white/10 transition-colors cursor-pointer'"
+                      >
+                        <div class="flex items-start gap-3 p-3">
+                          <div class="shrink-0 pt-0.5">
+                            <div class="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                              <span class="text-xs font-extrabold text-white/70" x-text="step()"></span>
+                            </div>
+                          </div>
+
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 min-w-0">
+                              <span class="text-[10px] uppercase tracking-widest text-white/35 shrink-0">À</span>
+                              <span class="text-sm font-semibold truncate"
+                                    :class="line.completed ? 'text-white/30 line-through decoration-white/15' : 'text-white/90'"
+                                    x-text="fromName()"></span>
+                              <span class="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-white/60"
+                                    x-show="fromSystem()" x-text="fromSystem()"></span>
+                            </div>
+
+                            <div class="mt-1 flex items-center gap-2 min-w-0">
+                              <span class="text-[10px] uppercase tracking-widest text-white/30 shrink-0">Ensuite</span>
+                              <span class="text-sm font-extrabold truncate"
+                                    :class="toName() ? 'text-sky-200' : 'text-emerald-300'"
+                                    x-text="toName() ? ('➡ ' + toName()) : '✅ Fin (livraison terminée)'"></span>
+                              <span class="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-white/50"
+                                    x-show="toName() && toSystem()" x-text="toSystem()"></span>
+                            </div>
+
+                            <div class="mt-2 flex flex-wrap gap-2">
+                              <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-orange-400/10 border border-orange-400/20 text-orange-300"
+                                    x-show="unloadOps().length"
+                                    x-text="'Décharger ici · ' + sum(unloadOps()) + ' SCU'"></span>
+
+                              <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-400/10 border border-emerald-400/20 text-emerald-300"
+                                    x-show="loadOps().length"
+                                    x-text="'Charger ici · ' + sum(loadOps()) + ' SCU'"></span>
+                            </div>
+                          </div>
+
+                          <div class="shrink-0" @click.stop>
+                            <button
+                              @click="handleToggleLeg(line)"
+                              :class="line.completed
+                                ? 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/10 border border-emerald-400/20 text-emerald-300 text-xs font-medium hover:bg-emerald-600/15'
+                                : 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/55 hover:bg-white/10 text-xs font-medium'"
+                              class="transition-colors"
+                            >
+                              <span x-text="line.completed ? 'Faite' : 'Faire'"></span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div x-show="line.expanded" class="px-3 pb-3">
+                          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <!-- Décharger -->
+                            <div class="rounded-xl border border-orange-400/15 bg-orange-950/20 overflow-hidden">
+                              <div class="px-3 py-2 border-b border-orange-400/10 flex items-center justify-between">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-orange-300/80">Décharger ici</div>
+                                <div class="text-[11px] text-orange-400/60" x-text="sum(unloadOps()) + ' SCU'"></div>
+                              </div>
+
+                              <div class="divide-y divide-orange-400/[0.08]">
+                                <template x-for="(m, midx) in unloadOps()" :key="'u2_'+(m.id||midx)">
+                                  <div class="px-3 py-2 flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                      <div class="flex flex-wrap items-center gap-2">
+                                        <div class="text-sm font-semibold text-white/85 truncate" x-text="m.commodityName || '—'"></div>
+
+                                        <span
+                                          class="inline-flex px-2 py-0.5 rounded-full text-[11px] border"
+                                          :class="m.cargoType === 'market'
+                                            ? 'bg-sky-400/10 border-sky-400/20 text-sky-200'
+                                            : 'bg-white/5 border-white/10 text-white/65'"
+                                          x-text="m.cargoType === 'market' ? 'Marché' : 'Livraison'"
+                                        ></span>
+                                      </div>
+
+                                      <div class="text-xs text-white/35"
+                                           x-text="'Provenance: ' + ((m.pickupPoiName || '—') + (m.pickupSystemName ? ' (' + m.pickupSystemName + ')' : ''))"></div>
+
+                                      <div class="text-xs text-white/35"
+                                           x-text="'Déchargé à: ' + ((m.dropoffPoiName || '—') + (m.dropoffSystemName ? ' (' + m.dropoffSystemName + ')' : ''))"></div>
+
+                                      <div class="text-xs text-white/40 mt-1"
+                                           x-show="m.cargoType === 'market' && (m.buyPrice || m.sellPrice || m.profitPerUnit)">
+                                        <span x-show="m.buyPrice">
+                                          Achat:
+                                          <strong class="text-emerald-300"><span x-text="m.buyPrice"></span> cr</strong>
+                                        </span>
+                                        <span x-show="m.sellPrice" class="ml-3">
+                                          Vente:
+                                          <strong class="text-orange-300"><span x-text="m.sellPrice"></span> cr</strong>
+                                        </span>
+                                        <span x-show="m.profitPerUnit" class="ml-3">
+                                          Profit/u:
+                                          <strong class="text-sky-200"><span x-text="m.profitPerUnit"></span> cr</strong>
+                                        </span>
+                                      </div>
+
+                                      <div class="text-xs text-white/40 mt-1"
+                                           x-show="m.cargoType === 'market' && m.profitPerUnit && m.quantity">
+                                        Profit total:
+                                        <strong class="text-sky-200" x-text="((Number(m.profitPerUnit)||0) * (Number(m.quantity)||0)) + ' cr'"></strong>
+                                      </div>
+
+                                      <div class="text-xs text-white/40 mt-1"
+                                           x-show="m.cargoType === 'market' && (m.depTerminalName || m.arrTerminalName)">
+                                        <span x-show="m.depTerminalName">
+                                          Terminal achat:
+                                          <strong class="text-emerald-300" x-text="m.depTerminalName"></strong>
+                                        </span>
+                                        <span x-show="m.arrTerminalName" class="ml-3">
+                                          Terminal vente:
+                                          <strong class="text-orange-300" x-text="m.arrTerminalName"></strong>
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div class="shrink-0 text-sm font-bold text-orange-300" x-text="(m.quantity ?? '—') + ' SCU'"></div>
+                                  </div>
+                                </template>
+
+                                <div x-show="!unloadOps().length" class="px-3 py-2 text-sm text-white/35 italic">— rien à décharger —</div>
+                              </div>
+                            </div>
+
+                            <!-- Charger -->
+                            <div class="rounded-xl border border-emerald-400/15 bg-emerald-950/20 overflow-hidden">
+                              <div class="px-3 py-2 border-b border-emerald-400/10 flex items-center justify-between">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-emerald-300/80">Charger ici</div>
+                                <div class="text-[11px] text-emerald-400/60" x-text="sum(loadOps()) + ' SCU'"></div>
+                              </div>
+
+                              <div class="divide-y divide-emerald-400/[0.08]">
+                                <template x-for="(m, midx) in loadOps()" :key="'l2_'+(m.id||midx)">
+                                  <div class="px-3 py-2 flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                      <div class="flex flex-wrap items-center gap-2">
+                                        <div class="text-sm font-semibold text-white/85 truncate" x-text="m.commodityName || '—'"></div>
+
+                                        <span
+                                          class="inline-flex px-2 py-0.5 rounded-full text-[11px] border"
+                                          :class="m.cargoType === 'market'
+                                            ? 'bg-sky-400/10 border-sky-400/20 text-sky-200'
+                                            : 'bg-white/5 border-white/10 text-white/65'"
+                                          x-text="m.cargoType === 'market' ? 'Marché' : 'Livraison'"
+                                        ></span>
+                                      </div>
+
+                                      <div class="text-xs text-white/35"
+                                           x-text="'Chargé à: ' + ((m.pickupPoiName || '—') + (m.pickupSystemName ? ' (' + m.pickupSystemName + ')' : ''))"></div>
+
+                                      <div class="text-xs text-white/35"
+                                           x-text="'Destination: ' + ((m.dropoffPoiName || m.dropoffName || '—') + (m.dropoffSystemName ? ' (' + m.dropoffSystemName + ')' : ''))"></div>
+
+                                      <div class="text-xs text-white/40 mt-1"
+                                           x-show="m.cargoType === 'market' && (m.buyPrice || m.sellPrice || m.profitPerUnit)">
+                                        <span x-show="m.buyPrice">
+                                          Achat:
+                                          <strong class="text-emerald-300"><span x-text="m.buyPrice"></span> cr</strong>
+                                        </span>
+
+                                        <span x-show="m.sellPrice" class="ml-3">
+                                          Vente:
+                                          <strong class="text-orange-300"><span x-text="m.sellPrice"></span> cr</strong>
+                                        </span>
+
+                                        <span x-show="m.profitPerUnit" class="ml-3">
+                                          Profit/u:
+                                          <strong class="text-sky-200"><span x-text="m.profitPerUnit"></span> cr</strong>
+                                        </span>
+                                      </div>
+
+                                      <div class="text-xs text-white/40 mt-1"
+                                           x-show="m.cargoType === 'market' && m.profitPerUnit && m.quantity">
+                                        Profit total:
+                                        <strong class="text-sky-200" x-text="((Number(m.profitPerUnit)||0) * (Number(m.quantity)||0)) + ' cr'"></strong>
+                                      </div>
+
+                                      <div class="text-xs text-white/40 mt-1"
+                                           x-show="m.cargoType === 'market' && (m.depTerminalName || m.arrTerminalName)">
+                                        <span x-show="m.depTerminalName">
+                                          Terminal achat:
+                                          <strong class="text-emerald-300" x-text="m.depTerminalName"></strong>
+                                        </span>
+                                        <span x-show="m.arrTerminalName" class="ml-3">
+                                          Terminal vente:
+                                          <strong class="text-orange-300" x-text="m.arrTerminalName"></strong>
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div class="shrink-0 text-sm font-bold text-emerald-300" x-text="(m.quantity ?? '—') + ' SCU'"></div>
+                                  </div>
+                                </template>
+
+                                <div x-show="!loadOps().length" class="px-3 py-2 text-sm text-white/35 italic">— rien à charger —</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Opportunités de commerce -->
+                          <div x-show="viewModel.autoFillCargo && showTradeOpp && (line.tradeSuggestions || []).length > 0" class="mt-2 rounded-xl border border-sky-400/15 bg-sky-950/20 overflow-hidden">
+                            <div class="px-3 py-2 border-b border-sky-400/10 flex items-center justify-between gap-3 flex-wrap">
+                              <div class="flex items-center gap-2">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-sky-300/80">Opportunités de commerce</div>
+                                <span class="text-[10px] text-white/35 italic">— choisir 1 parmi</span>
+                              </div>
+                              <div class="flex items-center gap-2">
+                                <span x-show="line.tradeBudget != null" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/55">
+                                  Budget T :
+                                  <strong class="text-emerald-300" x-text="(line.tradeBudget ?? 0).toLocaleString('fr-FR') + ' cr'"></strong>
+                                </span>
+                                <span x-show="line.tradeFreeScu" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/55">
+                                  Espace libre :
+                                  <strong class="text-sky-300" x-text="line.tradeFreeScu + ' SCU'"></strong>
+                                </span>
+                                <span class="text-[11px] text-sky-400/60" x-text="(line.tradeSuggestions || []).length + ' option(s)'"></span>
+                              </div>
+                            </div>
+                            <div class="divide-y divide-sky-400/[0.08]">
+                              <template x-for="(s, sidx) in (line.tradeSuggestions || [])" :key="'sg_'+(s.commodityId||sidx)">
+                                <div class="px-3 py-2 flex items-start justify-between gap-3">
+                                  <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                      <div class="text-sm font-semibold text-white/85 truncate" x-text="s.commodityName || '—'"></div>
+                                      <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] border bg-sky-400/10 border-sky-400/20 text-sky-200">Marché</span>
+                                    </div>
+                                    <div class="text-xs text-white/40 mt-1">
+                                      <span x-show="s.depTerminalName">Achat: <strong class="text-emerald-300" x-text="s.depTerminalName"></strong></span>
+                                      <span x-show="s.arrTerminalName" class="ml-3">Vente: <strong class="text-orange-300" x-text="s.arrTerminalName"></strong></span>
+                                    </div>
+                                    <div class="text-xs text-white/40 mt-1" x-show="s.buyPrice || s.sellPrice || s.profitPerUnit">
+                                      <span x-show="s.buyPrice">Achat: <strong class="text-emerald-300" x-text="s.buyPrice + ' cr'"></strong></span>
+                                      <span x-show="s.sellPrice" class="ml-3">Vente: <strong class="text-orange-300" x-text="s.sellPrice + ' cr'"></strong></span>
+                                      <span x-show="s.profitPerUnit" class="ml-3">Profit/u: <strong class="text-sky-200" x-text="s.profitPerUnit + ' cr'"></strong></span>
+                                    </div>
+                                    <div class="text-xs text-white/40 mt-0.5" x-show="s.profitTotal">
+                                      Profit total: <strong class="text-sky-200" x-text="s.profitTotal + ' cr'"></strong>
+                                    </div>
+                                  </div>
+                                  <div class="shrink-0 flex flex-col items-end gap-1">
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-400/25 text-sky-200 text-xs font-bold">
+                                      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                                      <span x-text="(s.maxQty ?? '—') + ' SCU'"></span>
+                                    </span>
+                                    <span class="text-[10px] uppercase tracking-wider text-white/35">à prendre</span>
+                                    <span
+                                      class="text-[10px] px-1.5 py-0.5 rounded-full border"
+                                      :class="(s.maxQty < line.tradeFreeScu) ? 'bg-amber-500/10 border-amber-400/20 text-amber-300' : 'bg-sky-500/10 border-sky-400/20 text-sky-400'"
+                                      x-text="(s.maxQty < line.tradeFreeScu) ? '⚠ budget' : 'espace'"
+                                    ></span>
+                                  </div>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+
+                        </div>
+
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <div x-show="sortedLines().length === 0"
+             class="text-white/50 italic px-4 py-5 rounded-xl border border-dashed border-white/10 bg-white/[0.01]">
+          Aucun résultat à afficher. Sélectionne “Consulter” sur un ordre.
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+      <!-- EDIT TAB (refait + sous-onglets) -->
+      <div x-show="tab==='edit'" x-transition x-data="{ editTab: 'meta' }">
+        <!-- Sous-onglets Edit -->
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            @click="editTab='meta'"
+            :class="editTab==='meta' ? 'bg-sky-400/15 border-sky-400/30 text-sky-100' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'"
+            class="px-4 py-2 rounded-xl border text-sm font-semibold transition"
+          >Infos</button>
+
+          <button
+            @click="editTab='lines'"
+            :class="editTab==='lines' ? 'bg-sky-400/15 border-sky-400/30 text-sky-100' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'"
+            class="px-4 py-2 rounded-xl border text-sm font-semibold transition"
+          >Manifestes</button>
+
+          <div class="flex-1"></div>
+
+          <button
+            @click="saveDelivery()"
+            class="px-4 py-2 rounded-xl font-semibold text-[#071018] bg-sky-300 hover:brightness-110 active:brightness-95"
+          >Enregistrer</button>
+
+          <button
+            @click="generateDelivery()"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-[#071018]
+                  bg-gradient-to-r from-emerald-300 to-sky-300 hover:brightness-110 active:brightness-95
+                  shadow-[0_10px_30px_rgba(110,231,183,0.12)]"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A2 2 0 013 15.382V6.618a2 2 0 011.553-1.894L9 2m0 18l6-3m-6 3V2m6 15l5.447-2.724A2 2 0 0021 12.382V3.618a2 2 0 00-1.553-1.894L15 2m0 15V2m0 15l-6-3" />
+            </svg>
+            Générer l'ordre (routes)
+          </button>
+
+          <button
+            @click="resetForm()"
+            class="px-4 py-2 rounded-xl font-semibold text-white/90 bg-white/5 border border-white/10 hover:bg-white/10"
+          >Reset</button>
+        </div>
+
+        <!-- Bandeau retour génération -->
+        <template x-if="generationOutput">
+          <div
+            :class="generationOutput.startsWith('Erreur') || generationOutput.startsWith('Enregistrement')
+              ? 'border-red-500/30 bg-red-950/30 text-red-200'
+              : generationOutput.startsWith('Génération déjà')
+                ? 'border-amber-500/30 bg-amber-950/30 text-amber-200'
+                : 'border-emerald-500/30 bg-emerald-950/30 text-emerald-200'"
+            class="mb-4 rounded-xl border px-4 py-3 text-sm flex items-start justify-between gap-3"
+          >
+            <div class="flex items-start gap-2 min-w-0">
+              <!-- Icône état -->
+              <template x-if="generationOutput.startsWith('Erreur') || generationOutput.startsWith('Enregistrement')">
+                <svg class="w-4 h-4 shrink-0 mt-0.5 text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+              </template>
+              <template x-if="generationOutput.startsWith('Génération déjà')">
+                <svg class="w-4 h-4 shrink-0 mt-0.5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z"/></svg>
+              </template>
+              <template x-if="!generationOutput.startsWith('Erreur') && !generationOutput.startsWith('Enregistrement') && !generationOutput.startsWith('Génération déjà')">
+                <svg class="w-4 h-4 shrink-0 mt-0.5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              </template>
+
+              <div class="min-w-0">
+                <!-- Lignes parsées si succès -->
+                <template x-if="generatedLines && generatedLines.length > 0">
+                  <div class="space-y-1">
+                    <div class="font-semibold text-emerald-100 mb-1">
+                      Itinéraire généré — <span x-text="generatedLines.length"></span> segment(s)
+                    </div>
+                    <template x-for="(seg, si) in generatedLines" :key="si">
+                      <div class="flex items-baseline gap-2 text-xs">
+                        <span
+                          :class="seg.status === 'ok' ? 'text-emerald-300' : 'text-amber-300'"
+                          class="font-bold"
+                          x-text="'L' + (si + 1)"
+                        ></span>
+                        <span class="text-white/80 font-semibold" x-text="seg.title"></span>
+                        <span x-show="seg.detail" class="text-white/50" x-text="'· ' + seg.detail"></span>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+                <!-- Sinon message brut -->
+                <template x-if="!generatedLines || generatedLines.length === 0">
+                  <span x-text="generationOutput"></span>
+                </template>
+              </div>
+            </div>
+            <button
+              @click="generationOutput = null; generatedLines = []"
+              class="shrink-0 p-1 rounded-lg opacity-60 hover:opacity-100 transition"
+              title="Fermer"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </template>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <!-- LEFT -->
+          <div class="lg:col-span-2">
+
+            <!-- INFOS TAB -->
+            <div x-show="editTab==='meta'" x-transition
+                class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]">
+
+              <div class="flex items-center justify-between mb-4 gap-3">
+                <div>
+                  <h3 class="font-semibold tracking-wide">Édition ordre de transport</h3>
+                  <div class="text-xs text-white/50">
+                    ID: <span class="text-white/70" x-text="current.id ?? '—'"></span>
+                  </div>
+                </div>
+
+                <div class="text-xs text-white/45">
+                  Onglet: <span class="text-white/70" x-text="editTab"></span>
+                </div>
+              </div>
+
+              <div x-show="loading.edit" class="text-white/60 text-sm mb-3">Chargement…</div>
+              <div x-show="errors.edit" class="text-red-200 text-sm mb-3">
+                <span class="font-semibold">Erreur:</span> <span x-text="errors.edit"></span>
+              </div>
+
+              <div class="space-y-4">
+
+                <!-- Name -->
+                <label class="block">
+                  <span class="text-xs uppercase tracking-wider text-white/55">Nom</span>
+                  <input
+                    type="text"
+                    x-model="current.name"
+                    class="mt-1 w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30"
+                    placeholder="Ex: Hurston → ArcCorp / Ravitaillement"
+                  >
+                </label>
+
+                <!-- Origin POI -->
+                <div class="block">
+                  <span class="text-xs uppercase tracking-wider text-white/55">Lieu de départ</span>
+                  <div class="relative mt-1">
+                    <input
+                      type="text"
+                      x-model="poiSearches.origin.query"
+                      @input="searchPoi('origin', $event.target.value)"
+                      @focus="poiSearches.origin && (poiSearches.origin.show = true)"
+                      @blur="hidePoiDropdown('origin')"
+                      class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30"
+                      placeholder="Rechercher un point de départ…"
+                    />
+
+                    <div
+                      x-show="poiSearches.origin?.show && (poiSearches.origin?.results?.length > 0 || poiSearches.origin?.loading)"
+                      class="absolute top-full left-0 right-0 mt-1 rounded-xl border border-white/10 bg-[#0b1422]/95 backdrop-blur-sm shadow-lg z-50 max-h-72 overflow-y-auto"
+                    >
+                      <div x-show="poiSearches.origin?.loading" class="px-3 py-2 text-sm text-white/55">Recherche en cours…</div>
+                      <div class="space-y-1 p-2">
+                        <template x-for="poi in (poiSearches.origin?.results || [])" :key="poi.id">
+                          <button
+                            @mousedown="selectPoi('origin', poi)"
+                            class="w-full text-left px-3 py-2 rounded-lg hover:bg-sky-400/10 border border-transparent hover:border-sky-400/20 transition"
+                          >
+                            <div class="flex items-center justify-between gap-2">
+                              <div class="text-sm font-semibold text-white/90" x-text="getPoiDisplayName(poi)"></div>
+                              <span class="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/60" x-text="getPoiTypeLabel(poi)"></span>
+                            </div>
+                          </button>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Ships -->
+                <div class="rounded-2xl border border-white/10 bg-[#070c14]/55 p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <div class="text-xs uppercase tracking-wider text-white/55">Flotte</div>
+                      <div class="text-xs text-white/45">Capacité totale = somme SCU des vaisseaux.</div>
+                    </div>
+                    <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/70"
+                          x-text="(current.ships?.length || 0) + ' vaisseau(x)'"></span>
+                  </div>
+
+                  <div class="mt-3 space-y-2">
+
+
+                    <div x-show="loading.shipModels" class="text-white/60 text-sm">Chargement des vaisseaux…</div>
+                    <div x-show="errors.shipModels" class="text-red-200 text-sm"><span class="font-semibold">Erreur:</span> <span x-text="errors.shipModels"></span></div>
+
+                    <div class="relative">
+                      <input
+                        type="text"
+                        x-model="shipSearch"
+                        @input="onFieldInput('ship','ship',$event.target)"
+                        placeholder="Rechercher un vaisseau…"
+                        class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30"
+                      />
+                    </div>
+
+                    <div class="space-y-2">
+                      <template x-for="(ship, idx) in (current.ships || [])" :key="idx + '_' + ship.shipId">
+                        <div class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                          <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                              <div class="text-sm font-semibold text-white/90 truncate" x-text="shipModelName(ship.shipId)"></div>
+                              <div class="text-xs text-white/45" x-text="shipMetaById(ship.shipId)"></div>
+                            </div>
+                            <button @click="removeShip(idx)" class="px-3 py-1.5 rounded-lg font-semibold text-white/90 bg-red-600/80 hover:bg-red-600 active:bg-red-700 shrink-0">Suppr</button>
+                          </div>
+
+                          <textarea
+                            x-model="ship.note"
+                            rows="2"
+                            class="mt-2 w-full rounded-lg bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30 resize-none"
+                            placeholder="Note (optionnel)…"
+                          ></textarea>
+                        </div>
+                      </template>
+
+                      <div x-show="(current.ships || []).length === 0" class="text-white/55 italic border border-dashed border-white/10 rounded-xl p-4 bg-white/[0.02]">
+                        Aucun vaisseau sélectionné.
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="pt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    @click="goToList()"
+                    class="px-4 py-2 rounded-xl font-semibold text-white/90 bg-white/5 border border-white/10 hover:bg-white/10"
+                  >Retour liste</button>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- LIGNES TAB -->
+            <div x-show="editTab==='lines'" x-transition
+                class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]">
+
+              <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="font-semibold tracking-wide">Lignes de livraison</h3>
+                  <div class="text-xs text-white/45">Pickup → Dropoff · Quantité · Cargaison · Caisse max</div>
+                </div>
+                <button
+                  @click="addLine(); $nextTick(() => $refs.manifestList.scrollTop = 0)"
+                  class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold text-[#071018] bg-emerald-300 hover:brightness-110 active:brightness-95"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                  </svg>
+                  Ajouter
+                </button>
+              </div>
+
+              {# IMPORTANT: plus de overflow-y-auto ici -> les dropdowns peuvent dépasser #}
+              <div x-ref="manifestList" class="max-h-[65vh] overflow-y-auto pr-2 space-y-3">
+                <template x-for="(manifest, idx) in (current.manifests || [])" :key="manifest._k">
+                  <div class="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+
+                    <!-- Header : numéro + type + actions -->
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <span class="text-xs text-white/40 font-semibold uppercase tracking-wider" x-text="'Mission ' + (idx + 1)"></span>
+                        <!-- Mission type selector -->
+                        <div class="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden text-xs">
+                          <template x-for="(label, val) in { mono_route: 'A→B', multi_drop: 'A→B+C', multi_pickup: 'A+B→C', multi_route: 'A+B→C+D' }">
+                            <button
+                              type="button"
+                              @click="manifest.type = val"
+                              :class="manifest.type === val ? 'bg-sky-400/20 text-sky-200 border-sky-400/30' : 'text-white/50 hover:bg-white/5 border-transparent'"
+                              class="px-2.5 py-1 font-semibold border transition"
+                              x-text="label"
+                            ></button>
+                          </template>
+                        </div>
+                        <span
+                          x-show="manifest.type && manifest.type !== 'mono_route'"
+                          class="text-[10px] px-2 py-0.5 rounded-full border bg-amber-400/10 border-amber-400/20 text-amber-300"
+                          x-text="{
+                            multi_drop:    '1 pickup · N dropoffs',
+                            multi_pickup:  'N pickups · 1 dropoff',
+                            multi_route:   'N pickups · N dropoffs'
+                          }[manifest.type] ?? ''"
+                        ></span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <button
+                          type="button"
+                          @click="duplicateLine(idx)"
+                          class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-white/70 bg-sky-400/10 border border-sky-400/20 hover:bg-sky-400/15 transition"
+                          title="Dupliquer ce manifeste"
+                        >
+                          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                          Dupliquer
+                        </button>
+                        <button
+                          type="button"
+                          @click="removeManifest(idx)"
+                          class="p-1.5 rounded-lg text-red-400/60 hover:text-red-400 hover:bg-red-400/10 transition"
+                          title="Supprimer ce manifeste"
+                        >
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Taille max des caisses (optionnel, niveau mission) -->
+                    <div class="flex items-center gap-3">
+                      <label class="text-xs uppercase tracking-wider text-white/55 whitespace-nowrap">Caisse max</label>
+                      <div class="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          x-model.number="manifest.maxBoxSize"
+                          class="w-24 rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-1.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30 text-sm"
+                          placeholder="— SCU"
+                        />
+                        <span class="text-xs text-white/35">SCU</span>
+                        <button
+                          type="button"
+                          x-show="manifest.maxBoxSize"
+                          @click="manifest.maxBoxSize = null"
+                          class="p-1 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition text-xs"
+                          title="Retirer la limite"
+                        >✕</button>
+                      </div>
+                    </div>
+
+                    <!-- Manifest-level pickup (shown for mono_route and multi_drop) -->
+                    <div x-show="manifest.type === 'mono_route' || manifest.type === 'multi_drop'">
+                      <span class="text-xs uppercase tracking-wider text-white/55">
+                        Pickup
+                        <span x-show="manifest.type === 'multi_drop'" class="text-white/35 normal-case tracking-normal ml-1">(partagé par toutes les cargaisons)</span>
+                      </span>
+                      <div class="relative mt-1">
+                        <input
+                          type="text"
+                          :value="poiSearches[`pickup_${manifest._k}`].query"
+                          @input="onFieldInput('poi', `pickup_${manifest._k}`, $event.target)"
+                          class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30"
+                          placeholder="Ex: Everus Harbor"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- Manifest-level dropoff (shown for mono_route and multi_pickup) -->
+                    <div x-show="manifest.type === 'mono_route' || manifest.type === 'multi_pickup'">
+                      <span class="text-xs uppercase tracking-wider text-white/55">
+                        Dropoff
+                        <span x-show="manifest.type === 'multi_pickup'" class="text-white/35 normal-case tracking-normal ml-1">(partagé par toutes les cargaisons)</span>
+                      </span>
+                      <div class="relative mt-1">
+                        <input
+                          type="text"
+                          :value="poiSearches[`dropoff_${manifest._k}`].query"
+                          @input="onFieldInput('poi', `dropoff_${manifest._k}`, $event.target)"
+                          class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30"
+                          placeholder="Ex: Seraphim Station"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- Cargaisons -->
+                    <div class="space-y-2">
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs uppercase tracking-wider text-white/55">Cargaisons</span>
+                        <button
+                          type="button"
+                          @click="addCargo(manifest._k)"
+                          class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-[#071018] bg-emerald-300/80 hover:brightness-110 active:brightness-95"
+                        >
+                          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                          Ajouter
+                        </button>
+                      </div>
+                      <template x-for="(cargo, ci) in (manifest.cargos || [])" :key="cargo._k">
+                        <div class="rounded-xl border border-white/[0.08] bg-white/[0.01] p-3 space-y-2">
+                          <div class="flex items-center gap-2">
+                            <!-- Commodity -->
+                            <div class="flex-1">
+                              <input
+                                type="text"
+                                :value="commoditySearches[`commodity_${manifest._k}_${cargo._k}`]?.query ?? cargo.commodityName"
+                                @input="onFieldInput('commodity', `commodity_${manifest._k}_${cargo._k}`, $event.target)"
+                                class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30 text-sm"
+                                placeholder="Cargaison…"
+                              />
+                            </div>
+                            <!-- Quantité -->
+                            <div class="w-24">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                x-model.number="cargo.quantity"
+                                class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30 text-sm"
+                                placeholder="SCU"
+                              />
+                            </div>
+                            <!-- Retirer -->
+                            <button
+                              type="button"
+                              x-show="(manifest.cargos || []).length > 1"
+                              @click="removeCargo(manifest._k, cargo._k)"
+                              class="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-400/10 transition"
+                              title="Retirer cette cargaison"
+                            >
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                          </div>
+
+                          <!-- Per-cargo pickup (for multi_pickup and multi_route) -->
+                          <div x-show="manifest.type === 'multi_pickup' || manifest.type === 'multi_route'" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <span class="text-[11px] uppercase tracking-wider text-emerald-300/70">Pickup cargaison</span>
+                              <div class="relative mt-1">
+                                <input
+                                  type="text"
+                                  :value="poiSearches[`cargo_pickup_${manifest._k}_${cargo._k}`]?.query ?? cargo.pickupName ?? ''"
+                                  @input="onFieldInput('poi', `cargo_pickup_${manifest._k}_${cargo._k}`, $event.target)"
+                                  class="w-full rounded-xl bg-[#070c14]/70 border border-emerald-400/20 px-3 py-1.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 text-sm"
+                                  placeholder="Ex: Everus Harbor"
+                                />
+                              </div>
+                            </div>
+
+                            <!-- Per-cargo dropoff (multi_route only — alongside pickup) -->
+                            <div x-show="manifest.type === 'multi_route'">
+                              <span class="text-[11px] uppercase tracking-wider text-orange-300/70">Dropoff cargaison</span>
+                              <div class="relative mt-1">
+                                <input
+                                  type="text"
+                                  :value="poiSearches[`cargo_dropoff_${manifest._k}_${cargo._k}`]?.query ?? cargo.dropoffName ?? ''"
+                                  @input="onFieldInput('poi', `cargo_dropoff_${manifest._k}_${cargo._k}`, $event.target)"
+                                  class="w-full rounded-xl bg-[#070c14]/70 border border-orange-400/20 px-3 py-1.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-orange-400/30 text-sm"
+                                  placeholder="Ex: Seraphim Station"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Per-cargo dropoff (for multi_drop — single column) -->
+                          <div x-show="manifest.type === 'multi_drop'">
+                            <span class="text-[11px] uppercase tracking-wider text-orange-300/70">Dropoff cargaison</span>
+                            <div class="relative mt-1">
+                              <input
+                                type="text"
+                                :value="poiSearches[`cargo_dropoff_${manifest._k}_${cargo._k}`]?.query ?? cargo.dropoffName ?? ''"
+                                @input="onFieldInput('poi', `cargo_dropoff_${manifest._k}_${cargo._k}`, $event.target)"
+                                class="w-full rounded-xl bg-[#070c14]/70 border border-orange-400/20 px-3 py-1.5 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-orange-400/30 text-sm"
+                                placeholder="Ex: Seraphim Station"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+
+                    <!-- Saisie rapide par collage -->
+                    <div class="pt-1">
+                      <button
+                        type="button"
+                        @click="pasteMode[manifest._k] ??= { open: false, text: '', errors: [] }; pasteMode[manifest._k].open = !pasteMode[manifest._k].open"
+                        class="inline-flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition"
+                      >
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        <span x-text="pasteMode[manifest._k]?.open ? 'Fermer la saisie rapide' : 'Saisie rapide (coller une liste)'"></span>
+                      </button>
+
+                      <div x-show="pasteMode[manifest._k]?.open" class="mt-2 space-y-2">
+                        <textarea
+                          x-model="(pasteMode[manifest._k] ??= { open: true, text: '', errors: [] }).text"
+                          rows="4"
+                          class="w-full rounded-xl bg-[#070c14]/70 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400/30 font-mono text-sm resize-y"
+                          placeholder="Iron 100&#10;Copper 50&#10;Titanium 75"
+                        ></textarea>
+                        <div class="flex items-center gap-2">
+                          <button
+                            type="button"
+                            @click="(pasteMode[manifest._k] ??= { open: true, text: '', errors: [] }).open = true; pasteMode[manifest._k].text = getPasteExample(manifest.type); pasteMode[manifest._k].errors = []"
+                            title="Insère un exemple de saisie rapide dans le champ"
+                            class="px-2 py-1 rounded-lg text-xs font-medium text-white/80 bg-white/5 border border-white/8 hover:bg-white/10"
+                          >Exemple</button>
+
+                          <button
+                            type="button"
+                            @click="parsePasteText(manifest._k, pasteMode[manifest._k]?.text).then(errs => { pasteMode[manifest._k].errors = errs || [] })"
+                            class="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#071018] bg-emerald-300 hover:brightness-110 active:brightness-95"
+                          >Importer</button>
+
+                          <button
+                            type="button"
+                            @click="pasteMode[manifest._k].text = ''; pasteMode[manifest._k].errors = []"
+                            class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white/60 bg-white/5 border border-white/10 hover:bg-white/10"
+                          >Effacer</button>
+                        </div>
+
+                        <div class="text-xs text-white/50 mt-2">
+                          <div><strong>Formats supportés :</strong></div>
+                          <ul class="list-inside list-disc ml-3">
+                            <li>"Iron 100" — cargaison simple</li>
+                            <li>"Iron 100 | Pickup | Dropoff" — préciser pickup et/ou dropoff</li>
+                            <li>"Iron 100 @Pickup -> Dropoff" — notation inline pour pickup et dropoff</li>
+                          </ul>
+                          <div class="mt-1">Pour les missions <em>multi_*</em>, fournissez les POI par cargaison (via syntaxe ci‑dessus) ou éditez chaque cargo après import.</div>
+                        </div>
+                        <template x-if="(pasteMode[manifest._k]?.errors || []).length > 0">
+                          <div class="space-y-1">
+                            <template x-for="(e, ei) in pasteMode[manifest._k].errors" :key="ei">
+                              <div class="text-xs text-red-300 bg-red-950/30 border border-red-500/20 rounded-lg px-3 py-1.5" x-text="e"></div>
+                            </template>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+
+                  </div>
+                </template>
+
+                <div x-show="(current.manifests || []).length === 0"
+                    class="text-white/55 italic border border-dashed border-white/10 rounded-xl p-4 bg-white/[0.02]">
+                  Aucune ligne de livraison. Ajoute au moins une ligne.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT (summary) -->
+          <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold tracking-wide">Résumé</h3>
+              <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/70">PREVIEW</span>
+            </div>
+
+            <div class="space-y-3 text-sm">
+              <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3">
+                <div class="text-xs text-white/45 uppercase tracking-wider">Nom</div>
+                <div class="font-semibold mt-1 truncate" x-text="current.name || '—'"></div>
+              </div>
+
+              <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3">
+                <div class="text-xs text-white/45 uppercase tracking-wider">Départ</div>
+                <div class="font-semibold mt-1 truncate" x-text="current.originName || '—'"></div>
+              </div>
+
+              <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3">
+                <div class="text-xs text-white/45 uppercase tracking-wider">Flotte</div>
+                <div class="mt-2 space-y-2 max-h-[28vh] overflow-y-auto pr-2">
+                  <template x-for="(ship, idx) in (current.ships || [])" :key="idx + '_sum_' + ship.shipId">
+                    <div class="text-xs text-white/65 border border-white/10 rounded-lg p-2 bg-white/[0.02]">
+                      <div class="font-semibold text-white/80" x-text="shipModelName(ship.shipId)"></div>
+                      <div x-show="ship.note" class="mt-1 text-white/55 italic" x-text="'Note: ' + ship.note"></div>
+                    </div>
+                  </template>
+                  <div x-show="(current.ships || []).length === 0" class="text-white/55 italic">— aucun vaisseau —</div>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-white/10 bg-[#070c14]/55 p-3">
+                <div class="text-xs text-white/45 uppercase tracking-wider">Lignes</div>
+                <div class="mt-2 space-y-2 max-h-[45vh] overflow-y-auto pr-2">
+                  <template x-for="(line, idx) in (current.manifests || [])" :key="line._k + '_sum'">
+                    <div class="text-xs text-white/65 border border-white/10 rounded-lg p-2 bg-white/[0.02]">
+                      <div class="font-semibold text-white/80 truncate flex items-center gap-2">
+                        <span x-text="'M' + (idx+1)"></span>
+                        <span
+                          class="inline-flex px-1.5 py-0.5 rounded text-[10px] border"
+                          :class="{
+                            'mono_route':  'bg-white/5 border-white/10 text-white/50',
+                            'multi_drop':  'bg-orange-400/10 border-orange-400/20 text-orange-300',
+                            'multi_pickup':'bg-emerald-400/10 border-emerald-400/20 text-emerald-300',
+                            'multi_route': 'bg-sky-400/10 border-sky-400/20 text-sky-300',
+                          }[line.type ?? 'mono_route'] ?? 'bg-white/5 border-white/10 text-white/50'"
+                          x-text="{ mono_route:'A→B', multi_drop:'A→B+C', multi_pickup:'A+B→C', multi_route:'A+B→C+D' }[line.type ?? 'mono_route'] ?? line.type"
+                        ></span>
+                        <span x-text="(line.pickupName || '…') + ' → ' + (line.dropoffName || '…')"></span>
+                      </div>
+                      <div class="mt-1 space-y-0.5">
+                        <template x-for="c in (line.cargos || [])" :key="c._k">
+                          <div class="text-white/55">
+                            <span class="text-white/75" x-text="c.commodityName || '—'"></span>
+                            <span x-show="c.quantity"> · <span x-text="c.quantity"></span> SCU</span>
+                            <span x-show="c.pickupName" class="text-emerald-300/70"> · ↑ <span x-text="c.pickupName"></span></span>
+                            <span x-show="c.dropoffName" class="text-orange-300/70"> · ↓ <span x-text="c.dropoffName"></span></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <div x-show="(current.manifests || []).length === 0" class="text-white/55 italic">— aucune ligne —</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- FLOATING DROPDOWN (PORTAL) -->
+        <div
+          x-show="floatDd.open"
+          x-cloak
+          class="fixed z-[9999]"
+          :style="`left:${floatDd.x}px; top:${floatDd.y}px; width:${floatDd.w}px;`"
+          @keydown.escape.window="closeFloat()"
+          @keydown.arrow-down.window="if (floatDd.open) { $event.preventDefault(); floatDdIndex = Math.min(floatDdIndex + 1, (floatDd.results || []).length - 1) }"
+          @keydown.arrow-up.window="if (floatDd.open) { $event.preventDefault(); floatDdIndex = Math.max(floatDdIndex - 1, 0) }"
+          @keydown.enter.window="if (floatDd.open && (floatDd.results || []).length > 0) { const item = floatDd.results[floatDdIndex >= 0 ? floatDdIndex : 0]; if (floatDd.kind === 'poi') selectFloatPoi(item); else if (floatDd.kind === 'commodity') selectFloatCommodity(item); else if (floatDd.kind === 'ship') selectFloatShip(item); }"
+          @mousedown.outside="closeFloat()"
+        >
+          <div class="rounded-xl border border-white/10 bg-[#0b1422]/95 backdrop-blur-sm shadow-2xl overflow-hidden">
+            <div x-show="floatDd.loading" class="px-3 py-2 text-sm text-white/55">Recherche…</div>
+
+            <!-- POI results -->
+            <template x-if="floatDd.kind === 'poi'">
+              <div class="max-h-60 overflow-y-auto p-2 space-y-1">
+                <template x-for="(poi, idx) in (floatDd.results || [])" :key="poi.id">
+                  <button
+                    @mousedown.prevent="selectFloatPoi(poi)"
+                    :class="idx === floatDdIndex ? 'bg-sky-400/20 border-sky-400/30' : 'border-transparent hover:bg-sky-400/10 hover:border-sky-400/20'"
+                    class="w-full text-left px-3 py-2 rounded-lg border transition"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="text-sm font-semibold text-white/90" x-text="getPoiDisplayName(poi)"></div>
+                      <span class="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/60" x-text="getPoiTypeLabel(poi)"></span>
+                    </div>
+                  </button>
+                </template>
+
+                <div x-show="(floatDd.results || []).length === 0 && !floatDd.loading" class="px-3 py-2 text-sm text-white/55 italic">
+                  Aucun résultat.
+                </div>
+              </div>
+            </template>
+
+            <!-- Commodity results -->
+            <template x-if="floatDd.kind === 'commodity'">
+              <div class="max-h-60 overflow-y-auto p-2 space-y-1">
+                <template x-for="(c, idx) in (floatDd.results || [])" :key="c.id">
+                  <button
+                    @mousedown.prevent="selectFloatCommodity(c)"
+                    :class="idx === floatDdIndex ? 'bg-sky-400/20 border-sky-400/30' : 'border-transparent hover:bg-sky-400/10 hover:border-sky-400/20'"
+                    class="w-full text-left px-3 py-2 rounded-lg border transition"
+                  >
+                    <div class="text-sm font-semibold text-white/90" x-text="c.name"></div>
+                  </button>
+                </template>
+
+                <div x-show="(floatDd.results || []).length === 0 && !floatDd.loading" class="px-3 py-2 text-sm text-white/55 italic">
+                  Aucun résultat.
+                </div>
+              </div>
+            </template>
+            <!-- Ship results -->
+            <template x-if="floatDd.kind === 'ship'">
+              <div class="max-h-60 overflow-y-auto p-2 space-y-1">
+                <template x-for="(s, idx) in (floatDd.results || [])" :key="s.id">
+                  <button
+                    @mousedown.prevent="selectFloatShip(s)"
+                    :class="idx === floatDdIndex ? 'bg-sky-400/20 border-sky-400/30' : 'border-transparent hover:bg-sky-400/10 hover:border-sky-400/20'"
+                    class="w-full text-left px-3 py-2 rounded-lg border transition"
+                  >
+                    <div class="text-sm font-semibold text-white/90" x-text="s.name"></div>
+                    <div class="text-xs text-white/45" x-text="s.specification?.scu ? ('SCU: ' + s.specification.scu) : ''"></div>
+                  </button>
+                </template>
+
+                <div x-show="(floatDd.results || []).length === 0 && !floatDd.loading" class="px-3 py-2 text-sm text-white/55 italic">
+                  Aucun vaisseau trouvé.
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

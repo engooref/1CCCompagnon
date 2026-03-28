@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { LayoutState } from '@shared/general'
 import TransportModule from '../components/overlay/TransportModule.vue'
 import MapModule from '../components/overlay/MapModule.vue'
+import RadioModule from '../components/overlay/RadioModule.vue'
 import { useOverlayLayout } from '../composables/useOverlayLayout'
 import { usePinnedMap } from '../composables/usePinnedMap'
 
@@ -90,6 +91,11 @@ onUnmounted(() => {
           </div>
         </Transition>
       </template>
+
+      <!-- ── Radio status widget (coin bas-gauche) ─────────────────── -->
+      <div class="absolute bottom-4 left-4 pointer-events-none" style="z-index: 100;">
+        <RadioModule />
+      </div>
 
       <!-- ── Carte tactique plein overlay (z-index max, au-dessus de tout) ── -->
       <!-- Monté dès qu'une carte est épinglée, caché/montré par CSS pour éviter le rechargement -->

@@ -14,6 +14,7 @@ import AgendaPage from '../pages/AgendaPage.vue'
 import AgendaDetailPage from '../pages/AgendaDetailPage.vue'
 import InventoryPage from '../pages/InventoryPage.vue'
 import FabricatorPage from '../pages/FabricatorPage.vue'
+import RadioPage from '../pages/RadioPage.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -23,6 +24,7 @@ export const router = createRouter({
     { path: '/transport', name: 'transport', component: TransportPage },
     { path: '/transport/new', name: 'transport-new', component: TransportFormPage },
     { path: '/transport/:id/edit', name: 'transport-edit', component: TransportFormPage },
+    { path: '/radio', name: 'radio', component: RadioPage },
     { path: '/transport/:id', name: 'transport-detail', component: TransportDetailPage },
     { path: '/maps', name: 'maps', component: MapPage },
     { path: '/maps/:id', name: 'map-detail', component: MapDetailPage },

@@ -93,11 +93,13 @@ export interface AppSettings {
   defaultPage?: string    // route path shown on startup e.g. '/transport'
   appearance?: AppearanceSettings
   // ── Radio settings ─────────────────────────────────────────────
-  radioLivekitUrl?: string
-  radioServerUrl?: string
+  /** @deprecated remplacé par radioPttBindings */
   radioPttKeyCode?: number | null
+  /** @deprecated remplacé par radioPttBindings */
   radioPttKey?: string
   radioVolume?: number
+  /** Associations canal → touche PTT (multi-canal murmure) */
+  radioPttBindings?: Array<{ channelId: string; keyCode: number | null; key: string }>
 }
 
 export type ConnectionLevel = 'idle' | 'loading' | 'connected' | 'auth_error' | 'network_error' | 'missing_api_key'
@@ -135,6 +137,7 @@ export interface OverlayProfile {
   avatar: string
   rh: RhMember | null
   tester: boolean
+  isBureau: boolean
 }
 
 export interface OverlayAuthResponse {

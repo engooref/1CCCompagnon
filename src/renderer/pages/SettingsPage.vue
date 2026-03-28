@@ -5,8 +5,9 @@ import OverlayTab    from '../components/settings/OverlayTab.vue'
 import TransportTab  from '../components/settings/TransportTab.vue'
 import MapsTab       from '../components/settings/MapsTab.vue'
 import AppearanceTab from '../components/settings/AppearanceTab.vue'
+import RadioTab      from '../components/settings/RadioTab.vue'
 
-type Tab = 'general' | 'overlay' | 'transport' | 'maps' | 'appearance'
+type Tab = 'general' | 'overlay' | 'transport' | 'maps' | 'appearance' | 'radio'
 const activeTab = ref<Tab>('general')
 </script>
 
@@ -28,6 +29,7 @@ const activeTab = ref<Tab>('general')
           { id: 'transport',  label: 'Transport'  },
           { id: 'maps',       label: 'Cartes'     },
           { id: 'appearance', label: 'Apparence'  },
+          { id: 'radio',      label: 'Radio'      },
         ] as const)"
         :key="tab.id"
         @click="activeTab = tab.id"
@@ -47,6 +49,7 @@ const activeTab = ref<Tab>('general')
       <TransportTab  v-if="activeTab === 'transport'"  />
       <MapsTab       v-if="activeTab === 'maps'"       />
       <AppearanceTab v-if="activeTab === 'appearance'" />
+      <RadioTab      v-if="activeTab === 'radio'"      />
     </div>
 
   </section>

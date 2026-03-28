@@ -11,7 +11,7 @@ import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterSe
 import { getSettings } from './services/settingsStore'
 import { onLayoutChange } from './services/layoutStore'
 import { registerRadioIpc } from './ipc/radio.ipc'
-import { registerPttKey, setPttTargetWindow } from './services/radioService'
+import { registerPttBindings, setPttTargetWindow } from './services/radioService'
 import { uIOhook } from 'uiohook-napi'
 
 interface ToggleKeyObject { accel?: string; keyCode?: number }
@@ -193,8 +193,8 @@ app.whenReady().then(async () => {
   if (mainWindow) {
     setPttTargetWindow(mainWindow)
     const radioSettings = getSettings()
-    const pttCode = radioSettings.radioPttKeyCode ?? 20 // CapsLock par défaut
-    registerPttKey(pttCode)
+    const bindings = radioSettings.radioPttBindings ?? []
+    if (bindings.length) registerPttBindings(bindings)
   }
 
   // Services en arrière-plan (non bloquants)
@@ -445,8 +445,6 @@ app.whenReady().then(async () => {
     }
   }
 
-  uIOhook.on('keydown', (_e: any) => { /* debug hook */ })
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
@@ -454,11 +452,18 @@ app.whenReady().then(async () => {
 
 // ─── Nettoyage ────────────────────────────────────────────────────────────────
 
-app.on('window-all-closed', () => {
+// Stopper uIOhook le plus tôt possible (avant la destruction des fenêtres)
+// pour éviter le lag souris causé par un hook Windows orphelin en fin de vie.
+app.on('before-quit', () => {
+  if (ioHookStarted) {
+    try { uIOhook.stop() } catch { /* ignore */ }
+    ioHookStarted = false
+  }
   stopGameWatcher()
   globalShortcut.unregisterAll()
-  if (ioHookStarted) { try { uIOhook.stop() } catch { /* ignore */ } }
+})
 
+app.on('window-all-closed', () => {
   try {
     const ow = getOverlayWindow()
     if (ow && !ow.isDestroyed()) { try { ow.destroy() } catch {} }

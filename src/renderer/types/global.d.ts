@@ -1,6 +1,6 @@
 import type { AppSettings, ConnectionState, OverlayAuthResponse, OverlayProfile, LayoutState, OverlayContext } from '@shared/general'
 import type { LogEntry } from '../../main/services/logger'
-import type { RadioSettings } from '@shared/radio'
+import type { RadioSettings, PttBinding } from '@shared/radio'
 
 declare global {
   interface Window {
@@ -63,11 +63,14 @@ declare global {
       // Radio
       radioGetSettings: () => Promise<RadioSettings>
       radioUpdateSettings: (partial: Partial<RadioSettings>) => Promise<boolean>
-      radioSetPttKey: (payload: { keyCode: number | null; key: string }) => Promise<boolean>
+      radioSetPttBindings: (bindings: PttBinding[]) => Promise<boolean>
       radioStopPtt: () => Promise<boolean>
-      onRadioPttStart: (cb: () => void) => void
-      onRadioPttStop: (cb: () => void) => void
+      onRadioPttStart: (cb: (channelId: string) => void) => void
+      onRadioPttStop: (cb: (channelId: string) => void) => void
       offRadioPtt: () => void
+      radioRelayState?: (state: unknown) => void
+      onRadioState?: (cb: (state: unknown) => void) => void
+      offRadioState?: () => void
 
       // App version & updates
       getAppVersion: () => Promise<string>

@@ -25,6 +25,9 @@ interface FormCargo {
 interface FormManifest {
   _k: number
   id: number | null
+  missionGroup: string
+  missionType: string
+  maxBoxSize: number | null
   pickup: number | null
   pickupName: string
   dropoff: number | null
@@ -155,11 +158,11 @@ async function loadOrder() {
       note:   s.note ?? '',
     }))
 
-      // Group server manifests by pickup+dropoff into a single form manifest with multiple cargos
+      // Group server manifests by missionGroup into a single form manifest with multiple cargos
       const rawManifests: any[] = order.manifests ?? []
       const groups: Record<string, any> = {}
-        for (const m of rawManifests) { 
-        const key = `${m.pickup ?? 'null'}::${m.dropoff ?? 'null'}`
+      for (const m of rawManifests) {
+        const key = m.missionGroup ?? `${m.pickup ?? 'null'}::${m.dropoff ?? 'null'}`
         const cargo = (m.cargos && m.cargos.length)
           ? m.cargos.map((c: any) => ({ id: c.id ?? null, commodityId: c.commodityId ?? null, commodityName: c.commodityName ?? '', quantity: c.quantity ?? 1 }))
           : [{ id: m.id ?? null, commodityId: m.commodityId ?? null, commodityName: m.commodityName ?? '', quantity: m.quantity ?? 1 }]
@@ -168,6 +171,9 @@ async function loadOrder() {
           groups[key] = {
             _k: Date.now() + Math.floor(Math.random() * 10000),
             id: null,
+            missionGroup: m.missionGroup ?? crypto.randomUUID(),
+            missionType: m.type ?? 'mono_route',
+            maxBoxSize: m.maxBoxSize ?? null,
             pickup: m.pickup ?? null,
             pickupName: m.pickupName ?? '',
             dropoff: m.dropoff ?? null,
@@ -243,6 +249,9 @@ function addLine() {
   const _k = Date.now()
   form.manifests.push({
     _k, id: null,
+    missionGroup: crypto.randomUUID(),
+    missionType: 'mono_route',
+    maxBoxSize: null,
     pickup: null, pickupName: '',
     dropoff: null, dropoffName: '',
     commodityId: null, commodityName: '',
@@ -433,6 +442,9 @@ async function save(): Promise<number | null> {
       (m.cargos && m.cargos.length)
         ? m.cargos.map(c => ({
             ...(c.id ? { id: c.id } : {}),
+            missionType: m.missionType,
+            missionGroup: m.missionGroup,
+            maxBoxSize:  m.maxBoxSize ?? null,
             pickup:      m.pickup,
             dropoff:     m.dropoff,
             commodityId: c.commodityId,
@@ -440,6 +452,9 @@ async function save(): Promise<number | null> {
           }))
         : [{
             ...(m.id ? { id: m.id } : {}),
+            missionType: m.missionType,
+            missionGroup: m.missionGroup,
+            maxBoxSize:  m.maxBoxSize ?? null,
             pickup:      m.pickup,
             dropoff:     m.dropoff,
             commodityId: m.commodityId,
@@ -841,6 +856,19 @@ async function deleteDelivery() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <!-- Max box size -->
+              <div>
+                <label class="block text-[10px] text-th-muted mb-1">Taille max des caisses (SCU) — optionnel</label>
+                <input
+                  :value="m.maxBoxSize ?? ''"
+                  @input="m.maxBoxSize = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
+                  type="number"
+                  min="1"
+                  placeholder="Aucune limite"
+                  class="w-32 rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
+                />
               </div>
 
               <!-- Commodity + Quantity (support multiple cargos per line) -->

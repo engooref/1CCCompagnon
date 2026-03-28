@@ -17,6 +17,9 @@ export interface CargoItem {
 
 export interface ManifestItem {
   id?: number
+  type?: string
+  missionGroup?: string
+  maxBoxSize?: number | null
   pickup?: number | null
   pickupName?: string | null
   pickupSystemName?: string | null

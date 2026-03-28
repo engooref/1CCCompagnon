@@ -91,12 +91,16 @@ contextBridge.exposeInMainWorld('oneCC', {
   // ── Radio ────────────────────────────────────────────────────────────────
   radioGetSettings:    () => ipcRenderer.invoke('radio:get-settings'),
   radioUpdateSettings: (partial: unknown) => ipcRenderer.invoke('radio:update-settings', partial),
-  radioSetPttKey:      (payload: { keyCode: number | null; key: string }) => ipcRenderer.invoke('radio:set-ptt-key', payload),
+  radioSetPttBindings: (bindings: unknown) => ipcRenderer.invoke('radio:set-ptt-bindings', bindings),
   radioStopPtt:        () => ipcRenderer.invoke('radio:stop-ptt'),
-  onRadioPttStart: (cb: () => void) => ipcRenderer.on('radio:ptt-start', () => cb()),
-  onRadioPttStop:  (cb: () => void) => ipcRenderer.on('radio:ptt-stop',  () => cb()),
+  onRadioPttStart: (cb: (channelId: string) => void) => ipcRenderer.on('radio:ptt-start', (_e, channelId) => cb(channelId)),
+  onRadioPttStop:  (cb: (channelId: string) => void) => ipcRenderer.on('radio:ptt-stop',  (_e, channelId) => cb(channelId)),
   offRadioPtt: () => {
     ipcRenderer.removeAllListeners('radio:ptt-start')
     ipcRenderer.removeAllListeners('radio:ptt-stop')
   },
+  // Relay état radio main window → main process → overlay window
+  radioRelayState: (state: unknown) => ipcRenderer.send('radio:relay-state', state),
+  onRadioState:    (cb: (state: unknown) => void) => ipcRenderer.on('radio:state', (_e, s) => cb(s)),
+  offRadioState:   () => ipcRenderer.removeAllListeners('radio:state'),
 })
