@@ -72,6 +72,7 @@ interface CatalogItem {
   categoryName: string
   hasRecipe: boolean
   iOwn: boolean
+  ownersCount?: number
   editUrl?: string
   deleteUrl?: string
 }
@@ -115,7 +116,15 @@ const catalogSearch = ref('')
 const catalogCategoryFilter = ref('')
 const catalogRecipeFilter = ref<'all' | 'with' | 'without'>('all')
 const catalogOwnedOnly = ref(false)
+const catalogHasOwners = ref(false)
 const catalogSectionFilter = ref('')
+
+// Global quick search (search tab)
+const globalSearch = ref('')
+const globalSearchResults = ref<FabItem[]>([])
+const globalSearchLoading = ref(false)
+const globalSearchOpen = ref(false)
+let globalSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 // Modal
 const modalOpen = ref(false)
@@ -187,6 +196,9 @@ const filteredCatalogSections = computed(() => {
     }
     if (catalogOwnedOnly.value) {
       items = items.filter(i => i.iOwn)
+    }
+    if (catalogHasOwners.value) {
+      items = items.filter(i => (i.ownersCount ?? 0) > 0)
     }
     if (catalogSearch.value) {
       const q = catalogSearch.value.toLowerCase()
@@ -308,12 +320,53 @@ async function fetchCatalog() {
     } else {
       secs = []
     }
-    catalogSections.value = secs.map(sec => ({ ...sec, items: (sec.items ?? []).map(normalizeId) }))
+    catalogSections.value = secs.map(sec => ({
+      ...sec,
+      items: (sec.items ?? []).map((item: any) => ({
+        ...normalizeId(item),
+        ownersCount: item.ownersCount ?? item.owners_count ?? item.ownerCount ?? undefined,
+      }))
+    }))
   } catch (e) {
     console.error('Failed to load fabricator catalog', e)
   } finally {
     catalogLoading.value = false
   }
+}
+
+async function fetchGlobalSearch(q: string) {
+  if (!urls.value || !q.trim()) {
+    globalSearchResults.value = []
+    globalSearchOpen.value = false
+    return
+  }
+  globalSearchLoading.value = true
+  globalSearchOpen.value = true
+  try {
+    const { data } = await http.get(urls.value.fabricatorItemSearch, {
+      headers: authHeaders(),
+      params: { q },
+    })
+    const raw = data?.data ?? data
+    const list: any[] = Array.isArray(raw) ? raw : (raw?.items ?? [])
+    globalSearchResults.value = list.map(normalizeId)
+  } catch (e) {
+    console.error('Failed to search fabricator items', e)
+    globalSearchResults.value = []
+  } finally {
+    globalSearchLoading.value = false
+  }
+}
+
+function selectGlobalItem(item: FabItem) {
+  globalSearch.value = ''
+  globalSearchOpen.value = false
+  globalSearchResults.value = []
+  selectedItemId.value = item.id
+  if (!allItems.value.find(i => i.id === item.id)) {
+    allItems.value = [item]
+  }
+  fetchDetail(item.id)
 }
 
 async function openModal(itemId: number) {
@@ -474,6 +527,7 @@ function onClickOutside(e: MouseEvent) {
   if (!target.closest('#sectionCol')) sectionDropOpen.value = false
   if (!target.closest('#catCol')) catDropOpen.value = false
   if (!target.closest('#itemCol')) itemDropOpen.value = false
+  if (!target.closest('#fabQuicksearch')) globalSearchOpen.value = false
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -504,6 +558,16 @@ watch(activeTab, (tab) => {
     fetchCatalog()
   }
 })
+
+watch(globalSearch, (q) => {
+  if (globalSearchTimer) clearTimeout(globalSearchTimer)
+  if (!q.trim()) {
+    globalSearchResults.value = []
+    globalSearchOpen.value = false
+    return
+  }
+  globalSearchTimer = setTimeout(() => fetchGlobalSearch(q), 350)
+})
 </script>
 
 <template>
@@ -533,6 +597,39 @@ watch(activeTab, (tab) => {
          TAB: SEARCH
     ═══════════════════════════════════════════ -->
     <section v-if="activeTab === 'search'" class="fab-main-stack">
+
+      <!-- Recherche rapide par nom -->
+      <div id="fabQuicksearch" class="fab-quicksearch">
+        <div class="fab-search-row">
+          <span class="fab-search-row__icon">⚡</span>
+          <input
+            v-model="globalSearch"
+            class="fab-search-input"
+            type="text"
+            placeholder="Recherche rapide par nom…"
+            autocomplete="off"
+            @focus="globalSearchOpen = globalSearchResults.length > 0"
+          >
+          <button v-if="globalSearch" class="fab-clear" @click="globalSearch = ''; globalSearchResults = []; globalSearchOpen = false">✕</button>
+        </div>
+        <div v-if="globalSearchOpen" class="fab-quicksearch-drop">
+          <div v-if="globalSearchLoading" class="fab-quicksearch-drop__status">Recherche…</div>
+          <template v-else>
+            <div
+              v-for="item in globalSearchResults" :key="item.id"
+              class="fab-quicksearch-row"
+              @click="selectGlobalItem(item)"
+            >
+              <span class="fab-quicksearch-row__name">{{ item.name }}</span>
+              <span v-if="item.categoryName" class="fab-quicksearch-row__cat">{{ item.categoryName }}</span>
+              <span class="fab-drop__pill" :class="item.hasRecipe ? 'fab-drop__pill--yes' : 'fab-drop__pill--no'">{{ item.hasRecipe ? '✓' : '—' }}</span>
+            </div>
+            <div v-if="globalSearchResults.length === 0" class="fab-quicksearch-drop__status">
+              Aucun résultat pour « {{ globalSearch }} »
+            </div>
+          </template>
+        </div>
+      </div>
 
       <!-- Panneau de recherche réductible -->
       <div class="fab-selectors" :class="{ 'is-collapsed': !searchPanelOpen }">
@@ -775,6 +872,10 @@ watch(activeTab, (tab) => {
             :class="{ 'is-active': catalogOwnedOnly }"
             @click="catalogOwnedOnly = !catalogOwnedOnly"
           >🧾 Mes recettes</button>
+          <button type="button" class="fab-filterbtn fab-filterbtn--owners"
+            :class="{ 'is-active': catalogHasOwners }"
+            @click="catalogHasOwners = !catalogHasOwners"
+          >👥 Avec possesseur(s)</button>
         </div>
 
         <!-- Category + search -->
@@ -1013,6 +1114,34 @@ watch(activeTab, (tab) => {
 
 /* ─── SEARCH TAB ─────────────────────────────────────────────────────────────── */
 .fab-main-stack { display: flex; flex-direction: column; gap: .65rem; }
+
+/* ─── QUICK SEARCH ───────────────────────────────────────────────────────────── */
+.fab-quicksearch { position: relative; }
+.fab-quicksearch-drop {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 100;
+  max-height: 320px; overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--accent-rgb, 110 210 255) / 0.22);
+  background: rgba(10,18,30,.99);
+  box-shadow: 0 16px 40px rgba(0,0,0,.55);
+  overscroll-behavior: contain;
+}
+.fab-quicksearch-drop__status {
+  padding: .85rem 1rem;
+  font-size: .84rem;
+  color: var(--th-secondary);
+}
+.fab-quicksearch-row {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .65rem .9rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  transition: background .1s ease; user-select: none;
+}
+.fab-quicksearch-row:last-child { border-bottom: none; }
+.fab-quicksearch-row:hover { background: rgba(var(--accent-rgb, 110 210 255) / 0.06); }
+.fab-quicksearch-row__name { flex: 1; font-size: .87rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fab-quicksearch-row__cat { font-size: .74rem; color: var(--th-tertiary); white-space: nowrap; flex-shrink: 0; }
 
 .fab-selectors {
   border: 1px solid rgba(var(--accent-rgb, 110 210 255) / 0.10);

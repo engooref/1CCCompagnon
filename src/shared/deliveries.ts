@@ -59,6 +59,8 @@ export interface TransportOrder {
   shipsCount?: number
   ships?: Array<{ shipId?: string; shipName?: string; note?: string; cargo?: number | null }>
   manifests?: ManifestItem[]
+  marketOpportunitiesEnabled?: boolean
+  marketBudget?: number | null
   itinerary?: {
     id?: number
     name?: string

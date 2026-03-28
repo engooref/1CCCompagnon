@@ -24,6 +24,7 @@ const defaults: AppSettings = {
       generate:    '/transport/{id}/generate',
       mercureInfo: '/transport/mercure-info',
       opportunities: '/transport/market-opportunities',
+      settings:      '/transport/{id}/settings',
     },
     starmap: {
       poiSearch: '/reference/pois',

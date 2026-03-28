@@ -20,6 +20,10 @@ interface FormCargo {
   commodityId: number | null
   commodityName: string
   quantity: number
+  pickup: number | null
+  pickupName: string
+  dropoff: number | null
+  dropoffName: string
 }
 
 interface FormManifest {
@@ -187,7 +191,7 @@ async function loadOrder() {
 
         for (const c of cargo) {
           const _k = Date.now() + Math.floor(Math.random() * 10000)
-          groups[key].cargos.push({ _k, id: c.id ?? null, commodityId: c.commodityId ?? null, commodityName: c.commodityName ?? '', quantity: c.quantity ?? 1 })
+          groups[key].cargos.push({ _k, id: c.id ?? null, commodityId: c.commodityId ?? null, commodityName: c.commodityName ?? '', quantity: c.quantity ?? 1, pickup: c.pickup ?? null, pickupName: c.pickupName ?? '', dropoff: c.dropoff ?? null, dropoffName: c.dropoffName ?? '' })
         }
       }
       form.manifests = Object.values(groups) as FormManifest[]
@@ -199,6 +203,8 @@ async function loadOrder() {
       getSearch(`commodity_${m._k}`).query = m.commodityName
       for (const c of m.cargos) {
         getSearch(`commodity_${m._k}_c_${c._k}`).query = c.commodityName ?? ''
+        getSearch(`cargo_pickup_${m._k}_${c._k}`).query = c.pickupName ?? ''
+        getSearch(`cargo_dropoff_${m._k}_${c._k}`).query = c.dropoffName ?? ''
       }
     }
     savedId.value = order.id
@@ -264,8 +270,10 @@ function addLine() {
   const m = form.manifests.find(mm => mm._k === _k)
   if (m) {
     const c_k = Date.now() + Math.floor(Math.random() * 1000)
-    m.cargos.push({ _k: c_k, id: null, commodityId: null, commodityName: '', quantity: 1 })
+    m.cargos.push({ _k: c_k, id: null, commodityId: null, commodityName: '', quantity: 1, pickup: null, pickupName: '', dropoff: null, dropoffName: '' })
     getSearch(`commodity_${_k}_c_${c_k}`).query = ''
+    getSearch(`cargo_pickup_${_k}_${c_k}`).query = ''
+    getSearch(`cargo_dropoff_${_k}_${c_k}`).query = ''
   }
 }
 
@@ -278,6 +286,8 @@ function removeLine(idx: number) {
     // remove cargo search keys
     ;(m.cargos ?? []).forEach(c => {
       delete searches[`commodity_${m._k}_c_${c._k}`]
+      delete searches[`cargo_pickup_${m._k}_${c._k}`]
+      delete searches[`cargo_dropoff_${m._k}_${c._k}`]
     })
   }
   form.manifests.splice(idx, 1)
@@ -320,19 +330,30 @@ function selectPoi(fieldKey: string, poi: any) {
   if (fieldKey === 'origin') {
     form.origin     = poi.id
     form.originName = name
+  } else if (fieldKey.startsWith('cargo_pickup_') || fieldKey.startsWith('cargo_dropoff_')) {
+    const isPickup = fieldKey.startsWith('cargo_pickup_')
+    const withoutPrefix = fieldKey.startsWith('cargo_pickup_')
+      ? fieldKey.slice('cargo_pickup_'.length)
+      : fieldKey.slice('cargo_dropoff_'.length)
+    for (const m of form.manifests) {
+      const mk = String(m._k)
+      if (!withoutPrefix.startsWith(mk + '_')) continue
+      const cargoKeyStr = withoutPrefix.slice(mk.length + 1)
+      const c = m.cargos.find(cc => String(cc._k) === cargoKeyStr)
+      if (c) {
+        if (isPickup) { c.pickup = poi.id; c.pickupName = name }
+        else          { c.dropoff = poi.id; c.dropoffName = name }
+      }
+      break
+    }
   } else {
     const sep  = fieldKey.indexOf('_')
     const type = fieldKey.substring(0, sep)
     const key  = Number(fieldKey.substring(sep + 1))
     const m    = form.manifests.find(m => m._k === key)
     if (m) {
-      if (type === 'pickup') {
-        m.pickup     = poi.id
-        m.pickupName = name
-      } else if (type === 'dropoff') {
-        m.dropoff     = poi.id
-        m.dropoffName = name
-      }
+      if (type === 'pickup') { m.pickup = poi.id; m.pickupName = name }
+      else if (type === 'dropoff') { m.dropoff = poi.id; m.dropoffName = name }
     }
   }
   const s   = getSearch(fieldKey)
@@ -412,10 +433,10 @@ function addCargo(manifestKey: number) {
   const m = form.manifests.find(mm => mm._k === manifestKey)
   if (!m) return
   const _k = Date.now() + Math.floor(Math.random() * 1000)
-  // Always add a new, empty cargo entry. Do not migrate or clear legacy single-item fields.
-  const initial = { id: null, commodityId: null, commodityName: '', quantity: 1 }
-  m.cargos.push({ _k, ...initial })
+  m.cargos.push({ _k, id: null, commodityId: null, commodityName: '', quantity: 1, pickup: null, pickupName: '', dropoff: null, dropoffName: '' })
   getSearch(`commodity_${manifestKey}_c_${_k}`).query = ''
+  getSearch(`cargo_pickup_${manifestKey}_${_k}`).query = ''
+  getSearch(`cargo_dropoff_${manifestKey}_${_k}`).query = ''
 }
 
 function removeCargo(manifestKey: number, cargoKey: number) {
@@ -424,6 +445,8 @@ function removeCargo(manifestKey: number, cargoKey: number) {
   const idx = m.cargos.findIndex(c => c._k === cargoKey)
   if (idx !== -1) {
     delete searches[`commodity_${manifestKey}_c_${cargoKey}`]
+    delete searches[`cargo_pickup_${manifestKey}_${cargoKey}`]
+    delete searches[`cargo_dropoff_${manifestKey}_${cargoKey}`]
     m.cargos.splice(idx, 1)
   }
 }
@@ -438,29 +461,25 @@ async function save(): Promise<number | null> {
     name:            form.name,
     origin:          form.origin,
     ships:    form.ships.map(s => ({ shipId: s.shipId, note: s.note })),
-    lines:    form.manifests.flatMap(m =>
-      (m.cargos && m.cargos.length)
-        ? m.cargos.map(c => ({
-            ...(c.id ? { id: c.id } : {}),
-            missionType: m.missionType,
-            missionGroup: m.missionGroup,
-            maxBoxSize:  m.maxBoxSize ?? null,
-            pickup:      m.pickup,
-            dropoff:     m.dropoff,
-            commodityId: c.commodityId,
-            quantity:    c.quantity ?? 1,
-          }))
-        : [{
-            ...(m.id ? { id: m.id } : {}),
-            missionType: m.missionType,
-            missionGroup: m.missionGroup,
-            maxBoxSize:  m.maxBoxSize ?? null,
-            pickup:      m.pickup,
-            dropoff:     m.dropoff,
-            commodityId: m.commodityId,
-            quantity:    m.quantity ?? 1,
-          }]
-    ),
+    lines:    form.manifests.flatMap(m => {
+      const type = m.missionType ?? 'mono_route'
+      const missionGroup = m.missionGroup ?? crypto.randomUUID()
+      const cargos = m.cargos && m.cargos.length
+        ? m.cargos
+        : [{ _k: 0, id: m.id, commodityId: m.commodityId, commodityName: m.commodityName, quantity: m.quantity ?? 1, pickup: null, pickupName: '', dropoff: null, dropoffName: '' }]
+      return cargos.map(c => ({
+        ...(c.id ? { id: c.id } : {}),
+        missionType:  type,
+        missionGroup,
+        maxBoxSize:   m.maxBoxSize ?? null,
+        pickup:       (type === 'multi_pickup' || type === 'multi_route') ? null : (m.pickup ?? null),
+        dropoff:      (type === 'multi_drop'   || type === 'multi_route') ? null : (m.dropoff ?? null),
+        cargoPickup:  (type === 'multi_pickup' || type === 'multi_route') ? (c.pickup ?? null) : null,
+        cargoDropoff: (type === 'multi_drop'   || type === 'multi_route') ? (c.dropoff ?? null) : null,
+        commodityId:  c.commodityId,
+        quantity:     c.quantity ?? 1,
+      }))
+    }),
   }
   try {
     if (savedId.value) {
@@ -782,24 +801,36 @@ async function deleteDelivery() {
               class="rounded-md border border-th-muted bg-th-card/20 p-3 space-y-2"
             >
               <!-- Line header -->
-              <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-th-muted">Ligne {{ idx + 1 }}</span>
-                <button
-                  @click="removeLine(idx)"
-                  class="text-th-muted hover:text-rose-400 transition"
-                >
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-[11px] font-bold text-th-muted">Ligne {{ idx + 1 }}</span>
+                  <!-- Type selector -->
+                  <div class="flex items-center rounded border border-th-muted/50 overflow-hidden text-[10px]">
+                    <button
+                      v-for="[val, label] in Object.entries({'mono_route':'A→B','multi_drop':'A→B+C','multi_pickup':'A+B→C','multi_route':'A+B→C+D'})"
+                      :key="val"
+                      @click="m.missionType = val"
+                      class="px-2 py-0.5 transition"
+                      :class="m.missionType === val ? 'bg-accent/25 text-accent font-semibold' : 'text-th-muted hover:bg-th-card hover:text-th-secondary'"
+                    >{{ label }}</button>
+                  </div>
+                </div>
+                <button @click="removeLine(idx)" class="text-th-muted hover:text-rose-400 transition">
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                   </svg>
                 </button>
               </div>
 
-              <!-- Pickup + Dropoff -->
+              <!-- Pickup + Dropoff (manifest-level, conditional on type) -->
               <div class="grid grid-cols-2 gap-2">
 
-                <!-- Pickup -->
-                <div>
-                  <label class="block text-[10px] text-th-muted mb-1">Pickup (chargement)</label>
+                <!-- Pickup (mono_route or multi_drop) -->
+                <div v-show="m.missionType === 'mono_route' || m.missionType === 'multi_drop'">
+                  <label class="block text-[10px] text-th-muted mb-1">
+                    Pickup
+                    <span v-if="m.missionType === 'multi_drop'" class="normal-case font-normal text-th-muted/70"> (partagé)</span>
+                  </label>
                   <div class="relative">
                     <input
                       :value="getSearch(`pickup_${m._k}`).query"
@@ -827,9 +858,12 @@ async function deleteDelivery() {
                   </div>
                 </div>
 
-                <!-- Dropoff -->
-                <div>
-                  <label class="block text-[10px] text-th-muted mb-1">Dropoff (livraison)</label>
+                <!-- Dropoff (mono_route or multi_pickup) -->
+                <div v-show="m.missionType === 'mono_route' || m.missionType === 'multi_pickup'">
+                  <label class="block text-[10px] text-th-muted mb-1">
+                    Dropoff
+                    <span v-if="m.missionType === 'multi_pickup'" class="normal-case font-normal text-th-muted/70"> (partagé)</span>
+                  </label>
                   <div class="relative">
                     <input
                       :value="getSearch(`dropoff_${m._k}`).query"
@@ -875,49 +909,108 @@ async function deleteDelivery() {
               <div>
                 <label class="block text-[10px] text-th-muted mb-1">Marchandises</label>
 
-                <!-- Multiple cargos UI (always shown) -->
                 <div class="space-y-2">
                   <div
-                    v-for="(c, ci) in m.cargos"
+                    v-for="c in m.cargos"
                     :key="c._k"
-                    class="grid grid-cols-12 gap-2 items-center"
+                    class="rounded border border-th-muted/30 bg-th-card/10 p-2 space-y-1.5"
                   >
-                    <div class="col-span-7">
-                      <div class="relative">
-                        <input
-                          :value="getSearch(`commodity_${m._k}_c_${c._k}`).query"
-                          @input="onCommodityInput(`commodity_${m._k}_c_${c._k}`, ($event.target as HTMLInputElement).value)"
-                          @blur="hideSearch(`commodity_${m._k}_c_${c._k}`)"
-                          type="text"
-                          placeholder="Rechercher une marchandise…"
-                          class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
-                        />
-                        <div
-                          v-if="getSearch(`commodity_${m._k}_c_${c._k}`).show || getSearch(`commodity_${m._k}_c_${c._k}`).loading"
-                          class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
-                        >
-                          <div v-if="getSearch(`commodity_${m._k}_c_${c._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
-                          <button
-                            v-for="res in getSearch(`commodity_${m._k}_c_${c._k}`).results"
-                            :key="res.id"
-                            @mousedown.prevent="selectCommodity(`commodity_${m._k}_c_${c._k}`, res)"
-                            class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
+                    <!-- Commodity + qty + remove -->
+                    <div class="grid grid-cols-12 gap-2 items-center">
+                      <div class="col-span-7">
+                        <div class="relative">
+                          <input
+                            :value="getSearch(`commodity_${m._k}_c_${c._k}`).query"
+                            @input="onCommodityInput(`commodity_${m._k}_c_${c._k}`, ($event.target as HTMLInputElement).value)"
+                            @blur="hideSearch(`commodity_${m._k}_c_${c._k}`)"
+                            type="text"
+                            placeholder="Marchandise…"
+                            class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
+                          />
+                          <div
+                            v-if="getSearch(`commodity_${m._k}_c_${c._k}`).show || getSearch(`commodity_${m._k}_c_${c._k}`).loading"
+                            class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
                           >
-                            {{ res.name }}
-                          </button>
+                            <div v-if="getSearch(`commodity_${m._k}_c_${c._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
+                            <button
+                              v-for="res in getSearch(`commodity_${m._k}_c_${c._k}`).results"
+                              :key="res.id"
+                              @mousedown.prevent="selectCommodity(`commodity_${m._k}_c_${c._k}`, res)"
+                              class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
+                            >
+                              {{ res.name }}
+                            </button>
+                          </div>
                         </div>
                       </div>
+                      <div class="col-span-3">
+                        <input
+                          v-model.number="c.quantity"
+                          type="number"
+                          min="1"
+                          class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary"
+                        />
+                      </div>
+                      <div class="col-span-2 flex items-center justify-end">
+                        <button @click="removeCargo(m._k, c._k)" type="button" class="text-rose-400 hover:underline text-xs">Suppr</button>
+                      </div>
                     </div>
-                    <div class="col-span-3">
-                      <input
-                        v-model.number="c.quantity"
-                        type="number"
-                        min="1"
-                        class="w-full rounded-md border border-th-subtle bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary"
-                      />
-                    </div>
-                    <div class="col-span-2 flex items-center justify-end">
-                      <button @click="removeCargo(m._k, c._k)" type="button" class="text-rose-400 hover:underline text-xs">Suppr</button>
+                    <!-- Per-cargo POI (multi types) -->
+                    <div
+                      v-if="m.missionType === 'multi_pickup' || m.missionType === 'multi_route' || m.missionType === 'multi_drop'"
+                      class="grid gap-2"
+                      :class="m.missionType === 'multi_route' ? 'grid-cols-2' : 'grid-cols-1'"
+                    >
+                      <!-- Per-cargo pickup (multi_pickup or multi_route) -->
+                      <div v-if="m.missionType === 'multi_pickup' || m.missionType === 'multi_route'">
+                        <label class="block text-[10px] text-emerald-400/70 mb-1">Pickup cargaison</label>
+                        <div class="relative">
+                          <input
+                            :value="getSearch(`cargo_pickup_${m._k}_${c._k}`).query"
+                            @input="onPoiInput(`cargo_pickup_${m._k}_${c._k}`, ($event.target as HTMLInputElement).value)"
+                            @blur="hideSearch(`cargo_pickup_${m._k}_${c._k}`)"
+                            type="text" placeholder="Lieu de pickup…"
+                            class="w-full rounded-md border border-emerald-400/20 bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-emerald-400/40"
+                          />
+                          <div
+                            v-if="getSearch(`cargo_pickup_${m._k}_${c._k}`).show || getSearch(`cargo_pickup_${m._k}_${c._k}`).loading"
+                            class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
+                          >
+                            <div v-if="getSearch(`cargo_pickup_${m._k}_${c._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
+                            <button
+                              v-for="poi in getSearch(`cargo_pickup_${m._k}_${c._k}`).results"
+                              :key="poi.id"
+                              @mousedown.prevent="selectPoi(`cargo_pickup_${m._k}_${c._k}`, poi)"
+                              class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
+                            >{{ poi.name }}<span v-if="poi.systemName" class="text-th-muted ml-1">({{ poi.systemName }})</span></button>
+                          </div>
+                        </div>
+                      </div>
+                      <!-- Per-cargo dropoff (multi_drop or multi_route) -->
+                      <div v-if="m.missionType === 'multi_drop' || m.missionType === 'multi_route'">
+                        <label class="block text-[10px] text-orange-400/70 mb-1">Dropoff cargaison</label>
+                        <div class="relative">
+                          <input
+                            :value="getSearch(`cargo_dropoff_${m._k}_${c._k}`).query"
+                            @input="onPoiInput(`cargo_dropoff_${m._k}_${c._k}`, ($event.target as HTMLInputElement).value)"
+                            @blur="hideSearch(`cargo_dropoff_${m._k}_${c._k}`)"
+                            type="text" placeholder="Lieu de dropoff…"
+                            class="w-full rounded-md border border-orange-400/20 bg-th-card px-2.5 py-1.5 text-[11px] text-th-primary placeholder:text-th-muted focus:outline-none focus:border-orange-400/40"
+                          />
+                          <div
+                            v-if="getSearch(`cargo_dropoff_${m._k}_${c._k}`).show || getSearch(`cargo_dropoff_${m._k}_${c._k}`).loading"
+                            class="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-th-subtle bg-th-surface shadow-xl max-h-40 overflow-y-auto"
+                          >
+                            <div v-if="getSearch(`cargo_dropoff_${m._k}_${c._k}`).loading" class="px-3 py-2 text-xs text-th-muted">Recherche…</div>
+                            <button
+                              v-for="poi in getSearch(`cargo_dropoff_${m._k}_${c._k}`).results"
+                              :key="poi.id"
+                              @mousedown.prevent="selectPoi(`cargo_dropoff_${m._k}_${c._k}`, poi)"
+                              class="w-full text-left px-3 py-1.5 text-[11px] text-th-primary hover:bg-th-card border-b border-th-muted last:border-0"
+                            >{{ poi.name }}<span v-if="poi.systemName" class="text-th-muted ml-1">({{ poi.systemName }})</span></button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div>

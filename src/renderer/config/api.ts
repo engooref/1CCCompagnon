@@ -23,6 +23,7 @@ export function createOverlayUrls(settings: AppSettings) {
     transportGenerate: (id: number) => url(base, o, 'transports', 'generate').replace('{id}', String(id)),
     mercureInfo:          url(base, o, 'transports', 'mercureInfo'),
     marketOpportunities:  url(base, o, 'transports', 'opportunities'),
+    transportSettings:   (id: number) => url(base, o, 'transports', 'settings').replace('{id}', String(id)),
     poiSearch:            `${url(base, o, 'starmap', 'poiSearch')}`,
     shipModels:           `${url(base, o, 'market', 'shipModels')}`,
     commodities:          `${url(base, o, 'market', 'commodities')}`,

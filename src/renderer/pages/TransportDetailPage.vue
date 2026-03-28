@@ -26,8 +26,8 @@ const expandedLegs = ref(new Set<string | number>())
 const generatingItinerary = ref(false)
 
 // ─── Market Opportunities ──────────────────────────────────────────────────
-const showMarketOpp    = ref(app.settings?.marketOppsEnabled ?? false)
-const marketBudget     = ref<number | null>(app.settings?.marketOppsBudget ?? null)
+const showMarketOpp    = ref(false)
+const marketBudget     = ref<number | null>(null)
 const legOpportunities = ref(new Map<string | number, any[]>())
 const loadingOpp       = ref(false)
 
@@ -132,15 +132,40 @@ async function fetchAllOpportunities() {
   }
 }
 
-function toggleMarketOpp() {
-  showMarketOpp.value = !showMarketOpp.value
-  app.saveSettings({ marketOppsEnabled: showMarketOpp.value })
-  if (!showMarketOpp.value) {
+async function toggleMarketOpp() {
+  if (!urls.value || !app.bearerToken) return
+  const next = !showMarketOpp.value
+  showMarketOpp.value = next
+  try {
+    await http.post(
+      urls.value.transportSettings(orderId.value),
+      JSON.stringify({ marketOpportunitiesEnabled: next }),
+      { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
+    )
+  } catch { /* silent */ }
+  if (!next) {
     legOpportunities.value.clear()
   } else {
     fetchAllOpportunities()
   }
 }
+
+async function saveMarketBudget() {
+  if (!urls.value || !app.bearerToken) return
+  try {
+    await http.post(
+      urls.value.transportSettings(orderId.value),
+      JSON.stringify({ marketBudget: marketBudget.value }),
+      { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
+    )
+  } catch { /* silent */ }
+}
+
+watch(order, (o) => {
+  if (!o) return
+  showMarketOpp.value = o.marketOpportunitiesEnabled ?? false
+  marketBudget.value  = o.marketBudget ?? null
+})
 
 watch([order, marketBudget], () => {
   if (!showMarketOpp.value) return
@@ -500,48 +525,12 @@ async function generateItinerary() {
               type="number" min="0"
               :value="marketBudget ?? ''"
               @input="marketBudget = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
+              @change="saveMarketBudget"
+              @keydown.enter="saveMarketBudget"
               class="w-28 rounded border border-th-subtle bg-th-card px-2 py-0.5 text-xs text-th-primary focus:outline-none focus:border-emerald-400/50"
               placeholder="optionnel"
             />
             <span class="text-[11px] text-th-muted">cr</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Manifests (missions) -->
-      <div v-if="order.manifests?.length" class="shrink-0 rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
-        <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Missions</p>
-        <div
-          v-for="(m, mi) in order.manifests"
-          :key="m.missionGroup ?? mi"
-          class="rounded-md border border-th-muted bg-th-card/20 p-3 space-y-1.5"
-        >
-          <!-- Route -->
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="text-xs font-semibold text-th-primary">{{ m.pickupName ?? '—' }}</span>
-            <span v-if="m.pickupSystemName" class="text-[10px] px-1.5 py-0.5 rounded-full bg-th-card text-th-muted">{{ m.pickupSystemName }}</span>
-            <svg class="w-3 h-3 text-th-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
-            </svg>
-            <span class="text-xs font-semibold text-accent/80">{{ m.dropoffName ?? '—' }}</span>
-            <span v-if="m.dropoffSystemName" class="text-[10px] px-1.5 py-0.5 rounded-full bg-th-card text-th-muted">{{ m.dropoffSystemName }}</span>
-          </div>
-          <!-- Max box size badge -->
-          <div v-if="m.maxBoxSize != null" class="flex items-center gap-1">
-            <span class="inline-flex items-center gap-1 rounded-md border border-amber-400/25 bg-amber-400/8 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-              Caisses max : {{ m.maxBoxSize }} SCU
-            </span>
-          </div>
-          <!-- Cargos -->
-          <div v-if="m.cargos?.length" class="space-y-0.5 pt-0.5">
-            <div
-              v-for="(c, ci) in m.cargos"
-              :key="c.id ?? ci"
-              class="flex items-center justify-between text-[11px]"
-            >
-              <span class="text-th-secondary">{{ c.commodityName ?? '—' }}</span>
-              <span class="text-th-muted font-medium">{{ c.quantity }} SCU</span>
-            </div>
           </div>
         </div>
       </div>
