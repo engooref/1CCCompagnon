@@ -109,6 +109,26 @@ export const useRadioStore = defineStore('radio', {
   },
 
   actions: {
+    _channelExists(channelId: string): boolean {
+      return this.channels.some(ch => ch.id === channelId)
+    },
+
+    async _pruneInvalidPttBindings() {
+      const validChannelIds = new Set(this.channels.map(ch => ch.id))
+      const invalidBindings = this.settings.pttBindings.filter(b => !validChannelIds.has(b.channelId))
+      if (!invalidBindings.length) return
+
+      this.settings.pttBindings = this.settings.pttBindings.filter(b => validChannelIds.has(b.channelId))
+      await window.oneCC.radioSetPttBindings(toRaw(this.settings.pttBindings).map(b => ({ ...toRaw(b) })))
+
+      // Si un canal invalide était connecté en murmure auto, on le quitte.
+      for (const binding of invalidBindings) {
+        if (this.channelState[binding.channelId]?.connected && this.channelState[binding.channelId]?.whisperOnly) {
+          await this.leaveChannel(binding.channelId)
+        }
+      }
+    },
+
     // ── Init ───────────────────────────────────────────────────────────────
 
     async init() {
@@ -166,6 +186,11 @@ export const useRadioStore = defineStore('radio', {
 
       // Écouter les événements PTT du main process (uIOhook) — avec channelId
       window.oneCC.onRadioPttStart(async (channelId) => {
+        if (!this._channelExists(channelId)) {
+          await this.removePttBinding(channelId)
+          return
+        }
+
         const cs = this.channelState[channelId]
         console.debug(`[RADIO][PTT] ptt-start canal=${channelId} connected=${cs?.connected} whisperOnly=${cs?.whisperOnly} muted=${this.muted}`)
         if (this.muted) return
@@ -320,6 +345,11 @@ export const useRadioStore = defineStore('radio', {
     // ── PTT Bindings ──────────────────────────────────────────────────────
 
     async setPttBinding(channelId: string, keyCode: number | null, key: string) {
+      if (!this._channelExists(channelId)) {
+        await this.removePttBinding(channelId)
+        return
+      }
+
       console.debug(`[RADIO][store] setPttBinding canal=${channelId} keyCode=${keyCode} key=${key} — état actuel:`, JSON.stringify(this.channelState[channelId] ?? null))
       const bindings = this.settings.pttBindings.filter(b => b.channelId !== channelId)
       if (keyCode !== null) bindings.push({ channelId, keyCode, key })
@@ -371,6 +401,7 @@ export const useRadioStore = defineStore('radio', {
       } catch {
         this.channels = [...STATIC_RADIOS]
       }
+      await this._pruneInvalidPttBindings()
       await this.fetchAllParticipants()
     },
 

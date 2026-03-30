@@ -81,9 +81,10 @@ async function onChannelDblClick(channelId: string) {
       }
     }
   } else {
-    // Quitter l'éventuel canal d'écoute actif (non-murmure)
+    // Quitter uniquement les canaux d'écoute actifs (non-murmure).
+    // On garde les canaux murmure déjà connectés pour éviter une reconnexion inutile.
     for (const cid of radio.connectedChannels) {
-      if (radio.channelState[cid]?.connected) {
+      if (radio.channelState[cid]?.connected && !radio.channelState[cid]?.whisperOnly) {
         console.log('Leaving channel', cid, 'before joining', channelId)
         await radio.leaveChannel(cid)
       }
