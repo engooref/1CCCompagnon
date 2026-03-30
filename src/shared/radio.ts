@@ -47,9 +47,3 @@ export const DEFAULT_RADIO_SETTINGS: RadioSettings = {
   pttBindings: [],
   radioVolume: 1.0,
 }
-
-export const STATIC_RADIOS: RadioChannel[] = [
-  { id: 'command', name: 'Commandement', description: 'Canal de commandement général' },
-  { id: 'logistics', name: 'Logistique', description: 'Canal logistique' },
-  { id: 'recon', name: 'Reconnaissance', description: 'Canal de reconnaissance' },
-]

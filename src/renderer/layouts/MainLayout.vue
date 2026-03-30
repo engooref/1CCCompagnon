@@ -9,15 +9,26 @@ import { createOverlayUrls } from '../config/api'
 const app = useAppStore()
 const route = useRoute()
 const router = useRouter()
+const canShowAppTabs = computed(() => app.status.authReady)
 
 let defaultPageApplied = false
 watch(() => app.settings, (s) => {
-  if (s && !defaultPageApplied && route.path === '/') {
+  if (s && canShowAppTabs.value && !defaultPageApplied && route.path === '/') {
     defaultPageApplied = true
     const dp = s.defaultPage
     if (dp && dp !== '/') router.replace(dp)
   }
 }, { immediate: true })
+
+watch(
+  [() => app.status.authReady, () => route.path],
+  ([authReady, path]) => {
+    if (authReady) return
+    if (path === '/' || path === '/settings') return
+    router.replace('/')
+  },
+  { immediate: true },
+)
 
 const NAV_ORDER = ['/', '/radio', '/transport', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
 
@@ -175,10 +186,10 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
         <span class="mr-3 text-sm font-bold tracking-[0.15em] text-th-secondary shrink-0">1CC</span>
 
         <!-- Dashboard -->
-        <RouterLink to="/" class="nav-h" :class="{ 'nav-h-active': isActive('/') }">Dashboard</RouterLink>
+        <RouterLink v-if="canShowAppTabs" to="/" class="nav-h" :class="{ 'nav-h-active': isActive('/') }">Dashboard</RouterLink>
 
         <!-- Dropdown Opérations -->
-        <div class="relative">
+        <div v-if="canShowAppTabs" class="relative">
           <button
             class="nav-h"
             :class="{ 'nav-h-active': isGroupActive('operations'), 'nav-h-open': openDropdown === 'operations' }"
@@ -190,10 +201,12 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
             </svg>
           </button>
           <div v-if="openDropdown === 'operations'" class="nav-dropdown">
-            <RouterLink to="/radio"      class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/radio') }">
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
-              Radio
-            </RouterLink>
+            <div v-if="app.profile?.rh?.radio || app.profile?.isBureau">
+              <RouterLink to="/radio"      class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/radio') }">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+                Radio
+              </RouterLink>
+            </div>
             <RouterLink to="/transport"  class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/transport') }">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
               Transport
@@ -210,7 +223,7 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
         </div>
 
         <!-- Dropdown Outils -->
-        <div class="relative">
+        <div v-if="canShowAppTabs" class="relative">
           <button
             class="nav-h"
             :class="{ 'nav-h-active': isGroupActive('outils'), 'nav-h-open': openDropdown === 'outils' }"
@@ -234,7 +247,7 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
         </div>
 
         <!-- Dropdown Admin -->
-        <div class="relative">
+        <div v-if="canShowAppTabs" class="relative">
           <button
             class="nav-h"
             :class="{ 'nav-h-active': isGroupActive('admin'), 'nav-h-open': openDropdown === 'admin' }"
@@ -292,6 +305,7 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
 
             <!-- ─ Dashboard ──────────────────────────────────────── -->
             <RouterLink
+              v-if="canShowAppTabs"
               to="/"
               class="nav-v"
               :class="[{ 'nav-v-active': isActive('/') }, sidebarCollapsed ? 'nav-v-icon' : '']"
@@ -304,10 +318,10 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
             </RouterLink>
 
             <!-- ─ Séparateur ─────────────────────────────────────── -->
-            <div class="my-1 border-t border-th-subtle" />
+            <div v-if="canShowAppTabs" class="my-1 border-t border-th-subtle" />
 
             <!-- ══ MODE ÉTENDU : groupes collapsibles ════════════════ -->
-            <template v-if="!sidebarCollapsed">
+            <template v-if="!sidebarCollapsed && canShowAppTabs">
 
               <!-- Groupe Opérations -->
               <button class="group-header" @click="toggleGroup('operations')">
@@ -377,7 +391,7 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
             </template>
 
             <!-- ══ MODE RÉDUIT : toutes les icônes à plat ════════════ -->
-            <template v-else>
+            <template v-else-if="canShowAppTabs">
               <RouterLink to="/radio"       class="nav-v nav-v-icon" :class="{ 'nav-v-active': isActive('/radio') }"       title="Radio">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
               </RouterLink>

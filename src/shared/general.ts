@@ -128,6 +128,7 @@ export interface RhMember {
   totalXp: number
   nextLevelXp: number | null
   level: number | null
+  radio: boolean
 }
 
 export interface OverlayProfile {

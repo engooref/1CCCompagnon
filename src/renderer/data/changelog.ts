@@ -8,14 +8,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '1.3.0-draft',
-    date: '2026-09-01',
-    changes: []
-  },
-  {
-    version: '1.2.0-draft',
-    date: '2026-06-15',
-    changes: []
+    version: '1.1.0',
+    date: '2026-03-31',
+    changes: [
+      { type: 'feature', text: 'Nouveau module Radio : communications vocales en temps réel avec gestion des canaux et des participants' },
+      { type: 'improvement', text: 'Ajout d\'un filtre pour le catalogue du fabricator permettant de voir les blueprint posseder par au moins un joueur' },
+      { type: 'improvement', text: 'Amélioration de l\'interface d\'onglet pour plus de lisibilité et d\'ergonomie' },
+      { type: 'fix', text: 'Correction de divers bugs mineurs et optimisation des performances' },
+
+    ]
   },
   {
     version: '1.0.3',

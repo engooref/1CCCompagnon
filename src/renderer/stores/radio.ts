@@ -4,17 +4,73 @@ import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 import { RadioClient } from '../services/radioClient'
 import type { RadioChannel, RadioSettings, RadioSpeaker, PttBinding } from '@shared/radio'
-import { STATIC_RADIOS, DEFAULT_RADIO_SETTINGS } from '@shared/radio'
+import { DEFAULT_RADIO_SETTINGS } from '@shared/radio'
 import { useAppStore } from './app'
 import { createOverlayUrls } from '../config/api'
 
 const radioClient = new RadioClient()
 
+type RadioParticipant = {
+  identity: string
+  avatar: string | null
+}
+
+function normalizeParticipant(raw: unknown): RadioParticipant | null {
+  if (typeof raw === 'string') {
+    const identity = raw.trim()
+    if (!identity) return null
+    return { identity, avatar: null }
+  }
+
+  if (!raw || typeof raw !== 'object') return null
+
+  const obj = raw as Record<string, unknown>
+  const identity = [
+    obj.identity,
+    obj.username,
+    obj.name,
+    obj.displayName,
+    obj.user,
+  ].find(v => typeof v === 'string' && v.trim().length > 0) as string | undefined
+
+  if (!identity) return null
+
+  const avatarRaw = [
+    obj.avatar,
+    obj.avatarUrl,
+    obj.image,
+    obj.imageUrl,
+    obj.discordAvatar,
+    obj.discordAvatarUrl,
+  ].find(v => typeof v === 'string' && v.trim().length > 0) as string | undefined
+
+  return {
+    identity: identity.trim(),
+    avatar: avatarRaw?.trim() ?? null,
+  }
+}
+
+function normalizeParticipants(raw: unknown): RadioParticipant[] {
+  if (!Array.isArray(raw)) return []
+
+  const out: RadioParticipant[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    const p = normalizeParticipant(item)
+    if (!p) continue
+    const key = p.identity.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(p)
+  }
+  return out
+}
+
 
 interface ChannelState {
   connected: boolean
   connecting: boolean
-  participants: string[]
+  participants: RadioParticipant[]
   transmitting: boolean
   /** true = murmure (émission uniquement, pas d'écoute) */
   whisperOnly: boolean
@@ -23,7 +79,7 @@ interface ChannelState {
 export const useRadioStore = defineStore('radio', {
   state: () => ({
     settings: { ...DEFAULT_RADIO_SETTINGS } as RadioSettings,
-    channels: [...STATIC_RADIOS] as RadioChannel[],
+    channels: [] as RadioChannel[],
 
     // État par canal (clé = channelId)
     channelState: {} as Record<string, ChannelState>,
@@ -42,7 +98,7 @@ export const useRadioStore = defineStore('radio', {
     gateThreshold: 0,
     inputGain: 1.0,
     /** Participants par canal, mis à jour par polling (canaux non connectés) */
-    channelParticipants: {} as Record<string, string[]>,
+    channelParticipants: {} as Record<string, RadioParticipant[]>,
     _participantsInterval: null as ReturnType<typeof setInterval> | null,
   }),
 
@@ -89,7 +145,7 @@ export const useRadioStore = defineStore('radio', {
     participants(state): string[] {
       const all = new Set<string>()
       for (const cs of Object.values(state.channelState)) {
-        for (const p of cs.participants) all.add(p)
+        for (const p of cs.participants) all.add(p.identity)
       }
       return Array.from(all)
     },
@@ -100,7 +156,7 @@ export const useRadioStore = defineStore('radio', {
     /**
      * Participants d'un canal : live si connecté, sinon depuis le polling.
      */
-    participantsFor: (state) => (channelId: string): string[] => {
+    participantsFor: (state) => (channelId: string): RadioParticipant[] => {
       if (state.channelState[channelId]?.connected) {
         return state.channelState[channelId].participants
       }
@@ -129,6 +185,49 @@ export const useRadioStore = defineStore('radio', {
       }
     },
 
+    async _fetchChannelParticipants(channelId: string): Promise<RadioParticipant[] | null> {
+      const appStore = useAppStore()
+      const participantsUrl = appStore.settings ? createOverlayUrls(appStore.settings).radioParticipants(channelId) : ''
+      if (!participantsUrl) return null
+
+      try {
+        const res = await fetch(participantsUrl, {
+          headers: { Authorization: `Bearer ${appStore.bearerToken}` },
+        })
+        if (!res.ok) return null
+
+        const data = await res.json()
+        console.log(data)
+        const list = normalizeParticipants(Array.isArray(data.participants)
+          ? data.participants
+          : Array.isArray(data) ? data : [])
+
+        this.channelParticipants[channelId] = list
+        if (this.channelState[channelId]) {
+          this.channelState[channelId].participants = list
+        }
+        return list
+      } catch {
+        return null
+      }
+    },
+
+    async _notifyChannelEvent(channelId: string, event: 'participant_joined' | 'participant_left') {
+      const appStore = useAppStore()
+      const notifyUrl = appStore.settings ? createOverlayUrls(appStore.settings).radioWebhook : ''
+      if (!notifyUrl) return
+
+      try {
+        await fetch(notifyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
+          body: JSON.stringify({ event, channelId }),
+        })
+      } catch (err) {
+        console.warn(`[RADIO][store] Failed to notify channel event: ${event} for ${channelId}`, err)
+      }
+    },
+
     // ── Init ───────────────────────────────────────────────────────────────
 
     async init() {
@@ -144,8 +243,10 @@ export const useRadioStore = defineStore('radio', {
         this._ensureChannelState(channelId)
         this.channelState[channelId].connected = true
         this.channelState[channelId].connecting = false
-        this.channelState[channelId].participants = radioClient.participants(channelId)
+        this.channelState[channelId].participants = normalizeParticipants(radioClient.participants(channelId))
         this.error = null
+        // Notifier le backend
+        this._notifyChannelEvent(channelId, 'participant_joined')
       })
 
       radioClient.on('channelDisconnected', (channelId, reason) => {
@@ -158,6 +259,8 @@ export const useRadioStore = defineStore('radio', {
         // Retirer les speakers de ce canal
         this.activeSpeakers = this.activeSpeakers.filter(s => s.channel !== channelId)
         if (reason) this.error = `Canal ${channelId} déconnecté: ${reason}`
+        // Notifier le backend
+        this._notifyChannelEvent(channelId, 'participant_left')
       })
 
       radioClient.on('speakersChanged', (speakers) => {
@@ -166,13 +269,13 @@ export const useRadioStore = defineStore('radio', {
 
       radioClient.on('participantJoined', (channelId) => {
         if (this.channelState[channelId]) {
-          this.channelState[channelId].participants = radioClient.participants(channelId)
+          this.channelState[channelId].participants = normalizeParticipants(radioClient.participants(channelId))
         }
       })
 
       radioClient.on('participantLeft', (channelId) => {
         if (this.channelState[channelId]) {
-          this.channelState[channelId].participants = radioClient.participants(channelId)
+          this.channelState[channelId].participants = normalizeParticipants(radioClient.participants(channelId))
         }
       })
 
@@ -221,11 +324,6 @@ export const useRadioStore = defineStore('radio', {
       if (this.settings.pttBindings.length) {
         window.oneCC.radioSetPttBindings(toRaw(this.settings.pttBindings).map(b => ({ ...toRaw(b) })))
       }
-
-      // Polling participants canaux non connectés (toutes les 30s)
-      this._participantsInterval = setInterval(() => {
-        this.fetchAllParticipants()
-      }, 30_000)
 
     },
 
@@ -399,34 +497,26 @@ export const useRadioStore = defineStore('radio', {
         if (Array.isArray(data.channels)) this.channels = data.channels
         else if (Array.isArray(data)) this.channels = data
       } catch {
-        this.channels = [...STATIC_RADIOS]
+        this.channels = []
       }
       await this._pruneInvalidPttBindings()
       await this.fetchAllParticipants()
     },
 
-    async fetchAllParticipants() {
-      const appStore = useAppStore()
-      const baseUrl = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
-      if (!baseUrl) return
+    async fetchAllParticipants(includeConnected = false) {
+      const targetChannels = includeConnected
+        ? this.channels
+        : this.channels.filter(ch => !this.channelState[ch.id]?.connected)
+
       await Promise.allSettled(
-        this.channels
-          .filter(ch => !this.channelState[ch.id]?.connected)
-          .map(async (ch) => {
-            try {
-              const res = await fetch(
-                `${baseUrl}/${encodeURIComponent(ch.id)}/participants`,
-                { headers: { Authorization: `Bearer ${appStore.bearerToken}` } },
-              )
-              if (!res.ok) return
-              const data = await res.json()
-              const list: string[] = Array.isArray(data.participants)
-                ? data.participants
-                : Array.isArray(data) ? data : []
-              this.channelParticipants[ch.id] = list
-            } catch { /* canal inaccessible, on garde la valeur précédente */ }
-          }),
+        targetChannels.map(async (ch) => {
+          await this._fetchChannelParticipants(ch.id)
+        }),
       )
+    },
+
+    async refreshParticipantsFromMercureEvent(payload: unknown) {
+      await this.fetchAllParticipants(true)
     },
 
     async createChannel(payload: { name: string; description: string }) {
@@ -454,6 +544,12 @@ export const useRadioStore = defineStore('radio', {
     },
 
     async deleteChannel(id: string) {
+      const liveParticipants = await this._fetchChannelParticipants(id)
+      const participantsCount = liveParticipants?.length ?? this.participantsFor(id).length
+      if (participantsCount > 0) {
+        throw new Error('Impossible de supprimer ce canal: au moins un participant est present.')
+      }
+
       const appStore = useAppStore()
       const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
       const res = await fetch(`${url}/${id}`, {

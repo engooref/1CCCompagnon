@@ -18,6 +18,42 @@ const sessions = new Map<number, SseSession>()
 const MIN_RETRY_MS  = 1_000
 const MAX_RETRY_MS  = 30_000
 
+function extractMessages(buffer: string): { messages: string[]; rest: string } {
+  const messages: string[] = []
+  let cursor = 0
+
+  while (cursor < buffer.length) {
+    const lfBoundary = buffer.indexOf('\n\n', cursor)
+    const crlfBoundary = buffer.indexOf('\r\n\r\n', cursor)
+
+    let boundary = -1
+    let separatorLength = 0
+
+    if (lfBoundary !== -1 && (crlfBoundary === -1 || lfBoundary < crlfBoundary)) {
+      boundary = lfBoundary
+      separatorLength = 2
+    } else if (crlfBoundary !== -1) {
+      boundary = crlfBoundary
+      separatorLength = 4
+    }
+
+    if (boundary === -1) break
+
+    const block = buffer.slice(cursor, boundary)
+    cursor = boundary + separatorLength
+
+    const dataLines: string[] = []
+    for (const line of block.split(/\r?\n/)) {
+      if (!line.startsWith('data:')) continue
+      dataLines.push(line.slice(5).trimStart())
+    }
+
+    if (dataLines.length) messages.push(dataLines.join('\n'))
+  }
+
+  return { messages, rest: buffer.slice(cursor) }
+}
+
 function connect(senderId: number, session: SseSession) {
   if (session.stopped) return
 
@@ -40,6 +76,7 @@ function connect(senderId: number, session: SseSession) {
 
       if (res.statusCode !== 200) {
         logger.error(`[Mercure:${senderId}] statut inattendu ${res.statusCode}, reconnexion dans ${session.retryDelay}ms`)
+        session.onError(`Erreur Mercure HTTP ${res.statusCode}`)
         res.resume()
         scheduleReconnect(senderId, session)
         return
@@ -54,17 +91,11 @@ function connect(senderId: number, session: SseSession) {
       res.on('data', (chunk: string) => {
         logger.debug(`[Mercure:${senderId}] chunk (${chunk.length} chars):`, JSON.stringify(chunk.slice(0, 200)))
         buffer += chunk
-        let boundary: number
-        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-          const block = buffer.slice(0, boundary)
-          buffer = buffer.slice(boundary + 2)
-          for (const line of block.split('\n')) {
-            if (line.startsWith('data:')) {
-              const msg = line.slice(5).trim()
-              logger.debug(`[Mercure:${senderId}] message:`, msg.slice(0, 200))
-              session.onMessage(msg)
-            }
-          }
+        const parsed = extractMessages(buffer)
+        buffer = parsed.rest
+        for (const msg of parsed.messages) {
+          logger.debug(`[Mercure:${senderId}] message:`, msg.slice(0, 200))
+          session.onMessage(msg)
         }
       })
 
@@ -77,6 +108,7 @@ function connect(senderId: number, session: SseSession) {
       res.on('error', (e: Error) => {
         if (session.stopped) return
         logger.error(`[Mercure:${senderId}] erreur SSE:`, e.message, '→ reconnexion dans', session.retryDelay, 'ms')
+        session.onError(e.message)
         scheduleReconnect(senderId, session)
       })
     },
@@ -85,6 +117,7 @@ function connect(senderId: number, session: SseSession) {
   req.on('error', (e: Error) => {
     if (session.stopped) return
     logger.error(`[Mercure:${senderId}] erreur requête:`, e.message, '→ reconnexion dans', session.retryDelay, 'ms')
+    session.onError(e.message)
     scheduleReconnect(senderId, session)
   })
 

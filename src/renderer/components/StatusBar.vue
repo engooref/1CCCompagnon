@@ -349,6 +349,9 @@ const changeTypeClass: Record<string, string> = {
             @keydown.escape="closePanel"
             class="w-full rounded-lg border border-th-subtle bg-th-surface px-3 py-2 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/50 focus:outline-none transition"
           />
+          <p class="text-[11px] text-th-muted leading-relaxed">
+            Tu peux recuperer cette cle dans ton profil utilisateur sur le site 1CC.
+          </p>
           <p v-if="loginError" class="text-[11px] text-rose-400">{{ loginError }}</p>
         </div>
 

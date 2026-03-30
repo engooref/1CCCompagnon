@@ -48,5 +48,7 @@ export function createOverlayUrls(settings: AppSettings) {
     radioToken:         url(base, o, 'radio', 'token'),
     radioChannels:      url(base, o, 'radio', 'channels'),
     radioMercureInfo:   url(base, o, 'radio', 'mercureInfo'),
+    radioParticipants: (id: string | number) => url(base, o, 'radio', 'participants').replace('{id}', String(id)),
+    radioWebhook:       url(base, o, 'radio', 'webhook'),
   }
 }

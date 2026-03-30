@@ -210,7 +210,7 @@ function startPttRecord(channelId: string) {
         </div>
 
         <!-- En-tête canal -->
-        <div v-else class="flex items-center justify-between gap-3 p-3">
+        <div v-else class="flex items-start justify-between gap-3 p-2.5">
 
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
@@ -247,7 +247,33 @@ function startPttRecord(channelId: string) {
               </span>
             </div>
 
-            <p class="text-xs text-th-muted mt-0.5 truncate">{{ channel.description }}</p>
+            <p class="text-[11px] text-th-muted mt-0.5 truncate">{{ channel.description }}</p>
+
+            <!-- Liste visuelle des participants de ce canal -->
+            <div v-if="radio.participantsFor(channel.id).length" class="mt-1.5 rounded-md border border-th-subtle/40 bg-black/20 px-2 py-1.5">
+              <div class="max-h-24 overflow-y-auto scrollbar-none space-y-1">
+                <div
+                  v-for="participant in radio.participantsFor(channel.id)"
+                  :key="`${channel.id}-${participant.identity}`"
+                  class="flex items-center gap-1.5"
+                >
+                  <img
+                    v-if="participant.avatar"
+                    :src="participant.avatar"
+                    :alt="participant.identity"
+                    class="h-4 w-4 rounded-full shrink-0 object-cover bg-th-card"
+                    @error="($event.target as HTMLImageElement).style.display = 'none'"
+                  />
+                  <span
+                    v-else
+                    class="h-4 w-4 rounded-full shrink-0 flex items-center justify-center text-[9px] font-bold bg-white/5 text-th-muted"
+                  >
+                    {{ participant.identity.charAt(0).toUpperCase() }}
+                  </span>
+                  <span class="text-[10px] text-th-secondary truncate">{{ participant.identity }}</span>
+                </div>
+              </div>
+            </div>
 
             <!-- Touche PTT liée à ce canal -->
             <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
@@ -292,9 +318,9 @@ function startPttRecord(channelId: string) {
             </button>
             <button
               @click.stop="deleteChannel(channel.id)"
-              :disabled="saving"
+              :disabled="saving || radio.participantsFor(channel.id).length > 0"
               class="p-1.5 rounded border border-th-subtle text-th-muted hover:text-rose-300 hover:border-rose-400/30 transition disabled:opacity-40"
-              title="Supprimer"
+              :title="radio.participantsFor(channel.id).length > 0 ? 'Suppression impossible: participants dans le canal' : 'Supprimer'"
             >
               <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -363,6 +389,9 @@ function startPttRecord(channelId: string) {
 </template>
 
 <style scoped>
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
 @keyframes eq-bar {
   0%, 100% { transform: scaleY(0.4); }
   50%       { transform: scaleY(1.2); }

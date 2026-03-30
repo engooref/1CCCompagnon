@@ -7,6 +7,14 @@ export function useMercure() {
   const sseError  = ref<string | null>(null)
   const currentUrl = ref<string | null>(null)
 
+  function parseMercureMessage(raw: string): unknown {
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return raw
+    }
+  }
+
   async function connect(
     mercureInfoUrl: string,
     authHeader: string,
@@ -37,7 +45,7 @@ export function useMercure() {
       // If already connected to the same url, just add listener and return
       if (connected.value && currentUrl.value === urlStr) {
         window.oneCC.onMercureMessage((raw) => {
-          try { onMessage(JSON.parse(raw)) } catch (e) { logger.error('[useMercure] JSON.parse échoué:', e, raw) }
+          onMessage(parseMercureMessage(raw))
         })
         return
       }
@@ -48,7 +56,7 @@ export function useMercure() {
       await window.oneCC.mercureDisconnect()
 
       window.oneCC.onMercureMessage((raw) => {
-        try { onMessage(JSON.parse(raw)) } catch (e) { logger.error('[useMercure] JSON.parse échoué:', e, raw) }
+        onMessage(parseMercureMessage(raw))
       })
 
       window.oneCC.onMercureError((reason: string) => {

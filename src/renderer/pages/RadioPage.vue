@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRadioStore } from '../stores/radio'
 import { useAppStore } from '../stores/app'
 import { usePushToTalk } from '../composables/usePushToTalk'
@@ -11,23 +11,41 @@ import RadioParticipants from '../components/radio/RadioParticipants.vue'
 
 const radio = useRadioStore()
 const app = useAppStore()
-const { connect: connectMercure } = useMercure()
+const { connect: connectMercure, disconnect: disconnectMercure } = useMercure()
+const urls = computed(() => app.settings ? createOverlayUrls(app.settings) : null)
 
 // Fallback clavier local (en plus du PTT natif uIOhook)
 usePushToTalk()
 
-onMounted(async () => {
+async function initRadioPage() {
+  console.log('Initialisation de la page Radio…', { authReady: app.status.authReady, bearerToken: !!app.bearerToken, mercureInfoUrl: !!urls.value?.radioMercureInfo })
+  if (!app.status.authReady || !app.bearerToken || !urls.value?.radioMercureInfo) return
+
   await radio.init()
 
-  // Actualisation automatique de la liste des canaux via Mercure SSE
-  const urls = app.settings ? createOverlayUrls(app.settings) : null
-  if (urls?.radioMercureInfo) {
-    connectMercure(
-      urls.radioMercureInfo,
-      `Bearer ${app.bearerToken}`,
-      () => { radio.fetchChannels() },
-    )
-  }
+  // Mercure radio:
+  // - si event ciblé (channelId), rafraîchir uniquement ce canal
+  // - sinon, fallback sur tous les participants
+  await connectMercure(
+    urls.value.radioMercureInfo,
+    `Bearer ${app.bearerToken}`,
+    async (payload) => {
+      await radio.refreshParticipantsFromMercureEvent(payload)
+    },
+  )
+}
+
+onMounted(async () => {
+  await initRadioPage()
+})
+
+watch(() => app.status.authReady, async (ready) => {
+  if (!ready) return
+  await initRadioPage()
+})
+
+onUnmounted(() => {
+  disconnectMercure()
 })
 
 // Relay de l'état radio vers l'overlay (via IPC main → overlay window)
@@ -103,7 +121,6 @@ watch(
       <!-- Droite : contrôles + participants -->
       <div class="flex flex-col gap-4 min-h-0 overflow-y-auto scrollbar-none pb-1">
         <RadioControls />
-        <RadioParticipants class="flex-1 min-h-0" />
       </div>
 
     </div>
