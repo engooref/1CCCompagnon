@@ -192,11 +192,17 @@ export class RadioClient {
     const entry: ChannelEntry = { room, micTrack: null, whisperOnly }
     this.channels.set(channelId, entry)
     this.setupRoomEvents(channelId, room, entry)
+    
 
     // Si room.connect() échoue (ex: serveur envoie Leave immédiatement), nettoyer
     // l'entrée pour ne pas laisser de Room zombie dans this.channels.
     try {
-      await room.connect(livekitUrl, token)
+      await room.connect(livekitUrl, token, {
+        autoSubscribe: !whisperOnly,
+      })
+      await room.localParticipant.setAttributes({
+        mode: whisperOnly ? 'whisper' : 'normal'
+      })
     } catch (err) {
       console.debug(`[RADIO][client] room.connect() échoué pour ${channelId}:`, err)
       entry.micTrack?.stop()
