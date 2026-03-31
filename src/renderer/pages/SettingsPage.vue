@@ -29,7 +29,6 @@ const activeTab = ref<Tab>('general')
           { id: 'transport',  label: 'Transport'  },
           { id: 'maps',       label: 'Cartes'     },
           { id: 'appearance', label: 'Apparence'  },
-          { id: 'radio',      label: 'Radio'      },
         ] as const)"
         :key="tab.id"
         @click="activeTab = tab.id"
@@ -49,7 +48,6 @@ const activeTab = ref<Tab>('general')
       <TransportTab  v-if="activeTab === 'transport'"  />
       <MapsTab       v-if="activeTab === 'maps'"       />
       <AppearanceTab v-if="activeTab === 'appearance'" />
-      <RadioTab      v-if="activeTab === 'radio'"      />
     </div>
 
   </section>

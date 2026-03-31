@@ -5,6 +5,7 @@
 
 import { onMounted, onUnmounted } from 'vue'
 import { useRadioStore } from '../stores/radio'
+import { isCategoryPttTarget, isGlobalPttTarget } from '@shared/radio'
 
 export function usePushToTalk() {
   const radio = useRadioStore()
@@ -25,10 +26,20 @@ export function usePushToTalk() {
       if (!binding.keyCode || e.keyCode !== binding.keyCode) continue
       if (pttActive.get(binding.channelId)) continue
 
+      // Si le binding cible un canal précis et qu'on est déjà connecté
+      // normalement (non murmure) sur ce canal, pas besoin d'utiliser le PTT.
+      if (!isCategoryPttTarget(binding.channelId) && !isGlobalPttTarget(binding.channelId)) {
+        const cs = radio.channelState[binding.channelId]
+        if (cs?.connected && !cs.whisperOnly) {
+          continue
+        }
+      }
+
       e.preventDefault()
       pttActive.set(binding.channelId, true)
       if (!radio.muted) {
-        radio.startPttTarget(binding.channelId)
+        if (typeof (radio as any).handlePttStart === 'function') (radio as any).handlePttStart(binding.channelId)
+        else radio.startPttTarget(binding.channelId)
       }
     }
   }
@@ -42,7 +53,8 @@ export function usePushToTalk() {
 
       e.preventDefault()
       pttActive.set(binding.channelId, false)
-      radio.stopPttTarget(binding.channelId)
+      if (typeof (radio as any).handlePttStop === 'function') (radio as any).handlePttStop(binding.channelId)
+      else radio.stopPttTarget(binding.channelId)
     }
   }
 

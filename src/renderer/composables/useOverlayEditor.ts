@@ -96,6 +96,10 @@ function normalizeModule(mod: Partial<OverlayModuleConfig> & Pick<OverlayModuleC
     fontSize:    Math.min(1.5, Math.max(0.75, mod.fontSize ?? fallback?.fontSize ?? 1)),
     bgColor:     mod.bgColor ?? fallback?.bgColor ?? '',
     anchor:    mod.anchor ?? fallback?.anchor ?? 'top-left',
+    radioDensity: mod.radioDensity ?? fallback?.radioDensity ?? 'medium',
+    radioShowSpeakers: mod.radioShowSpeakers ?? fallback?.radioShowSpeakers ?? true,
+    radioShowParticipants: mod.radioShowParticipants ?? fallback?.radioShowParticipants ?? true,
+    radioShowAdvancedStatus: mod.radioShowAdvancedStatus ?? fallback?.radioShowAdvancedStatus ?? true,
   }
 }
 

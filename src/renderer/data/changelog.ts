@@ -8,6 +8,17 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-03-31',
+    changes: [
+      { type: 'feature', text: 'Ajout de la partie Radio dans l\'overlay en jeu : affiche les communications vocales en temps réel' },
+      { type: 'improvement', text: 'Amélioration de la gestion des modules dans l\'éditeur de layout : options spécifiques pour le module Radio' },
+      { type: 'improvement', text: 'Amélioration de l\'interface de la radio pour ajouter des catégories de canaux et des options de PRT supplémentaires' },
+      { type: 'improvement', text: 'Amélioration du module Fabricator en fonction des retours joueurs' },
+      { type: 'fix', text: 'Correction de divers bugs mineurs et optimisation des performances' },
+    ]
+  },
+  {
     version: '1.1.0',
     date: '2026-03-31',
     changes: [

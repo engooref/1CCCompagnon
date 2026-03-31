@@ -36,7 +36,7 @@ const scContainerStyle = computed(() => {
 function isVisible(mod: (typeof modules)[number]): boolean {
   if (mapOnlyMode.value) return false
   if (!mod.visible) return false
-  return mod.type === 'transport'
+  return mod.type === 'transport' || mod.type === 'radio'
 }
 
 onMounted(async () => {
@@ -83,6 +83,7 @@ onUnmounted(() => {
             <template v-if="!mod.minimized">
               <div class="w-full overflow-hidden rounded-2xl" :style="{ zoom: mod.fontSize ?? 1 }">
                 <TransportModule v-if="mod.type === 'transport'" />
+                <RadioModule v-else-if="mod.type === 'radio'" :config="mod" />
               </div>
             </template>
             <div v-else class="rounded-xl border border-white/10 bg-black/60 px-3 py-1 text-[10px] text-th-muted backdrop-blur-sm">
@@ -91,11 +92,6 @@ onUnmounted(() => {
           </div>
         </Transition>
       </template>
-
-      <!-- ── Radio status widget (coin bas-gauche) ─────────────────── -->
-      <div class="absolute bottom-4 left-4 pointer-events-none" style="z-index: 100;">
-        <RadioModule />
-      </div>
 
       <!-- ── Carte tactique plein overlay (z-index max, au-dessus de tout) ── -->
       <!-- Monté dès qu'une carte est épinglée, caché/montré par CSS pour éviter le rechargement -->

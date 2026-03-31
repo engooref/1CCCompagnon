@@ -177,11 +177,4 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
     return true
   })
 
-  // -- Performance metrics ---------------------------------------------------
-  ipcMain.handle('perf:get-metrics', () => ({
-    processes:    electronApp.getAppMetrics(),
-    mainMemory:   process.memoryUsage(),
-    systemMemory: process.getSystemMemoryInfo(),
-    uptime:       process.uptime(),
-  }))
 }

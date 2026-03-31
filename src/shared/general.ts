@@ -26,8 +26,9 @@ export interface OverlayElementPos {
   yPct: number
 }
 
-export type OverlayModuleType = 'transport'
+export type OverlayModuleType = 'transport' | 'radio'
 export type OverlayAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
+export type OverlayRadioDensity = 'compact' | 'medium' | 'detailed'
 
 export interface OverlayModuleConfig {
   id: string
@@ -43,10 +44,16 @@ export interface OverlayModuleConfig {
   fontSize: number  // zoom scale 0.75–1.5, default 1.0
   bgColor: string   // hex background tint color, empty = pure black
   anchor: OverlayAnchor
+  // Radio-only display options (ignored by other module types)
+  radioDensity?: OverlayRadioDensity
+  radioShowSpeakers?: boolean
+  radioShowParticipants?: boolean
+  radioShowAdvancedStatus?: boolean
 }
 
 export const DEFAULT_OVERLAY_MODULES: OverlayModuleConfig[] = [
   { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-right' },
+  { id: 'radio', type: 'radio', title: 'Radio', visible: true, minimized: false, width: 280, height: 100, opacity: 0.65, locked: false, zIndex: 100, fontSize: 1, bgColor: '', anchor: 'bottom-left', radioDensity: 'medium', radioShowSpeakers: true, radioShowParticipants: true, radioShowAdvancedStatus: true },
 ]
 
 export type OverlayLayoutKey = string

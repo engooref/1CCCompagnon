@@ -55,15 +55,27 @@ export function toCategoryPttTarget(categoryId: number): string {
   return `${PTT_CATEGORY_PREFIX}${categoryId}`
 }
 
-export function isCategoryPttTarget(target: string): boolean {
-  return target.startsWith(PTT_CATEGORY_PREFIX)
+export function isCategoryPttTarget(target: unknown): target is string {
+  return typeof target === 'string' && target.startsWith(PTT_CATEGORY_PREFIX)
 }
 
-export function categoryIdFromPttTarget(target: string): number | null {
+export function categoryIdFromPttTarget(target: unknown): number | null {
   if (!isCategoryPttTarget(target)) return null
-  const raw = target.slice(PTT_CATEGORY_PREFIX.length)
+  const raw = (target as string).slice(PTT_CATEGORY_PREFIX.length)
   const parsed = Number.parseInt(raw, 10)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+/** Préfixe et cible globale PTT — cible spéciale signifiant "tous les canaux" */
+export const PTT_GLOBAL_PREFIX = 'global:'
+export const PTT_GLOBAL_TARGET = `${PTT_GLOBAL_PREFIX}all`
+
+export function isGlobalPttTarget(target: unknown): target is string {
+  return typeof target === 'string' && target === PTT_GLOBAL_TARGET
+}
+
+export function toGlobalPttTarget(): string {
+  return PTT_GLOBAL_TARGET
 }
 
 export interface RadioSettings {

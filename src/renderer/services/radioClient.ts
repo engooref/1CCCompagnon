@@ -174,6 +174,17 @@ export class RadioClient {
       }
     }
 
+    // Si c'est un whisper-only, n'autoriser la connexion que si on est
+    // déjà connecté à au moins un canal "normal" (écoute possible).
+    if (whisperOnly) {
+      const hasNormalConnected = Array.from(this.channels.values()).some(e => !e.whisperOnly && (e.room.state === 'connected' || e.room.state === 'reconnecting'))
+      if (!hasNormalConnected) {
+        console.debug(`[RADIO][client] join canal=${channelId} ignoré (whisperOnly=true) — aucun canal normal connecté`)
+        // Ne pas initialiser le pipeline ni créer de Room pour les whispers
+        return
+      }
+    }
+
     // Initialiser le pipeline audio partagé au premier canal
     if (!this.audioCtx || !this.processedDestination) {
       await this.setupAudioPipeline(inputDeviceId ?? undefined)

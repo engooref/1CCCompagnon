@@ -2,16 +2,24 @@
 
 import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
-import { RadioClient } from '../services/radioClient'
+import type { RadioClient } from '../services/radioClient'
 import type { RadioChannel, RadioCategory, RadioSettings, RadioSpeaker, PttBinding } from '@shared/radio'
-import { DEFAULT_RADIO_SETTINGS, categoryIdFromPttTarget, isCategoryPttTarget } from '@shared/radio'
+import { DEFAULT_RADIO_SETTINGS, categoryIdFromPttTarget, isCategoryPttTarget, isGlobalPttTarget } from '@shared/radio'
 import { useAppStore } from './app'
 import { createOverlayUrls } from '../config/api'
 
 type ChannelCreatePayload = Pick<RadioChannel, 'name' | 'description'> & { categoryId?: number | null }
 type ChannelUpdatePayload = Partial<Pick<RadioChannel, 'name' | 'description' | 'categoryId'>>
 
-const radioClient = new RadioClient()
+let radioClient: RadioClient | null = null
+
+async function getRadioClient(): Promise<RadioClient> {
+  if (!radioClient) {
+    const { RadioClient } = await import('../services/radioClient')
+    radioClient = new RadioClient()
+  }
+  return radioClient
+}
 
 type RadioParticipant = {
   identity: string
@@ -103,7 +111,10 @@ export const useRadioStore = defineStore('radio', {
     inputGain: 1.0,
     /** Participants par canal, mis à jour par polling (canaux non connectés) */
     channelParticipants: {} as Record<string, RadioParticipant[]>,
+    /** Channels auto-joined by a PTT press (targetId -> [channelId]) */
+    _pttAutoJoined: {} as Record<string, string[]>,
     _participantsInterval: null as ReturnType<typeof setInterval> | null,
+    _errorTimeout: null as ReturnType<typeof setTimeout> | null,
   }),
 
   getters: {
@@ -174,6 +185,7 @@ export const useRadioStore = defineStore('radio', {
 
   actions: {
     _channelExists(channelId: string): boolean {
+      console.log(this.channels)
       return this.channels.some(ch => ch.id === channelId)
     },
 
@@ -181,7 +193,50 @@ export const useRadioStore = defineStore('radio', {
       return this.categories.some(cat => cat.id === categoryId)
     },
 
+    setError(message: string | null, durationMs = 3000) {
+      if (this._errorTimeout) {
+        clearTimeout(this._errorTimeout)
+        this._errorTimeout = null
+      }
+      this.error = message
+      if (message !== null && durationMs > 0) {
+        this._errorTimeout = setTimeout(() => {
+          this.error = null
+          this._errorTimeout = null
+        }, durationMs)
+      }
+    },
+
+    _playPttWarningBeep() {
+      try {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+        if (!AudioCtx) return
+        const ctx = new AudioCtx()
+        const o = ctx.createOscillator()
+        const g = ctx.createGain()
+        o.type = 'sine'
+        o.frequency.value = 880
+        g.gain.value = 0.0001
+        o.connect(g)
+        g.connect(ctx.destination)
+        o.start()
+        // montée rapide
+        g.gain.setTargetAtTime(0.05, ctx.currentTime, 0.01)
+        // descente et arrêt
+        setTimeout(() => {
+          try { g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.05) } catch {}
+          setTimeout(() => { try { o.stop(); ctx.close() } catch {} }, 80)
+        }, 120)
+      } catch (e) {
+        console.debug('[RADIO] beep failed', e)
+      }
+    },
+
     _resolvePttTargetChannelIds(targetId: string): string[] {
+      if (isGlobalPttTarget(targetId)) {
+        return this.channels.map(ch => ch.id)
+      }
+
       if (!isCategoryPttTarget(targetId)) return [targetId]
 
       const categoryId = categoryIdFromPttTarget(targetId)
@@ -201,6 +256,8 @@ export const useRadioStore = defineStore('radio', {
       const validChannelIds = new Set(this.channels.map(ch => ch.id))
       const validCategoryIds = new Set(this.categories.map(cat => cat.id))
       const invalidBindings = this.settings.pttBindings.filter((b) => {
+        if (isGlobalPttTarget(b.channelId)) return false
+
         if (!isCategoryPttTarget(b.channelId)) {
           return !validChannelIds.has(b.channelId)
         }
@@ -216,6 +273,7 @@ export const useRadioStore = defineStore('radio', {
       if (!invalidBindings.length) return
 
       this.settings.pttBindings = this.settings.pttBindings.filter((b) => {
+        if (isGlobalPttTarget(b.channelId)) return true
         if (!isCategoryPttTarget(b.channelId)) return validChannelIds.has(b.channelId)
         if (validCategoryIds.size === 0) return true
         const categoryId = categoryIdFromPttTarget(b.channelId)
@@ -282,23 +340,26 @@ export const useRadioStore = defineStore('radio', {
       if (this._initialized) return
       this._initialized = true
 
+      // Charger RadioClient de manière lazy (évite d'importer livekit-client au démarrage)
+      const client = await getRadioClient()
+
       this.settings = await window.oneCC.radioGetSettings()
       await this.fetchChannels()
       await this.fetchCategories()
       await this.loadDevices()
 
       // Écouter les events RadioClient
-      radioClient.on('channelConnected', (channelId) => {
+      client.on('channelConnected', (channelId) => {
         this._ensureChannelState(channelId)
         this.channelState[channelId].connected = true
         this.channelState[channelId].connecting = false
-        this.channelState[channelId].participants = normalizeParticipants(radioClient.participants(channelId))
-        this.error = null
+        this.channelState[channelId].participants = normalizeParticipants(client.participants(channelId))
+          this.setError(null)
         // Notifier le backend
         this._notifyChannelEvent(channelId, 'participant_joined')
       })
 
-      radioClient.on('channelDisconnected', (channelId, reason) => {
+      client.on('channelDisconnected', (channelId, reason) => {
         console.debug(`[RADIO][store] channelDisconnected canal=${channelId} reason=${reason ?? 'none'}`, new Error('trace').stack)
         if (this.channelState[channelId]) {
           this.channelState[channelId].connected = false
@@ -307,65 +368,50 @@ export const useRadioStore = defineStore('radio', {
         }
         // Retirer les speakers de ce canal
         this.activeSpeakers = this.activeSpeakers.filter(s => s.channel !== channelId)
-        if (reason) this.error = `Canal ${channelId} déconnecté: ${reason}`
+        if (reason) this.setError(`Canal ${channelId} déconnecté: ${reason}`)
         // Notifier le backend
         this._notifyChannelEvent(channelId, 'participant_left')
       })
 
-      radioClient.on('speakersChanged', (speakers) => {
+      client.on('speakersChanged', (speakers) => {
         this.activeSpeakers = speakers
       })
 
-      radioClient.on('participantJoined', (channelId) => {
+      client.on('participantJoined', (channelId) => {
         if (this.channelState[channelId]) {
-          this.channelState[channelId].participants = normalizeParticipants(radioClient.participants(channelId))
+          this.channelState[channelId].participants = normalizeParticipants(client.participants(channelId))
         }
       })
 
-      radioClient.on('participantLeft', (channelId) => {
+      client.on('participantLeft', (channelId) => {
         if (this.channelState[channelId]) {
-          this.channelState[channelId].participants = normalizeParticipants(radioClient.participants(channelId))
+          this.channelState[channelId].participants = normalizeParticipants(client.participants(channelId))
         }
       })
 
-      radioClient.on('micLevel', (level) => {
+      client.on('micLevel', (level) => {
         this.micLevel = level
       })
 
-      radioClient.on('error', (err) => {
-        this.error = err.message
+      client.on('error', (err) => {
+        this.setError(err.message)
       })
 
       // Écouter les événements PTT du main process (uIOhook) — avec channelId
       window.oneCC.onRadioPttStart(async (targetId) => {
-        const targetChannels = this._resolvePttTargetChannelIds(targetId)
-        if (!targetChannels.length) {
-          await this.removePttBinding(targetId)
-          return
+        try {
+          await (this as any).handlePttStart?.(targetId)
+        } catch (e) {
+          console.debug('[RADIO][PTT] handlePttStart error', e)
         }
-
-        const connectedCount = targetChannels.filter(cid => this.channelState[cid]?.connected).length
-        console.debug(`[RADIO][PTT] ptt-start cible=${targetId} channels=${targetChannels.join(',')} connected=${connectedCount} muted=${this.muted}`)
-        if (this.muted) return
-
-        if (!this._hasPttBindingForTarget(targetId)) return
-
-        for (const channelId of targetChannels) {
-          if (this.channelState[channelId]?.connected) continue
-          console.debug(`[RADIO][PTT] canal=${channelId} non connecté → auto-join murmure`)
-          try {
-            await this.joinChannel(channelId, true)
-          } catch (e) {
-            console.debug(`[RADIO][PTT] auto-join échoué canal=${channelId}:`, e)
-          }
-        }
-
-        await this.startPttTarget(targetId)
       })
 
-      window.oneCC.onRadioPttStop((targetId) => {
-        console.debug(`[RADIO][PTT] ptt-stop cible=${targetId}`)
-        this.stopPttTarget(targetId)
+      window.oneCC.onRadioPttStop(async (targetId) => {
+        try {
+          await (this as any).handlePttStop?.(targetId)
+        } catch (e) {
+          console.debug('[RADIO][PTT] handlePttStop error', e)
+        }
       })
 
       // Enregistrer les bindings PTT dans le main process
@@ -396,7 +442,7 @@ export const useRadioStore = defineStore('radio', {
       this._ensureChannelState(channelId, whisperOnly)
       this.channelState[channelId].connecting = true
       this.channelState[channelId].whisperOnly = whisperOnly
-      this.error = null
+      this.setError(null)
 
       try {
         const appStore = useAppStore()
@@ -408,17 +454,43 @@ export const useRadioStore = defineStore('radio', {
         if (!res.ok) throw new Error(`Token server error: ${res.status}`)
         const { token, url } = await res.json()
 
-        await radioClient.join(channelId, url as string, token as string, this.selectedInputId, whisperOnly)
+        await radioClient!.join(channelId, url as string, token as string, this.selectedInputId, whisperOnly)
+
+        // Si radioClient.join() a retourné sans erreur mais n'a pas créé
+        // de Room (cas whisperOnly ignoré parce qu'aucun canal normal connecté),
+        // réinitialiser l'état "connecting" pour permettre une auto-join
+        // ultérieure (ex: on rejoint ensuite un canal normal).
+        if (!radioClient!.isChannelConnected(channelId)) {
+          console.debug(`[RADIO][store] joinChannel canal=${channelId} — join ignoré (whisperOnly probablement)`)
+          if (this.channelState[channelId]) this.channelState[channelId].connecting = false
+          return
+        }
 
         // Appliquer le volume
-        radioClient.setVolume(this.settings.radioVolume)
+        radioClient!.setVolume(this.settings.radioVolume)
 
         // Si on rejoint en écoute normale, connecter en murmure tous les autres
-        // canaux qui ont un binding PTT et ne sont pas encore connectés.
+        // canaux qui :
+        // - ont au moins une touche PTT configurée (binding avec keyCode)
+        // - contiennent au moins un participant
         if (!whisperOnly) {
+          const resolved = new Set<string>()
           for (const binding of this.settings.pttBindings) {
+            if (!binding.keyCode) continue
             for (const whisperTargetId of this._resolvePttTargetChannelIds(binding.channelId)) {
               if (whisperTargetId === channelId) continue
+              if (resolved.has(whisperTargetId)) continue
+              resolved.add(whisperTargetId)
+
+              // Vérifier présence de participants (cache puis live)
+              let participantsCount = this.channelParticipants[whisperTargetId]?.length ?? 0
+              try {
+                const live = await this._fetchChannelParticipants(whisperTargetId)
+                if (Array.isArray(live)) participantsCount = live.length
+              } catch {}
+
+              if (participantsCount === 0) continue
+
               const otherCs = this.channelState[whisperTargetId]
               if (!otherCs?.connected && !otherCs?.connecting) {
                 this.joinChannel(whisperTargetId, true).catch(() => {})
@@ -426,8 +498,17 @@ export const useRadioStore = defineStore('radio', {
             }
           }
         }
+        // Si on a rejoint en écoute normale, activer le transmit automatiquement
+        // pour permettre de parler librement sans PTT dans le canal où l'on est connecté.
+        if (!whisperOnly) {
+          try {
+            await this.startTransmit(channelId)
+          } catch (e) {
+            console.debug(`[RADIO][store] failed auto-start transmit canal=${channelId}`, e)
+          }
+        }
       } catch (err: any) {
-        this.error = err?.message || 'Erreur de connexion radio'
+        this.setError(err?.message || 'Erreur de connexion radio')
         if (this.channelState[channelId]) {
           this.channelState[channelId].connecting = false
         }
@@ -441,11 +522,11 @@ export const useRadioStore = defineStore('radio', {
 
     async leaveChannel(channelId: string) {
       console.debug(`[RADIO][store] leaveChannel canal=${channelId}`, new Error('trace').stack)
-      await radioClient.leave(channelId)
+      await radioClient!.leave(channelId)
     },
 
     async leaveAll() {
-      await radioClient.leaveAll()
+      await radioClient!.leaveAll()
     },
 
     // ── PTT ──────────────────────────────────────────────────────────────
@@ -454,7 +535,7 @@ export const useRadioStore = defineStore('radio', {
       const cs = this.channelState[channelId]
       console.debug(`[RADIO][store] startTransmit canal=${channelId} cs.connected=${cs?.connected} muted=${this.muted}`)
       if (!cs?.connected || this.muted) return
-      await radioClient.startTransmit(channelId)
+      await radioClient!.startTransmit(channelId)
       cs.transmitting = true
     },
 
@@ -462,7 +543,7 @@ export const useRadioStore = defineStore('radio', {
       const cs = this.channelState[channelId]
       console.debug(`[RADIO][store] stopTransmit canal=${channelId} cs=${!!cs}`)
       if (!cs) return
-      await radioClient.stopTransmit(channelId)
+      await radioClient!.stopTransmit(channelId)
       cs.transmitting = false
     },
 
@@ -475,6 +556,115 @@ export const useRadioStore = defineStore('radio', {
     async stopPttTarget(targetId: string) {
       for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
         await this.stopTransmit(channelId)
+      }
+    },
+
+    // ── Handle PTT lifecycle (used by main IPC and local keyboard fallback) ──
+    async handlePttStart(targetId: string) {
+      const targetChannels = this._resolvePttTargetChannelIds(targetId)
+      if (!targetChannels.length) {
+        await this.removePttBinding(targetId)
+        return
+      }
+
+      const connectedCount = targetChannels.filter(cid => this.channelState[cid]?.connected).length
+      console.debug(`[RADIO][PTT] handleStart cible=${targetId} channels=${targetChannels.join(',')} connected=${connectedCount} muted=${this.muted}`)
+      if (this.muted) return
+
+      if (!this._hasPttBindingForTarget(targetId)) return
+
+      const isGlobal = isGlobalPttTarget(targetId)
+
+      // Current vocal channel where we have non-whisper connection
+      const currentNonWhisperChannel = Object.entries(this.channelState).find(([, s]) => s.connected && !s.whisperOnly)?.[0] ?? null
+
+      if (isGlobal) {
+        const filtered: string[] = []
+        for (const channelId of targetChannels) {
+          if (currentNonWhisperChannel && channelId === currentNonWhisperChannel) continue
+          let participantsCount = this.channelParticipants[channelId]?.length ?? 0
+          try {
+            const live = await this._fetchChannelParticipants(channelId)
+            if (Array.isArray(live)) participantsCount = live.length
+          } catch {}
+          if (participantsCount > 0) filtered.push(channelId)
+        }
+
+        if (!filtered.length) return
+
+        for (const channelId of filtered) {
+          if (this.channelState[channelId]?.connected) continue
+          const wasConnected = Boolean(this.channelState[channelId]?.connected)
+          try {
+            await this.joinChannel(channelId, true)
+            if (!wasConnected && this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+              this._pttAutoJoined[targetId] = this._pttAutoJoined[targetId] ?? []
+              if (!this._pttAutoJoined[targetId].includes(channelId)) this._pttAutoJoined[targetId].push(channelId)
+            }
+          } catch (e) {
+            console.debug(`[RADIO][PTT] auto-join échoué canal=${channelId}:`, e)
+          }
+        }
+
+        for (const channelId of filtered) {
+          try { await this.startTransmit(channelId) } catch (e) { console.debug(`[RADIO][PTT] startTransmit échoué canal=${channelId}:`, e) }
+        }
+
+        return
+      }
+
+      // Non-global target (single channel or category)
+      for (const channelId of targetChannels) {
+        // If we are already in the channel non-whisper, no PTT needed
+        if (this.channelState[channelId]?.connected && !this.channelState[channelId]?.whisperOnly) continue
+
+        let participantsCount = this.channelParticipants[channelId]?.length ?? 0
+        try {
+          const live = await this._fetchChannelParticipants(channelId)
+          if (Array.isArray(live)) participantsCount = live.length
+        } catch {}
+
+        if (participantsCount === 0) {
+          if ((this as any).connected) {
+            try { this._playPttWarningBeep() } catch {}
+            const ch = this.channels.find(c => c.id === channelId)
+            this.setError(ch ? `Aucun participant dans "${ch.name}"` : 'Aucun participant dans le canal')
+          }
+          console.debug(`[RADIO][PTT] skip auto-join canal=${channelId} — aucun participant`)
+          continue
+        }
+
+        const wasConnected = Boolean(this.channelState[channelId]?.connected)
+        try {
+          await this.joinChannel(channelId, true)
+          if (!wasConnected && this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+            this._pttAutoJoined[targetId] = this._pttAutoJoined[targetId] ?? []
+            if (!this._pttAutoJoined[targetId].includes(channelId)) this._pttAutoJoined[targetId].push(channelId)
+          }
+        } catch (e) {
+          console.debug(`[RADIO][PTT] auto-join échoué canal=${channelId}:`, e)
+        }
+      }
+
+      await this.startPttTarget(targetId)
+    },
+
+    async handlePttStop(targetId: string) {
+      console.debug(`[RADIO][PTT] handleStop cible=${targetId}`)
+      await this.stopPttTarget(targetId)
+
+      const auto = this._pttAutoJoined[targetId] ?? []
+      if (auto.length) {
+        for (const channelId of auto) {
+          try {
+            if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+              await this.leaveChannel(channelId)
+            }
+          } catch (e) {
+            console.debug(`[RADIO][PTT] leave auto-joined failed canal=${channelId}:`, e)
+          }
+        }
+        delete this._pttAutoJoined[targetId]
       }
     },
 
@@ -491,29 +681,68 @@ export const useRadioStore = defineStore('radio', {
 
     toggleMutedIncoming() {
       this.mutedIncoming = !this.mutedIncoming
-      radioClient.setVolume(this.mutedIncoming ? 0 : this.settings.radioVolume)
+      radioClient!.setVolume(this.mutedIncoming ? 0 : this.settings.radioVolume)
     },
 
     // ── Volume ───────────────────────────────────────────────────────────
 
     setVolume(volume: number) {
       this.settings.radioVolume = volume
-      radioClient.setVolume(volume)
+      radioClient!.setVolume(volume)
       window.oneCC.radioUpdateSettings({ radioVolume: volume })
     },
 
     // ── PTT Bindings ──────────────────────────────────────────────────────
 
     async setPttBinding(targetId: string, keyCode: number | null, key: string) {
+      console.log(`[RADIO][store] setPttBinding targetId=${targetId} keyCode=${keyCode} key=${key}`)
       if (isCategoryPttTarget(targetId)) {
         const categoryId = categoryIdFromPttTarget(targetId)
+        console.log(`[RADIO][store] setPttBinding cible=${targetId} est une catégorie`)
         if (categoryId === null || !this._categoryExists(categoryId)) {
+          console.log(`[RADIO][store] setPttBinding catégorie invalide cible=${targetId} → suppression du binding`)
           await this.removePttBinding(targetId)
           return
         }
-      } else if (!this._channelExists(targetId)) {
+      } else if (!this._channelExists(targetId) && !isGlobalPttTarget(targetId)) {
+        console.log(`[RADIO][store] setPttBinding cible=${targetId} est un canal invalide → suppression du binding`)
         await this.removePttBinding(targetId)
         return
+      }
+
+      if (keyCode !== null) {
+        const existing = this.settings.pttBindings.find(b => b.keyCode === keyCode && b.channelId !== targetId)
+        console.log(`[RADIO][store] setPttBinding targetId=${targetId} keyCode=${keyCode} existing=${existing ? `${existing.channelId}` : 'none'}`)
+        if (existing) {
+          let allow = false
+          // Si l'existant est un binding de catégorie et que la cible
+          // est un canal appartenant à cette catégorie, autoriser.
+          if (isCategoryPttTarget(existing.channelId) && !isCategoryPttTarget(targetId)) {
+            const existingCid = categoryIdFromPttTarget(existing.channelId)
+            const targetChannel = this.channels.find(c => c.id === targetId)
+            if (existingCid !== null && targetChannel && targetChannel.categoryId === existingCid) {
+              allow = true
+            }
+          }
+
+          if (!allow) {
+            // Construire un libellé lisible pour l'erreur
+            let label = existing.channelId
+            if (isGlobalPttTarget(existing.channelId)) {
+              label = 'tous les canaux'
+            } else if (isCategoryPttTarget(existing.channelId)) {
+              const cid = categoryIdFromPttTarget(existing.channelId)
+              const cat = cid !== null ? this.categories.find(c => c.id === cid) : undefined
+              label = cat ? `catégorie "${cat.name}"` : `cible ${existing.channelId}`
+            } else {
+              const ch = this.channels.find(c => c.id === existing.channelId)
+              label = ch ? `canal "${ch.name}"` : `canal ${existing.channelId}`
+            }
+            const errMsg = `Touche déjà assignée à ${label}`
+            this.setError(errMsg)
+            throw new Error(errMsg)
+          }
+        }
       }
 
       console.debug(`[RADIO][store] setPttBinding cible=${targetId} keyCode=${keyCode} key=${key}`)
@@ -522,19 +751,7 @@ export const useRadioStore = defineStore('radio', {
       this.settings.pttBindings = bindings
       await window.oneCC.radioSetPttBindings(bindings.map(b => ({ ...b })))
 
-      // Auto-rejoindre en murmure dès qu'une touche PTT est configurée
-      if (keyCode !== null) {
-        for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
-          const cs = this.channelState[channelId]
-          if (cs?.connected && !cs.whisperOnly) {
-            // Canal en écoute normale → quitter puis rejoindre en murmure
-            await this.leaveChannel(channelId)
-          }
-          if (!this.channelState[channelId]?.connected) {
-            try { await this.joinChannel(channelId, true) } catch { /* noop */ }
-          }
-        }
-      }
+      // Ne pas auto-rejoindre lors du paramétrage d'une touche PTT.
     },
 
     async removePttBinding(targetId: string) {
@@ -559,18 +776,14 @@ export const useRadioStore = defineStore('radio', {
     // ── Channels CRUD ─────────────────────────────────────────────────────
 
     async fetchChannels() {
-      const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
-      if (!url) return
-      try {
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${appStore.bearerToken}` } })
-        if (!res.ok) return
-        const data = await res.json()
-        if (Array.isArray(data.channels)) this.channels = data.channels
-        else if (Array.isArray(data)) this.channels = data
-      } catch {
-        this.channels = []
+      // Channels are now provided inside categories (category.channels).
+      // Ensure categories are loaded, then flatten their channels list.
+      if (this.categories.length === 0) {
+        await this.fetchCategories()
       }
+
+      this.channels = this.categories.flatMap(cat => Array.isArray(cat.channels) ? cat.channels : [])
+
       await this._pruneInvalidPttBindings()
       await this.fetchAllParticipants()
     },
@@ -626,14 +839,14 @@ export const useRadioStore = defineStore('radio', {
 
       const appStore = useAppStore()
       const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
-      const res = await fetch(`${url}/${id}`, {
+      const res = await fetch(`${url}/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${appStore.bearerToken}` },
       })
       if (!res.ok) throw new Error(`Erreur ${res.status}`)
       if (this.channelState[id]?.connected) await this.leaveChannel(id)
-      await this.fetchChannels()
       await this.fetchCategories()
+      await this.fetchChannels()
     },
 
     // ── Categories CRUD ───────────────────────────────────────────────────
@@ -688,6 +901,10 @@ export const useRadioStore = defineStore('radio', {
       })
       if (!res.ok) throw new Error(`Erreur ${res.status}`)
       await this.fetchCategories()
+      // After removing a category the server may reassign or move channels
+      // to the uncategorized bucket; refresh channels as well to keep
+      // the client state consistent.
+      await this.fetchChannels()
     },
 
     // ── Devices ──────────────────────────────────────────────────────────
@@ -695,36 +912,37 @@ export const useRadioStore = defineStore('radio', {
     async loadDevices() {
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()))
-        this.availableInputs  = await RadioClient.getAudioInputDevices()
-        this.availableOutputs = await RadioClient.getAudioOutputDevices()
+        const { RadioClient: RC } = await import('../services/radioClient')
+        this.availableInputs  = await RC.getAudioInputDevices()
+        this.availableOutputs = await RC.getAudioOutputDevices()
       } catch { /* pas de permission micro */ }
     },
 
     async setAudioInput(deviceId: string) {
       this.selectedInputId = deviceId
-      if (radioClient.connected) await radioClient.setAudioInput(deviceId)
+      if (radioClient?.connected) await radioClient.setAudioInput(deviceId)
     },
 
     async setAudioOutput(deviceId: string) {
       this.selectedOutputId = deviceId
-      if (radioClient.connected) await radioClient.setAudioOutput(deviceId)
+      if (radioClient?.connected) await radioClient.setAudioOutput(deviceId)
     },
 
     setGateThreshold(value: number) {
       this.gateThreshold = value
-      radioClient.setGateThreshold(value)
+      radioClient?.setGateThreshold(value)
     },
 
     setInputGain(value: number) {
       this.inputGain = value
-      radioClient.setInputGain(value)
+      radioClient?.setInputGain(value)
     },
 
     async toggleMonitor() {
-      if (radioClient.isMonitoring) {
+      if (radioClient?.isMonitoring) {
         radioClient.stopMonitor()
         this.monitoring = false
-      } else {
+      } else if (radioClient) {
         await radioClient.startMonitor()
         this.monitoring = radioClient.isMonitoring
       }
@@ -737,7 +955,7 @@ export const useRadioStore = defineStore('radio', {
         this._participantsInterval = null
       }
       window.oneCC.offRadioPtt()
-      radioClient.destroy()
+      radioClient?.destroy()
     },
   },
 })

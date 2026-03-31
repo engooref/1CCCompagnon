@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick, watch, type Ref } from 'vue'
 import { useRadioStore } from '../../stores/radio'
 import type { RadioCategory, RadioChannel } from '@shared/radio'
-import { toCategoryPttTarget } from '@shared/radio'
+import { toCategoryPttTarget, toGlobalPttTarget } from '@shared/radio'
+import { useConfirm } from '../../composables/useConfirm'
 
 const radio = useRadioStore()
+const { visible: confirmVisible, message: confirmMessage, confirm: askConfirm, accept: confirmAccept, cancel: confirmCancel } = useConfirm()
 
 const managing = ref(false)
 
@@ -15,6 +17,27 @@ const showNewForm = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
 const creatingChannelCategoryId = ref<number | null>(null)
+const newFormNameRef = ref<HTMLInputElement | null>(null)
+const newCategoryNameRef = ref<HTMLInputElement | null>(null)
+const confirmBtnRef = ref<HTMLButtonElement | null>(null)
+
+watch(confirmVisible, (v) => {
+  if (v) nextTick(() => confirmBtnRef.value?.focus())
+})
+
+async function focusWhenReady(elRef: Ref<HTMLInputElement | null>, timeout = 500, interval = 50) {
+  const attempts = Math.max(1, Math.ceil(timeout / interval))
+  for (let i = 0; i < attempts; i++) {
+    await nextTick()
+    const el = elRef.value
+    if (el) {
+      try { el.focus() } catch {}
+      if (document.activeElement === el) return true
+    }
+    await new Promise(r => setTimeout(r, interval))
+  }
+  return false
+}
 
 const editingCategoryId = ref<number | null>(null)
 const editCategoryForm = ref({ name: '', description: '' })
@@ -24,17 +47,34 @@ const savingCategory = ref(false)
 const errorCategory = ref<string | null>(null)
 
 const collapsedCategories = ref<Record<number, boolean>>({})
-const draggedChannelId = ref<string | null>(null)
 const uncategorizedCollapsed = ref(false)
 
+const visibleCategories = computed(() => {
+  return radio.categories.filter(category => Number.isFinite(category.id))
+})
+
 const uncategorizedChannels = computed(() => {
-  const categoryChannelIds = new Set<string>()
+  const categorizedChannelIds = new Set<string>()
+  const uncategorizedById = new Map<string, RadioChannel>()
+
   for (const category of radio.categories) {
+    const hasRealCategoryId = Number.isFinite(category.id)
     for (const channel of category.channels) {
-      categoryChannelIds.add(channel.id)
+      if (hasRealCategoryId) {
+        categorizedChannelIds.add(channel.id)
+      } else {
+        uncategorizedById.set(channel.id, channel)
+      }
     }
   }
-  return radio.channels.filter(channel => !categoryChannelIds.has(channel.id))
+
+  for (const channel of radio.channels) {
+    if (!categorizedChannelIds.has(channel.id)) {
+      uncategorizedById.set(channel.id, channel)
+    }
+  }
+
+  return Array.from(uncategorizedById.values())
 })
 
 function resetManageUi() {
@@ -77,7 +117,7 @@ async function saveEdit() {
 }
 
 async function deleteChannel(id: string) {
-  if (!confirm('Supprimer ce canal ?')) return
+  if (!await askConfirm('Supprimer ce canal ?')) return
   saving.value = true
   error.value = null
   try {
@@ -136,7 +176,7 @@ async function saveEditCategory() {
 }
 
 async function deleteCategory(id: number) {
-  if (!confirm('Supprimer cette catégorie ?')) return
+  if (!await askConfirm('Supprimer cette catégorie ?')) return
   savingCategory.value = true
   errorCategory.value = null
   try {
@@ -166,13 +206,22 @@ async function createCategory() {
   }
 }
 
-function openNewChannelForm(categoryId: number | null) {
+async function openNewChannelForm(categoryId: number | null) {
   showNewCategory.value = false
   showNewForm.value = true
   creatingChannelCategoryId.value = categoryId
   if (categoryId !== null && isCategoryCollapsed(categoryId)) {
     toggleCategory(categoryId)
   }
+  // Focus the name input of the newly shown form (robust: retry until available)
+  await focusWhenReady(newFormNameRef, 800, 40)
+}
+
+async function openNewCategoryForm() {
+  showNewCategory.value = true
+  showNewForm.value = false
+  creatingChannelCategoryId.value = null
+  await focusWhenReady(newCategoryNameRef, 800, 40)
 }
 
 function isCategoryCollapsed(categoryId: number): boolean {
@@ -188,20 +237,6 @@ function toggleCategory(categoryId: number) {
 
 function toggleUncategorized() {
   uncategorizedCollapsed.value = !uncategorizedCollapsed.value
-}
-
-function onChannelDragStart(event: DragEvent, channelId: string) {
-  if (!managing.value) return
-  draggedChannelId.value = channelId
-
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', channelId)
-  }
-}
-
-function onChannelDragEnd() {
-  draggedChannelId.value = null
 }
 
 function findChannelById(channelId: string): RadioChannel | null {
@@ -223,36 +258,6 @@ function findChannelCategoryId(channelId: string): number | null {
     }
   }
   return null
-}
-
-async function onDropToCategory(event: DragEvent, categoryId: number | null) {
-  if (!managing.value) return
-
-  const droppedId = event.dataTransfer?.getData('text/plain')?.trim() ?? ''
-  const channelId = droppedId || draggedChannelId.value
-  if (!channelId) return
-
-  draggedChannelId.value = null
-
-  const currentCategoryId = findChannelCategoryId(channelId)
-  if (currentCategoryId === categoryId) return
-
-  const channel = findChannelById(channelId)
-  if (!channel) return
-
-  saving.value = true
-  error.value = null
-  try {
-    await radio.updateChannel(channelId, {
-      name: channel.name,
-      description: channel.description,
-      categoryId,
-    })
-  } catch (e: any) {
-    error.value = e?.message ?? 'Erreur'
-  } finally {
-    saving.value = false
-  }
 }
 
 async function onChannelDblClick(channelId: string) {
@@ -287,7 +292,7 @@ const recordingTarget = ref<string | null>(null)
 
 function startPttRecord(targetId: string) {
   recordingTarget.value = targetId
-  const handler = (e: KeyboardEvent) => {
+  const handler = async (e: KeyboardEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (e.key === 'Escape') {
@@ -301,7 +306,12 @@ function startPttRecord(targetId: string) {
     if (!code) return
     window.removeEventListener('keydown', handler, true)
     recordingTarget.value = null
-    radio.setPttBinding(targetId, code, e.key.length === 1 ? e.key.toUpperCase() : e.key)
+    error.value = null
+    try {
+      await radio.setPttBinding(targetId, code, e.key.length === 1 ? e.key.toUpperCase() : e.key)
+    } catch (err: any) {
+      error.value = err?.message ?? 'Touche déjà assignée'
+    }
   }
   window.addEventListener('keydown', handler, true)
 }
@@ -309,6 +319,17 @@ function startPttRecord(targetId: string) {
 function startCategoryPttRecord(categoryId: number) {
   startPttRecord(toCategoryPttTarget(categoryId))
 }
+
+
+function setNewFormNameRef(el: any, categoryId: number | null) {
+  // Only assign the input element if the current "creating" category matches.
+  // `creatingChannelCategoryId` is a ref so compare its `.value`.
+  if (creatingChannelCategoryId.value === categoryId) {
+    if (el && typeof el.focus === 'function') newFormNameRef.value = el as HTMLInputElement
+    else newFormNameRef.value = null
+  }
+}
+
 </script>
 
 <template>
@@ -354,15 +375,41 @@ function startCategoryPttRecord(categoryId: number) {
       </button>
     </div>
 
+    <!-- Global PTT binding -->
+    <div class="rounded-lg border border-th-subtle/50 bg-black/30 overflow-hidden">
+      <div class="px-2.5 py-1.5 flex items-start gap-2 bg-th-card/40 border-b border-th-subtle/30">
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-bold text-th-primary">PTT global</p>
+          <p class="text-[10px] text-th-muted/70">Transmet sur tous les canaux en mode murmure</p>
+
+          <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
+            <template v-if="recordingTarget === toGlobalPttTarget()">
+              <span class="text-[10px] text-amber-300 animate-pulse">Touche globale… (Esc annule)</span>
+            </template>
+            <template v-else>
+              <kbd v-if="radio.pttBinding(toGlobalPttTarget())" class="inline-flex items-center rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-accent">
+                {{ radio.pttBinding(toGlobalPttTarget())!.key }}
+              </kbd>
+              <button @click="startPttRecord(toGlobalPttTarget())" class="text-[10px] text-th-muted hover:text-accent transition px-1.5 py-0.5 rounded border border-th-subtle/50 hover:border-accent/30">
+                {{ radio.pttBinding(toGlobalPttTarget()) ? 'Changer PTT global' : '+ PTT global' }}
+              </button>
+              <button v-if="radio.pttBinding(toGlobalPttTarget())" @click="radio.removePttBinding(toGlobalPttTarget())" class="text-[10px] text-th-muted/50 hover:text-rose-300 transition">
+                ✕
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <p v-if="error" class="text-[10px] text-rose-300">{{ error }}</p>
     <p v-if="errorCategory" class="text-[10px] text-rose-300">{{ errorCategory }}</p>
 
     <div
-      v-for="category in radio.categories"
+      v-for="category in visibleCategories"
       :key="category.id"
       class="rounded-lg border border-th-subtle/50 bg-black/30 overflow-hidden"
-      @dragover.prevent
-      @drop.prevent="onDropToCategory($event, category.id)"
+      
     >
       <div class="px-2.5 py-1.5 flex items-start gap-2 bg-th-card/40 border-b border-th-subtle/30">
         <button
@@ -378,8 +425,8 @@ function startCategoryPttRecord(categoryId: number) {
         <div class="flex-1 min-w-0">
           <template v-if="managing && editingCategoryId === category.id">
             <div class="space-y-2">
-              <input v-model="editCategoryForm.name" placeholder="Nom" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
-              <input v-model="editCategoryForm.description" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+              <input v-model="editCategoryForm.name" @keydown.enter.prevent="saveEditCategory" placeholder="Nom" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+              <input v-model="editCategoryForm.description" @keydown.enter.prevent="saveEditCategory" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
               <div class="flex gap-2">
                 <button @click="saveEditCategory" :disabled="savingCategory" class="text-[10px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition disabled:opacity-50">
                   {{ savingCategory ? 'Sauvegarde…' : 'Sauvegarder' }}
@@ -430,8 +477,8 @@ function startCategoryPttRecord(categoryId: number) {
       <div v-show="!isCategoryCollapsed(category.id)" class="space-y-1 p-1.5">
         <div v-if="managing && showNewForm && creatingChannelCategoryId === category.id" class="rounded border border-accent/30 bg-accent/[0.05] p-3 space-y-2 mb-2">
           <p class="text-[10px] font-bold uppercase tracking-wider text-accent">Nouveau channel</p>
-          <input v-model="newForm.name" placeholder="Nom du channel" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
-          <input v-model="newForm.description" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+          <input v-model="newForm.name" @keydown.enter.prevent="createChannel" :ref="el => setNewFormNameRef(el, category.id)" placeholder="Nom du channel" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+          <input v-model="newForm.description" @keydown.enter.prevent="createChannel" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
           <div class="flex gap-2">
             <button @click="createChannel" :disabled="saving || !newForm.name.trim()" class="text-[10px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition disabled:opacity-50">
               {{ saving ? 'Création…' : 'Créer' }}
@@ -451,15 +498,12 @@ function startCategoryPttRecord(categoryId: number) {
             : radio.channelState[channel.id]?.connected && radio.channelState[channel.id]?.whisperOnly
               ? 'border-violet-500/30 bg-violet-500/[0.05]'
               : 'border-th-subtle/40 bg-black/20 hover:border-accent/10',
-            managing ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer']"
-          :draggable="managing"
-          @dragstart="onChannelDragStart($event, channel.id)"
-          @dragend="onChannelDragEnd"
+            managing ? '' : 'cursor-pointer']"
           @dblclick="onChannelDblClick(channel.id)"
         >
           <div v-if="managing && editingId === channel.id" class="p-2 space-y-2">
-            <input v-model="editForm.name" placeholder="Nom" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
-            <input v-model="editForm.description" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+            <input v-model="editForm.name" @keydown.enter.prevent="saveEdit" placeholder="Nom" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+            <input v-model="editForm.description" @keydown.enter.prevent="saveEdit" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
             <div class="flex gap-2">
               <button @click="saveEdit" :disabled="saving" class="text-[10px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition disabled:opacity-50">
                 {{ saving ? 'Sauvegarde…' : 'Sauvegarder' }}
@@ -484,6 +528,22 @@ function startCategoryPttRecord(categoryId: number) {
                 </span>
               </div>
               <p class="text-[11px] text-th-muted mt-0.5 truncate">{{ channel.description }}</p>
+              <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                <template v-if="recordingTarget === channel.id">
+                  <span class="text-[10px] text-amber-300 animate-pulse">Touche… (Esc annule)</span>
+                </template>
+                <template v-else>
+                  <kbd v-if="radio.pttBinding(channel.id)" class="inline-flex items-center rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-accent">
+                    {{ radio.pttBinding(channel.id)!.key }}
+                  </kbd>
+                  <button @click="startPttRecord(channel.id)" class="text-[10px] text-th-muted hover:text-accent transition px-1.5 py-0.5 rounded border border-th-subtle/50 hover:border-accent/30">
+                    {{ radio.pttBinding(channel.id) ? 'Changer' : '+ PTT' }}
+                  </button>
+                  <button v-if="radio.pttBinding(channel.id)" @click="radio.removePttBinding(channel.id)" class="text-[10px] text-th-muted/50 hover:text-rose-300 transition">
+                    ✕
+                  </button>
+                </template>
+              </div>
             </div>
             <div v-if="managing" class="flex items-center gap-1.5 shrink-0">
               <button @click.stop="startEdit(channel)" class="p-1.5 rounded border border-th-subtle text-th-muted hover:text-accent hover:border-accent/30 transition">✏️</button>
@@ -499,15 +559,13 @@ function startCategoryPttRecord(categoryId: number) {
             ? 'border-dashed border-th-subtle/40 text-th-muted/70'
             : 'border-th-subtle/30 bg-black/10 text-th-muted/60'"
         >
-          {{ managing ? 'Dépose un channel ici' : 'Aucun channel dans cette catégorie' }}
+          {{ managing ? 'Ajouter un channel ici' : 'Aucun channel dans cette catégorie' }}
         </div>
       </div>
     </div>
 
     <div
       class="rounded-lg border border-th-subtle/50 bg-black/30 overflow-hidden"
-      @dragover.prevent
-      @drop.prevent="onDropToCategory($event, null)"
     >
       <div class="px-2.5 py-1.5 flex items-start gap-2 bg-th-card/40 border-b border-th-subtle/30">
         <button
@@ -538,8 +596,8 @@ function startCategoryPttRecord(categoryId: number) {
       <div v-show="!uncategorizedCollapsed" class="space-y-1 p-1.5">
         <div v-if="managing && showNewForm && creatingChannelCategoryId === null" class="rounded border border-accent/30 bg-accent/[0.05] p-3 space-y-2 mb-2">
           <p class="text-[10px] font-bold uppercase tracking-wider text-accent">Nouveau channel</p>
-          <input v-model="newForm.name" placeholder="Nom du channel" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
-          <input v-model="newForm.description" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+          <input v-model="newForm.name" @keydown.enter.prevent="createChannel" :ref="el => setNewFormNameRef(el, null)" placeholder="Nom du channel" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+          <input v-model="newForm.description" @keydown.enter.prevent="createChannel" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
           <div class="flex gap-2">
             <button @click="createChannel" :disabled="saving || !newForm.name.trim()" class="text-[10px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition disabled:opacity-50">
               {{ saving ? 'Création…' : 'Créer' }}
@@ -559,15 +617,12 @@ function startCategoryPttRecord(categoryId: number) {
             : radio.channelState[channel.id]?.connected && radio.channelState[channel.id]?.whisperOnly
               ? 'border-violet-500/30 bg-violet-500/[0.05]'
               : 'border-th-subtle bg-black/20 hover:border-accent/10',
-            managing ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer']"
-          :draggable="managing"
-          @dragstart="onChannelDragStart($event, channel.id)"
-          @dragend="onChannelDragEnd"
+            managing ? '' : 'cursor-pointer']"
           @dblclick="onChannelDblClick(channel.id)"
         >
           <div v-if="managing && editingId === channel.id" class="p-3 space-y-2">
-            <input v-model="editForm.name" placeholder="Nom" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
-            <input v-model="editForm.description" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+            <input v-model="editForm.name" @keydown.enter.prevent="saveEdit" placeholder="Nom" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+            <input v-model="editForm.description" @keydown.enter.prevent="saveEdit" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
             <div class="flex gap-2">
               <button @click="saveEdit" :disabled="saving" class="text-[10px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition disabled:opacity-50">
                 {{ saving ? 'Sauvegarde…' : 'Sauvegarder' }}
@@ -632,15 +687,15 @@ function startCategoryPttRecord(categoryId: number) {
             ? 'border-dashed border-th-subtle/40 text-th-muted/70'
             : 'border-th-subtle/30 bg-black/10 text-th-muted/60'"
         >
-          {{ managing ? 'Dépose ici pour retirer un channel de sa catégorie' : 'Aucun channel sans catégorie' }}
+          {{ managing ? 'Utilisez Gérer pour déplacer un channel' : 'Aucun channel sans catégorie' }}
         </div>
       </div>
     </div>
 
     <div v-if="managing && showNewCategory" class="rounded-lg border border-accent/30 bg-accent/[0.05] p-3 space-y-2">
       <p class="text-[10px] font-bold uppercase tracking-wider text-accent">Nouvelle catégorie</p>
-      <input v-model="newCategoryForm.name" placeholder="Nom de la catégorie" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
-      <input v-model="newCategoryForm.description" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+      <input ref="newCategoryNameRef" v-model="newCategoryForm.name" @keydown.enter.prevent="createCategory" placeholder="Nom de la catégorie" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
+      <input v-model="newCategoryForm.description" @keydown.enter.prevent="createCategory" placeholder="Description" class="w-full rounded border border-th-subtle bg-th-surface px-2 py-1 text-xs text-th-primary focus:outline-none focus:border-accent/50" />
       <div class="flex gap-2">
         <button @click="createCategory" :disabled="savingCategory || !newCategoryForm.name.trim()" class="text-[10px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition disabled:opacity-50">
           {{ savingCategory ? 'Création…' : 'Créer' }}
@@ -653,7 +708,7 @@ function startCategoryPttRecord(categoryId: number) {
 
     <div v-if="managing" class="space-y-2">
       <button
-        @click="showNewCategory = true; showNewForm = false; creatingChannelCategoryId = null"
+        @click="openNewCategoryForm()"
         class="w-full rounded-lg border border-dashed border-th-subtle/50 py-3 text-[11px] text-th-muted hover:text-accent hover:border-accent/30 transition flex items-center justify-center gap-1.5"
       >
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -662,6 +717,36 @@ function startCategoryPttRecord(categoryId: number) {
         Nouvelle catégorie
       </button>
     </div>
+
+    <!-- Confirm modal -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="confirmVisible"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          @click.self="confirmCancel"
+        >
+          <div class="w-[340px] rounded-xl border border-th-subtle/50 bg-th-base shadow-2xl shadow-black/80 p-5 space-y-4">
+            <p class="text-sm text-th-primary">{{ confirmMessage }}</p>
+            <div class="flex justify-end gap-2">
+              <button
+                @click="confirmCancel"
+                class="px-3 py-1.5 rounded-md border border-th-subtle text-xs text-th-muted hover:text-th-primary transition"
+              >
+                Annuler
+              </button>
+              <button
+                ref="confirmBtnRef"
+                @click="confirmAccept"
+                class="px-3 py-1.5 rounded-md border border-rose-400/40 bg-rose-400/10 text-xs font-semibold text-rose-300 hover:bg-rose-400/20 transition"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 

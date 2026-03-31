@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import type { OverlayRadioDensity } from '@shared/general'
 import type { TransportOrder } from '../../shared/deliveries'
 import TransportModule from '../components/overlay/TransportModule.vue'
+import RadioModule from '../components/overlay/RadioModule.vue'
 import { useOverlayEditor } from '../composables/useOverlayEditor'
 
 const previewRef = ref<HTMLElement | null>(null)
@@ -82,6 +84,23 @@ const FAKE_TRANSPORT_ORDER: TransportOrder = {
   },
 } as TransportOrder
 
+const FAKE_RADIO_STATE = {
+  connected: true,
+  connecting: false,
+  currentChannel: 'alpha',
+  currentChannelName: 'Escadron Alpha',
+  participantCount: 7,
+  transmitting: true,  // Exemple: en train de transmettre
+  muted: false,
+  mutedIncoming: false,
+  activeSpeakers: [
+    { identity: 'Mira', channel: 'Escadron Alpha', audioLevel: 0.76 },
+    { identity: 'Vega', channel: 'Escadron Alpha', audioLevel: 0.52 },
+    { identity: 'Nox', channel: 'Escadron Alpha', audioLevel: 0.34 },
+    { identity: 'Sol', channel: 'Escadron Alpha', audioLevel: 0.61 },
+  ],
+}
+
 function handleKeydown(event: KeyboardEvent) {
   if (!selectedModule.value) return
   const step = event.shiftKey ? GRID_SIZE : 1
@@ -158,6 +177,15 @@ function closeEditor() {
                 @click="toggleModuleType('transport')"
               >
                 Transport
+              </button>
+              <button
+                class="rounded-full border px-3 py-1.5 text-xs transition"
+                :class="isTypeVisible('radio')
+                  ? 'border-accent/30 bg-accent/10 text-accent'
+                  : 'border-white/10 bg-white/5 text-th-secondary hover:bg-white/10'"
+                @click="toggleModuleType('radio')"
+              >
+                Radio
               </button>
             </div>
 
@@ -246,8 +274,41 @@ function closeEditor() {
                   }"
                 >
                   <TransportModule v-if="selectedModule.type === 'transport'" :preview="true" :preview-order="FAKE_TRANSPORT_ORDER" />
+                  <RadioModule v-else-if="selectedModule.type === 'radio'" :preview="true" :preview-state="FAKE_RADIO_STATE" :config="selectedModule" />
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div v-if="selectedModule.type === 'radio'" class="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p class="text-xs uppercase tracking-[0.2em] text-th-muted">Affichage radio</p>
+
+            <label class="space-y-2">
+              <span class="text-xs uppercase tracking-[0.2em] text-th-muted">Densité</span>
+              <select
+                class="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white outline-none transition focus:border-accent/40 hover:bg-white/15 cursor-pointer"
+                :value="selectedModule.radioDensity ?? 'medium'"
+                  @change="setField(selectedModule.id, 'radioDensity', ($event.target as HTMLSelectElement).value as OverlayRadioDensity); commitSelected()"
+              >
+                <option class="w-full rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none transition focus:border-accent/40 hover:bg-white/15 cursor-pointer" value="compact">Compact</option>
+                <option class="w-full rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none transition focus:border-accent/40 hover:bg-white/15 cursor-pointer" value="medium">Intermédiaire</option>
+                <option class="w-full rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none transition focus:border-accent/40 hover:bg-white/15 cursor-pointer" value="detailed">Détaillé</option>
+              </select>
+            </label>
+
+            <div class="grid grid-cols-1 gap-2">
+              <label class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm">
+                <span>Compteur participants</span>
+                <input type="checkbox" :checked="selectedModule.radioShowParticipants ?? true" class="accent-[rgb(var(--accent-rgb))]" @change="setField(selectedModule.id, 'radioShowParticipants', ($event.target as HTMLInputElement).checked); commitSelected()" />
+              </label>
+              <label class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm">
+                <span>Speakers actifs</span>
+                <input type="checkbox" :checked="selectedModule.radioShowSpeakers ?? true" class="accent-[rgb(var(--accent-rgb))]" @change="setField(selectedModule.id, 'radioShowSpeakers', ($event.target as HTMLInputElement).checked); commitSelected()" />
+              </label>
+              <label class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm">
+                <span>Statut avancé</span>
+                <input type="checkbox" :checked="selectedModule.radioShowAdvancedStatus ?? true" class="accent-[rgb(var(--accent-rgb))]" @change="setField(selectedModule.id, 'radioShowAdvancedStatus', ($event.target as HTMLInputElement).checked); commitSelected()" />
+              </label>
             </div>
           </div>
 
@@ -314,7 +375,7 @@ function closeEditor() {
             </label>
             <label class="space-y-2">
               <span class="text-xs uppercase tracking-[0.2em] text-th-muted">Z-index</span>
-              <input type="number" min="1" max="999" :value="selectedModule.zIndex" class="field" @change="setField(selectedModule.id, 'zIndex', Number(($event.target as HTMLInputElement).value)); commitSelected()" />
+              <input type="number" min="1" max="999" :value="selectedModule.zIndex" class="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white outline-none transition focus:border-accent/40 hover:bg-white/15" @change="setField(selectedModule.id, 'zIndex', Number(($event.target as HTMLInputElement).value)); commitSelected()" />
             </label>
           </div>
 

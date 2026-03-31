@@ -7,7 +7,6 @@ import { useMercure } from '../composables/useMercure'
 import { createOverlayUrls } from '../config/api'
 import RadioPanel from '../components/radio/RadioPanel.vue'
 import RadioControls from '../components/radio/RadioControls.vue'
-import RadioParticipants from '../components/radio/RadioParticipants.vue'
 
 const radio = useRadioStore()
 const app = useAppStore()
@@ -52,9 +51,13 @@ onUnmounted(() => {
 watch(
   () => ({
     connected:      radio.connected,
+    connecting:     radio.connecting,
     currentChannel: radio.currentChannel,
+    currentChannelName: radio.currentChannelName,
+    participantCount: radio.currentChannel ? radio.participantsFor(radio.currentChannel).length : 0,
     transmitting:   radio.transmitting,
     muted:          radio.muted,
+    mutedIncoming:  radio.mutedIncoming,
     activeSpeakers: [...radio.activeSpeakers],
   }),
   (state) => {
@@ -71,7 +74,7 @@ watch(
     <div class="shrink-0 flex items-start justify-between gap-4">
       <div>
         <h2 class="text-base font-bold text-th-primary">Radio</h2>
-        <p class="text-xs text-th-muted mt-0.5">Communications vocales — LiveKit</p>
+        <p class="text-xs text-th-muted mt-0.5">Communications vocales</p>
       </div>
 
       <!-- Badge statut connexion -->

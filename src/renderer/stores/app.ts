@@ -98,15 +98,16 @@ export const useAppStore = defineStore('app', {
           checkedAt: new Date().toISOString(),
           latencyMs: null
         }
-        // Démarrer le polling agenda + prefetch initial
-        try {
-          startAgendaPoll(this, this.settings?.agendaPollIntervalMs ?? 5 * 60 * 1000)
-        } catch (e) {
-          // ignore
-        }
-        // Prefetch des données principales après connexion
-        void this.fetchTransports()
-        void this.fetchAgendaEvents()
+        // Démarrer le polling agenda + prefetch en arrière-plan (non bloquant)
+        queueMicrotask(() => {
+          try {
+            startAgendaPoll(this, this.settings?.agendaPollIntervalMs ?? 5 * 60 * 1000)
+          } catch (e) {
+            // ignore
+          }
+          void this.fetchTransports()
+          void this.fetchAgendaEvents()
+        })
       } catch (error: any) {
         this.bearerToken = null
         this.profile = null
