@@ -4,6 +4,14 @@ export interface RadioChannel {
   id: string
   name: string
   description: string
+  categoryId?: number | null
+}
+
+export interface RadioCategory {
+  id: number
+  name: string
+  description: string
+  channels: RadioChannel[]
 }
 
 export interface RadioState {
@@ -31,9 +39,31 @@ export interface RadioSpeaker {
 
 /** Association canal ↔ touche PTT (système murmure TeamSpeak) */
 export interface PttBinding {
+  /**
+   * Cible PTT:
+   * - channelId classique (ex: "alpha")
+   * - catégorie (ex: "category:12")
+   */
   channelId: string
   keyCode: number | null
   key: string
+}
+
+export const PTT_CATEGORY_PREFIX = 'category:'
+
+export function toCategoryPttTarget(categoryId: number): string {
+  return `${PTT_CATEGORY_PREFIX}${categoryId}`
+}
+
+export function isCategoryPttTarget(target: string): boolean {
+  return target.startsWith(PTT_CATEGORY_PREFIX)
+}
+
+export function categoryIdFromPttTarget(target: string): number | null {
+  if (!isCategoryPttTarget(target)) return null
+  const raw = target.slice(PTT_CATEGORY_PREFIX.length)
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 export interface RadioSettings {

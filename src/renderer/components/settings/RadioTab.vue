@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { useRadioStore } from '../../stores/radio'
+import { categoryIdFromPttTarget, isCategoryPttTarget } from '@shared/radio'
 
 const radio = useRadioStore()
+
+function bindingLabel(targetId: string): string {
+  if (!isCategoryPttTarget(targetId)) {
+    return radio.channels.find(c => c.id === targetId)?.name ?? targetId
+  }
+
+  const categoryId = categoryIdFromPttTarget(targetId)
+  if (categoryId === null) return targetId
+  const categoryName = radio.categories.find(c => c.id === categoryId)?.name ?? `#${categoryId}`
+  return `Catégorie: ${categoryName}`
+}
 </script>
 
 <template>
@@ -11,7 +23,7 @@ const radio = useRadioStore()
     <div class="rounded-lg border border-th-subtle bg-black/20 p-4">
       <p class="text-xs font-bold uppercase tracking-wider text-th-muted mb-1">Touches Push-to-Talk</p>
       <p class="text-xs text-th-muted mb-3">
-        Chaque canal radio peut avoir sa propre touche PTT (système murmure).
+        Chaque canal ou catégorie radio peut avoir sa propre touche PTT (système murmure).
         Configurez les touches directement depuis l'onglet <strong class="text-th-secondary">Radio</strong>.
       </p>
 
@@ -22,7 +34,7 @@ const radio = useRadioStore()
           class="flex items-center justify-between gap-2 rounded border border-th-subtle/50 bg-black/20 px-3 py-1.5"
         >
           <span class="text-xs text-th-secondary truncate">
-            {{ radio.channels.find(c => c.id === b.channelId)?.name ?? b.channelId }}
+            {{ bindingLabel(b.channelId) }}
           </span>
           <kbd class="inline-flex items-center rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-accent shrink-0">
             {{ b.key }}

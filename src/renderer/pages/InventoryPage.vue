@@ -21,6 +21,7 @@ interface InventoryEntry {
   section: string
   categoryName: string
   quantity: number
+  quality?: number | null
   screenshot?: string
   location?: InventoryLocation | null
 }
@@ -35,6 +36,7 @@ interface SearchResult {
 
 interface StackLine {
   qty: number
+  quality: number
   locationQ: string
   locationResults: InventoryLocation[]
   locationSearching: boolean
@@ -58,6 +60,7 @@ const groupBy        = ref<'item' | 'location'>('item')
 const editRow = ref<{
   id: number
   qty: number
+  quality: number
   locationQ: string
   locationResults: InventoryLocation[]
   locationSearching: boolean
@@ -193,6 +196,7 @@ function startEdit(entry: InventoryEntry) {
   editRow.value = {
     id: entry.id,
     qty: entry.quantity,
+    quality: typeof entry.quality === 'number' ? entry.quality : 100,
     locationQ: '',
     locationResults: [],
     locationSearching: false,
@@ -206,11 +210,12 @@ function cancelEdit() {
 
 async function saveEdit() {
   if (!editRow.value || !urls.value) return
-  const { id, qty, selectedLocation } = editRow.value
+  const { id, qty, quality, selectedLocation } = editRow.value
   if (qty <= 0) { await removeEntryById(id); return }
   try {
     await http.put(urls.value.inventoryShow(id), {
       quantity: qty,
+      quality,
       poiId: selectedLocation?.id ?? null,
     }, { headers: authHeaders() })
     await fetchAll(true)
@@ -242,7 +247,7 @@ async function removeEntryById(id: number) {
 // ─── Add modal ────────────────────────────────────────────────────────────────
 
 function addStack() {
-  addModal.stacks.push({ qty: 1, locationQ: '', locationResults: [], locationSearching: false, selectedLocation: null })
+  addModal.stacks.push({ qty: 1, quality: 100, locationQ: '', locationResults: [], locationSearching: false, selectedLocation: null })
 }
 
 function removeStack(i: number) {
@@ -289,6 +294,7 @@ async function confirmAdd() {
         categoryName: addModal.selected.categoryName,
         screenshot: addModal.selected.screenshot ?? null,
         quantity: stack.qty,
+        quality: stack.quality,
         poiId: stack.selectedLocation?.id ?? null,
       }, { headers: authHeaders() })
     }
@@ -475,6 +481,7 @@ onMounted(() => {
                     <p class="text-sm font-semibold text-th-primary truncate">{{ entry.name }}</p>
                     <p class="text-xs text-th-muted truncate">{{ entry.section }} › {{ entry.categoryName }}</p>
                   </div>
+                  <span class="text-[11px] font-semibold rounded-md px-1.5 py-0.5 border border-cyan-300/30 bg-cyan-300/10 text-cyan-200/90 shrink-0">Q {{ entry.quality ?? '—' }}</span>
                   <span class="text-sm font-bold text-accent tabular-nums shrink-0">× {{ entry.quantity }}</span>
                   <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
                     <button @click="startEdit(entry)" class="rounded p-1 hover:bg-accent/10 text-th-muted hover:text-accent transition" title="Modifier">
@@ -498,6 +505,13 @@ onMounted(() => {
                       class="w-20 px-2 py-1 rounded-md bg-black/20 border border-accent/15 text-xs text-th-primary focus:outline-none focus:ring-1 focus:ring-accent/40"
                     />
                     <span class="text-xs text-th-muted">( 0 = supprimer )</span>
+                  </div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label class="text-xs text-th-muted w-14 shrink-0">Quality</label>
+                    <input
+                      v-model.number="editRow.quality" type="number" min="0"
+                      class="w-20 px-2 py-1 rounded-md bg-black/20 border border-accent/15 text-xs text-th-primary focus:outline-none focus:ring-1 focus:ring-cyan-400/40"
+                    />
                   </div>
                   <!-- Location edit -->
                   <div class="space-y-1">
@@ -578,6 +592,7 @@ onMounted(() => {
                       </template>
                       <span v-else class="text-sm text-th-muted italic">Localisation inconnue</span>
                     </div>
+                    <span class="text-[11px] font-semibold rounded-md px-1.5 py-0.5 border border-cyan-300/30 bg-cyan-300/10 text-cyan-200/90 shrink-0">Q {{ entry.quality ?? '—' }}</span>
                     <span class="text-sm font-bold text-accent tabular-nums shrink-0">× {{ entry.quantity }}</span>
                     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
                       <button @click="startEdit(entry)" class="rounded p-1 hover:bg-accent/10 text-th-muted hover:text-accent transition" title="Modifier">
@@ -601,6 +616,13 @@ onMounted(() => {
                         class="w-20 px-2 py-1 rounded-md bg-black/20 border border-accent/15 text-xs text-th-primary focus:outline-none focus:ring-1 focus:ring-accent/40"
                       />
                       <span class="text-xs text-th-muted">( 0 = supprimer )</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <label class="text-xs text-th-muted w-14 shrink-0">Quality</label>
+                      <input
+                        v-model.number="editRow.quality" type="number" min="0"
+                        class="w-20 px-2 py-1 rounded-md bg-black/20 border border-accent/15 text-xs text-th-primary focus:outline-none focus:ring-1 focus:ring-cyan-400/40"
+                      />
                     </div>
                     <div class="space-y-1">
                       <label class="text-xs text-th-muted">Localisation</label>
@@ -737,6 +759,14 @@ onMounted(() => {
                       <input
                         v-model.number="stack.qty" type="number" min="1"
                         class="w-24 px-2.5 py-1.5 rounded-md bg-black/20 border border-accent/15 text-sm text-th-primary focus:outline-none focus:ring-1 focus:ring-accent/40"
+                      />
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <label class="text-xs text-th-muted w-16 shrink-0">Quality</label>
+                      <input
+                        v-model.number="stack.quality" type="number" min="0"
+                        class="w-24 px-2.5 py-1.5 rounded-md bg-black/20 border border-accent/15 text-sm text-th-primary focus:outline-none focus:ring-1 focus:ring-cyan-400/40"
                       />
                     </div>
 

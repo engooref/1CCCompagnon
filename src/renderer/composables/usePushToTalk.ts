@@ -9,7 +9,7 @@ import { useRadioStore } from '../stores/radio'
 export function usePushToTalk() {
   const radio = useRadioStore()
 
-  // channelId → true si PTT enfoncé (pour éviter repeat)
+  // targetId (canal ou catégorie) → true si PTT enfoncé (pour éviter repeat)
   const pttActive = new Map<string, boolean>()
 
   function isTypingTarget(e: KeyboardEvent): boolean {
@@ -27,9 +27,9 @@ export function usePushToTalk() {
 
       e.preventDefault()
       pttActive.set(binding.channelId, true)
-
-      const cs = radio.channelState[binding.channelId]
-      if (cs?.connected && !radio.muted) radio.startTransmit(binding.channelId)
+      if (!radio.muted) {
+        radio.startPttTarget(binding.channelId)
+      }
     }
   }
 
@@ -42,7 +42,7 @@ export function usePushToTalk() {
 
       e.preventDefault()
       pttActive.set(binding.channelId, false)
-      radio.stopTransmit(binding.channelId)
+      radio.stopPttTarget(binding.channelId)
     }
   }
 
@@ -55,8 +55,8 @@ export function usePushToTalk() {
     window.removeEventListener('keydown', onKeyDown)
     window.removeEventListener('keyup', onKeyUp)
     // Arrêter toutes les transmissions actives
-    for (const [channelId, active] of pttActive) {
-      if (active) radio.stopTransmit(channelId)
+    for (const [targetId, active] of pttActive) {
+      if (active) radio.stopPttTarget(targetId)
     }
     pttActive.clear()
   })

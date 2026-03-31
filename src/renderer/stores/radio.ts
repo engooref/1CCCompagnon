@@ -3,10 +3,13 @@
 import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 import { RadioClient } from '../services/radioClient'
-import type { RadioChannel, RadioSettings, RadioSpeaker, PttBinding } from '@shared/radio'
-import { DEFAULT_RADIO_SETTINGS } from '@shared/radio'
+import type { RadioChannel, RadioCategory, RadioSettings, RadioSpeaker, PttBinding } from '@shared/radio'
+import { DEFAULT_RADIO_SETTINGS, categoryIdFromPttTarget, isCategoryPttTarget } from '@shared/radio'
 import { useAppStore } from './app'
 import { createOverlayUrls } from '../config/api'
+
+type ChannelCreatePayload = Pick<RadioChannel, 'name' | 'description'> & { categoryId?: number | null }
+type ChannelUpdatePayload = Partial<Pick<RadioChannel, 'name' | 'description' | 'categoryId'>>
 
 const radioClient = new RadioClient()
 
@@ -80,6 +83,7 @@ export const useRadioStore = defineStore('radio', {
   state: () => ({
     settings: { ...DEFAULT_RADIO_SETTINGS } as RadioSettings,
     channels: [] as RadioChannel[],
+    categories: [] as RadioCategory[],
 
     // État par canal (clé = channelId)
     channelState: {} as Record<string, ChannelState>,
@@ -153,6 +157,10 @@ export const useRadioStore = defineStore('radio', {
     pttBinding: (state) => (channelId: string): PttBinding | undefined => {
       return state.settings.pttBindings.find(b => b.channelId === channelId)
     },
+    /** Binding PTT pour une catégorie donnée */
+    pttBindingForCategory: (state) => (categoryId: number): PttBinding | undefined => {
+      return state.settings.pttBindings.find(b => b.channelId === `category:${categoryId}`)
+    },
     /**
      * Participants d'un canal : live si connecté, sinon depuis le polling.
      */
@@ -169,18 +177,58 @@ export const useRadioStore = defineStore('radio', {
       return this.channels.some(ch => ch.id === channelId)
     },
 
+    _categoryExists(categoryId: number): boolean {
+      return this.categories.some(cat => cat.id === categoryId)
+    },
+
+    _resolvePttTargetChannelIds(targetId: string): string[] {
+      if (!isCategoryPttTarget(targetId)) return [targetId]
+
+      const categoryId = categoryIdFromPttTarget(targetId)
+      if (categoryId === null) return []
+
+      const category = this.categories.find(cat => cat.id === categoryId)
+      if (!category) return []
+
+      return category.channels.map(ch => ch.id)
+    },
+
+    _hasPttBindingForTarget(targetId: string): boolean {
+      return this.settings.pttBindings.some(b => b.channelId === targetId)
+    },
+
     async _pruneInvalidPttBindings() {
       const validChannelIds = new Set(this.channels.map(ch => ch.id))
-      const invalidBindings = this.settings.pttBindings.filter(b => !validChannelIds.has(b.channelId))
+      const validCategoryIds = new Set(this.categories.map(cat => cat.id))
+      const invalidBindings = this.settings.pttBindings.filter((b) => {
+        if (!isCategoryPttTarget(b.channelId)) {
+          return !validChannelIds.has(b.channelId)
+        }
+
+        if (validCategoryIds.size === 0) {
+          // Quand les catégories ne sont pas encore chargées, on évite de supprimer trop tôt.
+          return false
+        }
+
+        const categoryId = categoryIdFromPttTarget(b.channelId)
+        return categoryId === null || !validCategoryIds.has(categoryId)
+      })
       if (!invalidBindings.length) return
 
-      this.settings.pttBindings = this.settings.pttBindings.filter(b => validChannelIds.has(b.channelId))
+      this.settings.pttBindings = this.settings.pttBindings.filter((b) => {
+        if (!isCategoryPttTarget(b.channelId)) return validChannelIds.has(b.channelId)
+        if (validCategoryIds.size === 0) return true
+        const categoryId = categoryIdFromPttTarget(b.channelId)
+        return categoryId !== null && validCategoryIds.has(categoryId)
+      })
       await window.oneCC.radioSetPttBindings(toRaw(this.settings.pttBindings).map(b => ({ ...toRaw(b) })))
 
-      // Si un canal invalide était connecté en murmure auto, on le quitte.
+      // Si une cible invalide était connectée en murmure auto, on quitte ses canaux.
       for (const binding of invalidBindings) {
-        if (this.channelState[binding.channelId]?.connected && this.channelState[binding.channelId]?.whisperOnly) {
-          await this.leaveChannel(binding.channelId)
+        for (const channelId of this._resolvePttTargetChannelIds(binding.channelId)) {
+          if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+            await this.leaveChannel(channelId)
+          }
         }
       }
     },
@@ -236,6 +284,7 @@ export const useRadioStore = defineStore('radio', {
 
       this.settings = await window.oneCC.radioGetSettings()
       await this.fetchChannels()
+      await this.fetchCategories()
       await this.loadDevices()
 
       // Écouter les events RadioClient
@@ -288,36 +337,35 @@ export const useRadioStore = defineStore('radio', {
       })
 
       // Écouter les événements PTT du main process (uIOhook) — avec channelId
-      window.oneCC.onRadioPttStart(async (channelId) => {
-        if (!this._channelExists(channelId)) {
-          await this.removePttBinding(channelId)
+      window.oneCC.onRadioPttStart(async (targetId) => {
+        const targetChannels = this._resolvePttTargetChannelIds(targetId)
+        if (!targetChannels.length) {
+          await this.removePttBinding(targetId)
           return
         }
 
-        const cs = this.channelState[channelId]
-        console.debug(`[RADIO][PTT] ptt-start canal=${channelId} connected=${cs?.connected} whisperOnly=${cs?.whisperOnly} muted=${this.muted}`)
+        const connectedCount = targetChannels.filter(cid => this.channelState[cid]?.connected).length
+        console.debug(`[RADIO][PTT] ptt-start cible=${targetId} channels=${targetChannels.join(',')} connected=${connectedCount} muted=${this.muted}`)
         if (this.muted) return
 
-        // Si pas connecté : auto-join en murmure avant de transmettre
-        if (!this.channelState[channelId]?.connected) {
-          const hasPttBinding = this.settings.pttBindings.some(b => b.channelId === channelId)
-          if (!hasPttBinding) return
-          console.debug(`[RADIO][PTT] canal non connecté → auto-join murmure`)
+        if (!this._hasPttBindingForTarget(targetId)) return
+
+        for (const channelId of targetChannels) {
+          if (this.channelState[channelId]?.connected) continue
+          console.debug(`[RADIO][PTT] canal=${channelId} non connecté → auto-join murmure`)
           try {
             await this.joinChannel(channelId, true)
           } catch (e) {
-            console.debug('[RADIO][PTT] auto-join échoué:', e)
-            return
+            console.debug(`[RADIO][PTT] auto-join échoué canal=${channelId}:`, e)
           }
         }
 
-        console.debug(`[RADIO][PTT] → startTransmit canal=${channelId}`)
-        this.startTransmit(channelId)
+        await this.startPttTarget(targetId)
       })
 
-      window.oneCC.onRadioPttStop((channelId) => {
-        console.debug(`[RADIO][PTT] ptt-stop canal=${channelId}`)
-        this.stopTransmit(channelId)
+      window.oneCC.onRadioPttStop((targetId) => {
+        console.debug(`[RADIO][PTT] ptt-stop cible=${targetId}`)
+        this.stopPttTarget(targetId)
       })
 
       // Enregistrer les bindings PTT dans le main process
@@ -369,10 +417,12 @@ export const useRadioStore = defineStore('radio', {
         // canaux qui ont un binding PTT et ne sont pas encore connectés.
         if (!whisperOnly) {
           for (const binding of this.settings.pttBindings) {
-            if (binding.channelId === channelId) continue
-            const otherCs = this.channelState[binding.channelId]
-            if (!otherCs?.connected && !otherCs?.connecting) {
-              this.joinChannel(binding.channelId, true).catch(() => {})
+            for (const whisperTargetId of this._resolvePttTargetChannelIds(binding.channelId)) {
+              if (whisperTargetId === channelId) continue
+              const otherCs = this.channelState[whisperTargetId]
+              if (!otherCs?.connected && !otherCs?.connecting) {
+                this.joinChannel(whisperTargetId, true).catch(() => {})
+              }
             }
           }
         }
@@ -416,6 +466,18 @@ export const useRadioStore = defineStore('radio', {
       cs.transmitting = false
     },
 
+    async startPttTarget(targetId: string) {
+      for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
+        await this.startTransmit(channelId)
+      }
+    },
+
+    async stopPttTarget(targetId: string) {
+      for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
+        await this.stopTransmit(channelId)
+      }
+    },
+
     // ── Mute ─────────────────────────────────────────────────────────────
 
     toggleMute() {
@@ -442,38 +504,48 @@ export const useRadioStore = defineStore('radio', {
 
     // ── PTT Bindings ──────────────────────────────────────────────────────
 
-    async setPttBinding(channelId: string, keyCode: number | null, key: string) {
-      if (!this._channelExists(channelId)) {
-        await this.removePttBinding(channelId)
+    async setPttBinding(targetId: string, keyCode: number | null, key: string) {
+      if (isCategoryPttTarget(targetId)) {
+        const categoryId = categoryIdFromPttTarget(targetId)
+        if (categoryId === null || !this._categoryExists(categoryId)) {
+          await this.removePttBinding(targetId)
+          return
+        }
+      } else if (!this._channelExists(targetId)) {
+        await this.removePttBinding(targetId)
         return
       }
 
-      console.debug(`[RADIO][store] setPttBinding canal=${channelId} keyCode=${keyCode} key=${key} — état actuel:`, JSON.stringify(this.channelState[channelId] ?? null))
-      const bindings = this.settings.pttBindings.filter(b => b.channelId !== channelId)
-      if (keyCode !== null) bindings.push({ channelId, keyCode, key })
+      console.debug(`[RADIO][store] setPttBinding cible=${targetId} keyCode=${keyCode} key=${key}`)
+      const bindings = this.settings.pttBindings.filter(b => b.channelId !== targetId)
+      if (keyCode !== null) bindings.push({ channelId: targetId, keyCode, key })
       this.settings.pttBindings = bindings
       await window.oneCC.radioSetPttBindings(bindings.map(b => ({ ...b })))
 
       // Auto-rejoindre en murmure dès qu'une touche PTT est configurée
       if (keyCode !== null) {
-        const cs = this.channelState[channelId]
-        if (cs?.connected && !cs.whisperOnly) {
-          // Canal en écoute normale → quitter puis rejoindre en murmure
-          await this.leaveChannel(channelId)
-        }
-        if (!this.channelState[channelId]?.connected) {
-          try { await this.joinChannel(channelId, true) } catch { /* noop */ }
+        for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
+          const cs = this.channelState[channelId]
+          if (cs?.connected && !cs.whisperOnly) {
+            // Canal en écoute normale → quitter puis rejoindre en murmure
+            await this.leaveChannel(channelId)
+          }
+          if (!this.channelState[channelId]?.connected) {
+            try { await this.joinChannel(channelId, true) } catch { /* noop */ }
+          }
         }
       }
     },
 
-    async removePttBinding(channelId: string) {
-      this.settings.pttBindings = this.settings.pttBindings.filter(b => b.channelId !== channelId)
+    async removePttBinding(targetId: string) {
+      this.settings.pttBindings = this.settings.pttBindings.filter(b => b.channelId !== targetId)
       await window.oneCC.radioSetPttBindings(toRaw(this.settings.pttBindings).map(b => ({ ...toRaw(b) })))
 
-      // Auto-quitter si le canal était en murmure automatique
-      if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
-        await this.leaveChannel(channelId)
+      // Auto-quitter si les canaux de la cible étaient en murmure automatique
+      for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
+        if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+          await this.leaveChannel(channelId)
+        }
       }
     },
 
@@ -519,7 +591,7 @@ export const useRadioStore = defineStore('radio', {
       await this.fetchAllParticipants(true)
     },
 
-    async createChannel(payload: { name: string; description: string }) {
+    async createChannel(payload: ChannelCreatePayload) {
       const appStore = useAppStore()
       const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
       const res = await fetch(url, {
@@ -529,9 +601,10 @@ export const useRadioStore = defineStore('radio', {
       })
       if (!res.ok) throw new Error(`Erreur ${res.status}`)
       await this.fetchChannels()
+      await this.fetchCategories()
     },
 
-    async updateChannel(id: string, payload: { name?: string; description?: string }) {
+    async updateChannel(id: string, payload: ChannelUpdatePayload) {
       const appStore = useAppStore()
       const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
       const res = await fetch(`${url}/${id}`, {
@@ -541,6 +614,7 @@ export const useRadioStore = defineStore('radio', {
       })
       if (!res.ok) throw new Error(`Erreur ${res.status}`)
       await this.fetchChannels()
+      await this.fetchCategories()
     },
 
     async deleteChannel(id: string) {
@@ -559,6 +633,61 @@ export const useRadioStore = defineStore('radio', {
       if (!res.ok) throw new Error(`Erreur ${res.status}`)
       if (this.channelState[id]?.connected) await this.leaveChannel(id)
       await this.fetchChannels()
+      await this.fetchCategories()
+    },
+
+    // ── Categories CRUD ───────────────────────────────────────────────────
+
+    async fetchCategories() {
+      const appStore = useAppStore()
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      if (!url) return
+      try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${appStore.bearerToken}` } })
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.categories)) this.categories = data.categories
+        else if (Array.isArray(data)) this.categories = data
+      } catch {
+        this.categories = []
+      }
+      await this._pruneInvalidPttBindings()
+    },
+
+    async createCategory(payload: { name: string; description?: string }) {
+      const appStore = useAppStore()
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(`Erreur ${res.status}`)
+      await this.fetchCategories()
+      await this.fetchChannels()
+    },
+
+    async updateCategory(id: number, payload: { name?: string; description?: string }) {
+      const appStore = useAppStore()
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const res = await fetch(`${url}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(`Erreur ${res.status}`)
+      await this.fetchCategories()
+    },
+
+    async deleteCategory(id: number) {
+      const appStore = useAppStore()
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const res = await fetch(`${url}/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${appStore.bearerToken}` },
+      })
+      if (!res.ok) throw new Error(`Erreur ${res.status}`)
+      await this.fetchCategories()
     },
 
     // ── Devices ──────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@ const defaults: AppSettings = {
     radio: {
       token:    '/radio/token',
       channels: '/radio/channels',
+      categories: '/radio/categories',
       mercureInfo: '/radio/mercure-info',
       participants: '/radio/channels/{id}/participants',
       webhook:   '/radio/livekit-webhook',

@@ -47,6 +47,7 @@ export function createOverlayUrls(settings: AppSettings) {
     fabricatorBlueprintToggle:(id: number) => url(base, o, 'fabricator', 'blueprintToggle').replace('{id}', String(id)),
     radioToken:         url(base, o, 'radio', 'token'),
     radioChannels:      url(base, o, 'radio', 'channels'),
+    radioCategories:    url(base, o, 'radio', 'categories'),
     radioMercureInfo:   url(base, o, 'radio', 'mercureInfo'),
     radioParticipants: (id: string | number) => url(base, o, 'radio', 'participants').replace('{id}', String(id)),
     radioWebhook:       url(base, o, 'radio', 'webhook'),

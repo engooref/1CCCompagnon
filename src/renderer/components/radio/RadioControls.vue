@@ -23,25 +23,25 @@ const transmittingChannelName = computed(() =>
 
     <!-- Indicateur d'émission -->
     <div
-      class="flex flex-col items-center gap-1.5 rounded-xl border-2 py-5 text-sm font-bold tracking-widest uppercase transition-all duration-100 select-none"
+      class="flex flex-col items-center gap-1 rounded-xl border-2 py-3.5 text-xs font-bold tracking-wide uppercase transition-all duration-100 select-none"
       :class="radio.transmitting
         ? 'border-rose-500 bg-rose-500/20 text-rose-300 shadow-[0_0_24px_rgba(239,68,68,0.4)]'
         : radio.connected
           ? 'border-accent/30 bg-accent/[0.05] text-th-muted'
           : 'border-th-subtle bg-black/20 text-th-muted opacity-40'"
     >
-      <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
           d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
       </svg>
       {{ pttLabel }}
-      <span v-if="transmittingChannelName" class="text-[10px] font-normal tracking-normal normal-case text-rose-300/80">
+      <span v-if="transmittingChannelName" class="text-[9px] font-normal tracking-normal normal-case text-rose-300/80">
         → {{ transmittingChannelName }}
       </span>
-      <span v-else-if="!radio.connected" class="text-[10px] font-normal tracking-normal normal-case">
-        Rejoindre un canal pour émettre
+      <span v-else-if="!radio.connected" class="text-[9px] font-normal tracking-normal normal-case">
+        Rejoindre un canal
       </span>
-      <span v-else class="text-[10px] font-normal tracking-normal normal-case opacity-60">
+      <span v-else class="text-[9px] font-normal tracking-normal normal-case opacity-60">
         {{ radio.settings.pttBindings.length ? 'Appuyez sur la touche PTT du canal' : 'Configurez une touche PTT par canal' }}
       </span>
     </div>

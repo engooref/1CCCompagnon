@@ -26,7 +26,6 @@ interface FabItem {
   uuid?: string
   section?: string
   categoryName?: string
-  hasRecipe?: boolean
   iOwn?: boolean
   screenshot?: string
   editUrl?: string
@@ -622,7 +621,7 @@ watch(globalSearch, (q) => {
             >
               <span class="fab-quicksearch-row__name">{{ item.name }}</span>
               <span v-if="item.categoryName" class="fab-quicksearch-row__cat">{{ item.categoryName }}</span>
-              <span class="fab-drop__pill" :class="item.hasRecipe ? 'fab-drop__pill--yes' : 'fab-drop__pill--no'">{{ item.hasRecipe ? '✓' : '—' }}</span>
+              <span class="fab-drop__pill" :class="item.iOwn ? 'fab-drop__pill--yes' : 'fab-drop__pill--no'">{{ item.iOwn ? '✓' : '—' }}</span>
             </div>
             <div v-if="globalSearchResults.length === 0" class="fab-quicksearch-drop__status">
               Aucun résultat pour « {{ globalSearch }} »
@@ -745,8 +744,8 @@ watch(globalSearch, (q) => {
                   @click="selectItem(item)"
                 >
                   <span class="fab-drop__name">{{ item.name }}</span>
-                  <span class="fab-drop__pill" :class="item.hasRecipe ? 'fab-drop__pill--yes' : 'fab-drop__pill--no'">
-                    {{ item.hasRecipe ? '✓' : '—' }}
+                  <span class="fab-drop__pill" :class="item.iOwn ? 'fab-drop__pill--yes' : 'fab-drop__pill--no'">
+                    {{ item.iOwn ? '✓' : '—' }}
                   </span>
                 </div>
                 <div v-if="filteredItems.length === 0" class="fab-drop__empty">Aucun objet</div>
