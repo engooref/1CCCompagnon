@@ -26,15 +26,6 @@ export function usePushToTalk() {
       if (!binding.keyCode || e.keyCode !== binding.keyCode) continue
       if (pttActive.get(binding.channelId)) continue
 
-      // Si le binding cible un canal précis et qu'on est déjà connecté
-      // normalement (non murmure) sur ce canal, pas besoin d'utiliser le PTT.
-      if (!isCategoryPttTarget(binding.channelId) && !isGlobalPttTarget(binding.channelId)) {
-        const cs = radio.channelState[binding.channelId]
-        if (cs?.connected && !cs.whisperOnly) {
-          continue
-        }
-      }
-
       e.preventDefault()
       pttActive.set(binding.channelId, true)
       if (!radio.muted) {

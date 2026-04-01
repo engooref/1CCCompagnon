@@ -78,6 +78,13 @@ function normalizeParticipants(raw: unknown): RadioParticipant[] {
 }
 
 
+function extractChannelIdFromPayload(payload: unknown): number | null {
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+
+  return p.channelId as number ?? null;
+}
+
 interface ChannelState {
   connected: boolean
   connecting: boolean
@@ -113,6 +120,8 @@ export const useRadioStore = defineStore('radio', {
     channelParticipants: {} as Record<string, RadioParticipant[]>,
     /** Channels auto-joined by a PTT press (targetId -> [channelId]) */
     _pttAutoJoined: {} as Record<string, string[]>,
+    /** true si la touche PTT est actuellement enfoncée (targetId -> bool) */
+    _pttActive: {} as Record<string, boolean>,
     _participantsInterval: null as ReturnType<typeof setInterval> | null,
     _errorTimeout: null as ReturnType<typeof setTimeout> | null,
   }),
@@ -173,11 +182,21 @@ export const useRadioStore = defineStore('radio', {
       return state.settings.pttBindings.find(b => b.channelId === `category:${categoryId}`)
     },
     /**
-     * Participants d'un canal : live si connecté, sinon depuis le polling.
+     * Participants d'un canal : live si connecté (avec soi-même en tête),
+     * sinon depuis le cache API (sans soi-même, déjà filtré à la source).
      */
     participantsFor: (state) => (channelId: string): RadioParticipant[] => {
+      const appStore = useAppStore()
       if (state.channelState[channelId]?.connected) {
-        return state.channelState[channelId].participants
+        const list = state.channelState[channelId].participants
+        const me = appStore.profile?.username
+        const myAvatar = appStore.avatarUrl || null
+        // LiveKit ne retourne que les participants distants ; on s'ajoute en tête
+        if (me && !list.some(p => p.identity.toLowerCase() === me.toLowerCase())) {
+          
+          return [{ identity: me, avatar: myAvatar }, ...list]
+        }
+        return list
       }
       return state.channelParticipants[channelId] ?? []
     },
@@ -185,7 +204,6 @@ export const useRadioStore = defineStore('radio', {
 
   actions: {
     _channelExists(channelId: string): boolean {
-      console.log(this.channels)
       return this.channels.some(ch => ch.id === channelId)
     },
 
@@ -303,10 +321,16 @@ export const useRadioStore = defineStore('radio', {
         if (!res.ok) return null
 
         const data = await res.json()
-        console.log(data)
-        const list = normalizeParticipants(Array.isArray(data.participants)
+        const rawList = normalizeParticipants(Array.isArray(data.participants)
           ? data.participants
           : Array.isArray(data) ? data : [])
+
+        // Filtrer l'utilisateur courant — l'API l'inclut toujours mais le getter
+        // participantsFor l'ajoute lui-même pour le canal connecté.
+        const myIdentity = appStore.profile?.username?.toLowerCase() ?? ''
+        const list = myIdentity
+          ? rawList.filter(p => p.identity.toLowerCase() !== myIdentity)
+          : rawList
 
         this.channelParticipants[channelId] = list
         if (this.channelState[channelId]) {
@@ -386,6 +410,19 @@ export const useRadioStore = defineStore('radio', {
       client.on('participantLeft', (channelId) => {
         if (this.channelState[channelId]) {
           this.channelState[channelId].participants = normalizeParticipants(client.participants(channelId))
+          // Si c'est un murmure auto-join et qu'il n'y a plus de participants, quitter
+          const cs = this.channelState[channelId]
+          if (cs.whisperOnly && cs.connected && cs.participants.length === 0) {
+            // Nettoyer le tracking _pttAutoJoined
+            for (const [targetId, channels] of Object.entries(this._pttAutoJoined)) {
+              const idx = channels.indexOf(channelId)
+              if (idx !== -1) {
+                channels.splice(idx, 1)
+                if (channels.length === 0) delete this._pttAutoJoined[targetId]
+              }
+            }
+            this.leaveChannel(channelId).catch(() => {})
+          }
         }
       })
 
@@ -469,44 +506,8 @@ export const useRadioStore = defineStore('radio', {
         // Appliquer le volume
         radioClient!.setVolume(this.settings.radioVolume)
 
-        // Si on rejoint en écoute normale, connecter en murmure tous les autres
-        // canaux qui :
-        // - ont au moins une touche PTT configurée (binding avec keyCode)
-        // - contiennent au moins un participant
-        if (!whisperOnly) {
-          const resolved = new Set<string>()
-          for (const binding of this.settings.pttBindings) {
-            if (!binding.keyCode) continue
-            for (const whisperTargetId of this._resolvePttTargetChannelIds(binding.channelId)) {
-              if (whisperTargetId === channelId) continue
-              if (resolved.has(whisperTargetId)) continue
-              resolved.add(whisperTargetId)
-
-              // Vérifier présence de participants (cache puis live)
-              let participantsCount = this.channelParticipants[whisperTargetId]?.length ?? 0
-              try {
-                const live = await this._fetchChannelParticipants(whisperTargetId)
-                if (Array.isArray(live)) participantsCount = live.length
-              } catch {}
-
-              if (participantsCount === 0) continue
-
-              const otherCs = this.channelState[whisperTargetId]
-              if (!otherCs?.connected && !otherCs?.connecting) {
-                this.joinChannel(whisperTargetId, true).catch(() => {})
-              }
-            }
-          }
-        }
-        // Si on a rejoint en écoute normale, activer le transmit automatiquement
-        // pour permettre de parler librement sans PTT dans le canal où l'on est connecté.
-        if (!whisperOnly) {
-          try {
-            await this.startTransmit(channelId)
-          } catch (e) {
-            console.debug(`[RADIO][store] failed auto-start transmit canal=${channelId}`, e)
-          }
-        }
+        // Ne pas démarrer la transmission automatiquement après un join normal.
+        // L'émission se fera uniquement via PTT ou appels explicites à startTransmit().
       } catch (err: any) {
         this.setError(err?.message || 'Erreur de connexion radio')
         if (this.channelState[channelId]) {
@@ -573,37 +574,50 @@ export const useRadioStore = defineStore('radio', {
 
       if (!this._hasPttBindingForTarget(targetId)) return
 
+      // Marquer la touche comme enfoncée — handlePttStop peut l'effacer pendant
+      // les await qui suivent ; on vérifiera avant chaque startTransmit.
+      this._pttActive[targetId] = true
+
       const isGlobal = isGlobalPttTarget(targetId)
 
       // Current vocal channel where we have non-whisper connection
       const currentNonWhisperChannel = Object.entries(this.channelState).find(([, s]) => s.connected && !s.whisperOnly)?.[0] ?? null
 
       if (isGlobal) {
+        // Utiliser le cache existant pour le filtre initial (évite les requêtes sérielles)
         const filtered: string[] = []
         for (const channelId of targetChannels) {
           if (currentNonWhisperChannel && channelId === currentNonWhisperChannel) continue
-          let participantsCount = this.channelParticipants[channelId]?.length ?? 0
-          try {
-            const live = await this._fetchChannelParticipants(channelId)
-            if (Array.isArray(live)) participantsCount = live.length
-          } catch {}
-          if (participantsCount > 0) filtered.push(channelId)
+          const cachedCount = this.channelParticipants[channelId]?.length ?? 0
+          if (cachedCount > 0) filtered.push(channelId)
         }
 
-        if (!filtered.length) return
+        if (!filtered.length) {
+          this._pttActive[targetId] = false
+          return
+        }
 
-        for (const channelId of filtered) {
-          if (this.channelState[channelId]?.connected) continue
-          const wasConnected = Boolean(this.channelState[channelId]?.connected)
-          try {
-            await this.joinChannel(channelId, true)
-            if (!wasConnected && this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
-              this._pttAutoJoined[targetId] = this._pttAutoJoined[targetId] ?? []
-              if (!this._pttAutoJoined[targetId].includes(channelId)) this._pttAutoJoined[targetId].push(channelId)
-            }
-          } catch (e) {
-            console.debug(`[RADIO][PTT] auto-join échoué canal=${channelId}:`, e)
-          }
+        // Rejoindre en parallèle les canaux non encore connectés
+        await Promise.allSettled(
+          filtered
+            .filter(channelId => !this.channelState[channelId]?.connected)
+            .map(async (channelId) => {
+              try {
+                await this.joinChannel(channelId, true)
+                if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+                  this._pttAutoJoined[targetId] = this._pttAutoJoined[targetId] ?? []
+                  if (!this._pttAutoJoined[targetId].includes(channelId)) this._pttAutoJoined[targetId].push(channelId)
+                }
+              } catch (e) {
+                console.debug(`[RADIO][PTT] auto-join échoué canal=${channelId}:`, e)
+              }
+            }),
+        )
+
+        // Vérifier que la touche est encore enfoncée après les await
+        if (!this._pttActive[targetId]) {
+          console.debug('[RADIO][PTT] touche relâchée pendant join global — annulation startTransmit')
+          return
         }
 
         for (const channelId of filtered) {
@@ -613,25 +627,75 @@ export const useRadioStore = defineStore('radio', {
         return
       }
 
-      // Non-global target (single channel or category)
-      for (const channelId of targetChannels) {
-        // If we are already in the channel non-whisper, no PTT needed
-        if (this.channelState[channelId]?.connected && !this.channelState[channelId]?.whisperOnly) continue
+      // Catégorie : même logique que global mais restreinte aux canaux de la catégorie
+      if (isCategoryPttTarget(targetId)) {
+        const filtered = targetChannels.filter(channelId => {
+          if (currentNonWhisperChannel && channelId === currentNonWhisperChannel) return false
+          return (this.channelParticipants[channelId]?.length ?? 0) > 0
+        })
 
-        let participantsCount = this.channelParticipants[channelId]?.length ?? 0
-        try {
-          const live = await this._fetchChannelParticipants(channelId)
-          if (Array.isArray(live)) participantsCount = live.length
-        } catch {}
-
-        if (participantsCount === 0) {
+        if (!filtered.length) {
+          // Aucun canal de la catégorie n'a de participant
           if ((this as any).connected) {
             try { this._playPttWarningBeep() } catch {}
-            const ch = this.channels.find(c => c.id === channelId)
-            this.setError(ch ? `Aucun participant dans "${ch.name}"` : 'Aucun participant dans le canal')
+            const categoryId = categoryIdFromPttTarget(targetId)
+            const cat = categoryId !== null ? this.categories.find(c => c.id === categoryId) : undefined
+            this.setError(cat ? `Aucun participant dans la catégorie "${cat.name}"` : 'Aucun participant dans la catégorie')
           }
-          console.debug(`[RADIO][PTT] skip auto-join canal=${channelId} — aucun participant`)
-          continue
+          this._pttActive[targetId] = false
+          return
+        }
+
+        await Promise.allSettled(
+          filtered
+            .filter(channelId => !this.channelState[channelId]?.connected)
+            .map(async (channelId) => {
+              try {
+                await this.joinChannel(channelId, true)
+                if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
+                  this._pttAutoJoined[targetId] = this._pttAutoJoined[targetId] ?? []
+                  if (!this._pttAutoJoined[targetId].includes(channelId)) this._pttAutoJoined[targetId].push(channelId)
+                }
+              } catch (e) {
+                console.debug(`[RADIO][PTT] auto-join catégorie échoué canal=${channelId}:`, e)
+              }
+            }),
+        )
+
+        if (!this._pttActive[targetId]) {
+          console.debug('[RADIO][PTT] touche relâchée pendant join catégorie — annulation startTransmit')
+          return
+        }
+
+        for (const channelId of filtered) {
+          try { await this.startTransmit(channelId) } catch (e) { console.debug(`[RADIO][PTT] startTransmit catégorie échoué canal=${channelId}:`, e) }
+        }
+
+        return
+      }
+
+      // Canal unique
+      for (const channelId of targetChannels) {
+        // Si déjà connecté en mode normal, startTransmit sera appelé plus bas
+        if (this.channelState[channelId]?.connected && !this.channelState[channelId]?.whisperOnly) continue
+
+        const cachedCount = this.channelParticipants[channelId]?.length ?? 0
+        if (cachedCount === 0) {
+          let liveCount = 0
+          try {
+            const live = await this._fetchChannelParticipants(channelId)
+            if (Array.isArray(live)) liveCount = live.length
+          } catch {}
+
+          if (liveCount === 0) {
+            if ((this as any).connected) {
+              try { this._playPttWarningBeep() } catch {}
+              const ch = this.channels.find(c => c.id === channelId)
+              this.setError(ch ? `Aucun participant dans "${ch.name}"` : 'Aucun participant dans le canal')
+            }
+            console.debug(`[RADIO][PTT] skip auto-join canal=${channelId} — aucun participant`)
+            continue
+          }
         }
 
         const wasConnected = Boolean(this.channelState[channelId]?.connected)
@@ -646,25 +710,45 @@ export const useRadioStore = defineStore('radio', {
         }
       }
 
+      // Vérifier que la touche est encore enfoncée après les await
+      if (!this._pttActive[targetId]) {
+        console.debug('[RADIO][PTT] touche relâchée pendant join — annulation startTransmit')
+        return
+      }
+
       await this.startPttTarget(targetId)
     },
 
     async handlePttStop(targetId: string) {
       console.debug(`[RADIO][PTT] handleStop cible=${targetId}`)
+      // Couper le flag immédiatement (synchrone) pour annuler tout handlePttStart
+      // encore en cours d'exécution qui n'a pas encore appelé startTransmit.
+      this._pttActive[targetId] = false
       await this.stopPttTarget(targetId)
 
       const auto = this._pttAutoJoined[targetId] ?? []
+      const kept: string[] = []
       if (auto.length) {
         for (const channelId of auto) {
           try {
-            if (this.channelState[channelId]?.connected && this.channelState[channelId]?.whisperOnly) {
-              await this.leaveChannel(channelId)
+            const cs = this.channelState[channelId]
+            if (cs?.connected && cs.whisperOnly) {
+              // Garder le murmure actif tant qu'il reste au moins un participant
+              if (cs.participants.length > 0) {
+                kept.push(channelId)
+              } else {
+                await this.leaveChannel(channelId)
+              }
             }
           } catch (e) {
             console.debug(`[RADIO][PTT] leave auto-joined failed canal=${channelId}:`, e)
           }
         }
-        delete this._pttAutoJoined[targetId]
+        if (kept.length) {
+          this._pttAutoJoined[targetId] = kept
+        } else {
+          delete this._pttAutoJoined[targetId]
+        }
       }
     },
 
@@ -801,7 +885,16 @@ export const useRadioStore = defineStore('radio', {
     },
 
     async refreshParticipantsFromMercureEvent(payload: unknown) {
-      await this.fetchAllParticipants(true)
+      // Extraire le channelId depuis le payload (plusieurs formats possibles)
+      const channelId = extractChannelIdFromPayload(payload)
+
+      if (channelId) {
+        console.debug('[RADIO][Mercure] refresh ciblé canal=', channelId)
+        await this._fetchChannelParticipants(channelId)
+      } else {
+        console.debug('[RADIO][Mercure] payload sans channelId, refresh complet. Payload:', JSON.stringify(payload))
+        await this.fetchAllParticipants(true)
+      }
     },
 
     async createChannel(payload: ChannelCreatePayload) {

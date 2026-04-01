@@ -49,7 +49,7 @@ const effectiveState = computed<OverlayRadioState | null>(() => {
 
 const shouldRender = computed(() => {
   if (props.preview) return true
-  return Boolean(effectiveState.value?.connected || effectiveState.value?.connecting)
+  return Boolean(effectiveState.value?.connected)
 })
 
 const channelLabel = computed(() => {

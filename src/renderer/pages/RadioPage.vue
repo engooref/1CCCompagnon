@@ -17,10 +17,16 @@ const urls = computed(() => app.settings ? createOverlayUrls(app.settings) : nul
 usePushToTalk()
 
 async function initRadioPage() {
-  console.log('Initialisation de la page Radio…', { authReady: app.status.authReady, bearerToken: !!app.bearerToken, mercureInfoUrl: !!urls.value?.radioMercureInfo })
   if (!app.status.authReady || !app.bearerToken || !urls.value?.radioMercureInfo) return
 
   await radio.init()
+
+  // S'assurer que la liste des participants est à jour après le chargement des canaux
+  try {
+    await radio.fetchAllParticipants(true)
+  } catch (e) {
+    console.debug('[RadioPage] fetchAllParticipants failed', e)
+  }
 
   // Mercure radio:
   // - si event ciblé (channelId), rafraîchir uniquement ce canal

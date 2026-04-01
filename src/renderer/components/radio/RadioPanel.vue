@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, type Ref } from 'vue'
 import { useRadioStore } from '../../stores/radio'
+import { useAppStore } from '../../stores/app'
 import type { RadioCategory, RadioChannel } from '@shared/radio'
 import { toCategoryPttTarget, toGlobalPttTarget } from '@shared/radio'
 import { useConfirm } from '../../composables/useConfirm'
 
 const radio = useRadioStore()
+const app = useAppStore()
 const { visible: confirmVisible, message: confirmMessage, confirm: askConfirm, accept: confirmAccept, cancel: confirmCancel } = useConfirm()
 
 const managing = ref(false)
@@ -239,26 +241,6 @@ function toggleUncategorized() {
   uncategorizedCollapsed.value = !uncategorizedCollapsed.value
 }
 
-function findChannelById(channelId: string): RadioChannel | null {
-  const fromChannels = radio.channels.find(ch => ch.id === channelId)
-  if (fromChannels) return fromChannels
-
-  for (const category of radio.categories) {
-    const fromCategory = category.channels.find(ch => ch.id === channelId)
-    if (fromCategory) return fromCategory
-  }
-
-  return null
-}
-
-function findChannelCategoryId(channelId: string): number | null {
-  for (const category of radio.categories) {
-    if (category.channels.some(ch => ch.id === channelId)) {
-      return category.id
-    }
-  }
-  return null
-}
 
 async function onChannelDblClick(channelId: string) {
   if (managing.value) return
@@ -267,6 +249,7 @@ async function onChannelDblClick(channelId: string) {
   const cs = radio.channelState[channelId]
 
   if (cs?.connected && !cs.whisperOnly) {
+    // Toggle off : quitter ce canal et tous les murmures
     await radio.leaveChannel(channelId)
     for (const cid of [...radio.connectedChannels]) {
       if (radio.channelState[cid]?.whisperOnly) {
@@ -274,9 +257,16 @@ async function onChannelDblClick(channelId: string) {
       }
     }
   } else {
-    for (const cid of radio.connectedChannels) {
-      if (radio.channelState[cid]?.connected && !radio.channelState[cid]?.whisperOnly) {
-        await radio.leaveChannel(cid)
+    // Switch : quitter tous les canaux principaux, puis rejoindre en murmure si participant
+    for (const cid of [...radio.connectedChannels]) {
+      if (!radio.channelState[cid]?.connected || radio.channelState[cid]?.whisperOnly) continue
+      await radio.leaveChannel(cid)
+      const live = await radio._fetchChannelParticipants(cid)
+      const myIdentity = app.profile?.username?.toLowerCase() ?? ''
+
+      const others = Array.isArray(live) ? live.filter(p => p.identity.toLowerCase() !== myIdentity) : []
+      if (others.length > 0) {
+        radio.joinChannel(cid, true).catch(() => {})
       }
     }
 
@@ -528,6 +518,20 @@ function setNewFormNameRef(el: any, categoryId: number | null) {
                 </span>
               </div>
               <p class="text-[11px] text-th-muted mt-0.5 truncate">{{ channel.description }}</p>
+
+              <div v-if="radio.participantsFor(channel.id).length" class="mt-2 flex items-center gap-2 flex-wrap">
+                <template v-for="p in radio.participantsFor(channel.id).slice(0,5)" :key="p.identity">
+                  <div class="inline-flex items-center gap-2 bg-th-card/10 rounded px-1 py-0.5">
+                    <img v-if="p.avatar" :src="p.avatar" alt="" class="h-5 w-5 rounded-full object-cover shrink-0" />
+                    <div v-else class="h-5 w-5 rounded-full bg-th-subtle flex items-center justify-center text-[10px] text-white/80 shrink-0">
+                      {{ (p.identity || '').charAt(0).toUpperCase() }}
+                    </div>
+                    <span class="text-[11px] text-th-muted truncate max-w-[140px]">{{ p.identity }}</span>
+                  </div>
+                </template>
+                <span v-if="radio.participantsFor(channel.id).length > 5" class="text-[11px] text-th-muted">+{{ radio.participantsFor(channel.id).length - 5 }}</span>
+              </div>
+
               <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
                 <template v-if="recordingTarget === channel.id">
                   <span class="text-[10px] text-amber-300 animate-pulse">Touche… (Esc annule)</span>
@@ -654,6 +658,13 @@ function setNewFormNameRef(el: any, categoryId: number | null) {
               </div>
 
               <p class="text-[11px] text-th-muted mt-0.5 truncate">{{ channel.description }}</p>
+
+              <div v-if="radio.participantsFor(channel.id).length" class="mt-2 flex items-center gap-2 flex-wrap">
+                <template v-for="(p, idx) in radio.participantsFor(channel.id).slice(0,5)" :key="p.identity">
+                  <span class="text-[11px] text-th-muted truncate max-w-[180px]">{{ p.identity }}</span>
+                </template>
+                <span v-if="radio.participantsFor(channel.id).length > 5" class="text-[11px] text-th-muted">+{{ radio.participantsFor(channel.id).length - 5 }}</span>
+              </div>
 
               <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
                 <template v-if="recordingTarget === channel.id">

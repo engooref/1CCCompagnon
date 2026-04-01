@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.1',
+    date: '2026-04-01',
+    changes: [
+      { type: 'fix', text: 'Correction de bugs remonter dans le module Radio' },
+    ]
+  },
+  {
     version: '1.2.0',
     date: '2026-03-31',
     changes: [
