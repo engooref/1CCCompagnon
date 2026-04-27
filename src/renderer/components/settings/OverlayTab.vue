@@ -83,14 +83,21 @@ async function saveToggleKey(key: string | { accel: string; keyCode: number | nu
 
 // ─── Disposition overlay ──────────────────────────────────────────────────────
 
-const editLayoutBusy = ref(false)
+const inlineEditBusy = ref(false)
+const inlineEditError = ref<string | null>(null)
 
-async function enterEditLayout() {
-  editLayoutBusy.value = true
+async function enterInlineEdit() {
+  inlineEditBusy.value = true
+  inlineEditError.value = null
   try {
-    await window.oneCC.openOverlayEditor()
+    const enabled = await window.oneCC.setOverlayEditMode(true)
+    if (!enabled) {
+      inlineEditError.value = 'Impossible d\'activer l\'edition integree. Verifiez que l\'overlay est visible sur SC.'
+    }
+  } catch (error: any) {
+    inlineEditError.value = error?.message ?? 'Impossible d\'activer l\'edition integree.'
   } finally {
-    editLayoutBusy.value = false
+    inlineEditBusy.value = false
   }
 }
 </script>
@@ -111,11 +118,11 @@ async function enterEditLayout() {
           @click="toggleOverlay"
           :disabled="overlayToggling"
           class="shrink-0 relative inline-flex h-6 w-11 items-center rounded-full border transition-colors duration-200 disabled:opacity-50"
-          :class="overlayEnabled ? 'bg-accent/30 border-accent/40' : 'bg-th-card border-th-subtle'"
+          :class="overlayEnabled ? 'bg-accent/30 border-accent/40' : 'bg-slate-800 border-slate-600'"
         >
           <span
             class="inline-block h-4 w-4 rounded-full shadow transition-transform duration-200"
-            :class="overlayEnabled ? 'translate-x-6' : 'translate-x-1 bg-th-muted'"
+            :class="overlayEnabled ? 'translate-x-6' : 'translate-x-1 bg-slate-500'"
             :style="overlayEnabled ? { backgroundColor: 'rgb(var(--accent-rgb))' } : {}"
           />
         </button>
@@ -177,20 +184,26 @@ async function enterEditLayout() {
         Les positions sont sauvegardées automatiquement.
       </p>
 
-      <button
-        @click="enterEditLayout"
-        :disabled="editLayoutBusy"
-        class="flex items-center gap-2 rounded-md border border-accent/25 bg-accent/[0.08] px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 transition disabled:opacity-50"
-      >
-        <svg v-if="editLayoutBusy" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-        </svg>
-        <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
-        </svg>
-        Modifier la disposition
-      </button>
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <button
+          @click="enterInlineEdit"
+          :disabled="inlineEditBusy"
+          class="flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/15 transition disabled:opacity-50"
+        >
+          <svg v-if="inlineEditBusy" class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          <svg v-else class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Editer directement sur l'overlay
+        </button>
+
+        <span class="text-xs text-th-muted">Raccourci direct: Ctrl+Shift+E</span>
+      </div>
+
+      <p v-if="inlineEditError" class="mb-3 text-xs text-rose-300">{{ inlineEditError }}</p>
     </div>
 
   </div>

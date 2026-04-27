@@ -53,7 +53,7 @@ function formatDate(iso: string | null): string {
 
 async function fetchEvents() {
   if (!app.bearerToken) return
-  const url = urls.value?.agendaIndex
+  const url = urls.value?.agenda.index
   if (!url) return
 
   loading.value = true

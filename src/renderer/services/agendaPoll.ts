@@ -19,7 +19,7 @@ export function startAgendaPoll(app: any, intervalMs = 5 * 60 * 1000) {
   async function fetchAndEmit() {
     if (!app?.bearerToken) return
     const urls = createOverlayUrls(app.settings)
-    const url = urls?.agendaIndex
+    const url = urls?.agenda.index
     if (!url) return
 
     try {

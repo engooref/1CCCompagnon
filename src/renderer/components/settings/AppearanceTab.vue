@@ -8,6 +8,9 @@ const app = useAppStore()
 const saving = ref(false)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
+const loadoutScale = ref<number>(app.settings?.loadoutCardScale ?? 1.06)
+let loadoutSaveTimer: ReturnType<typeof setTimeout> | null = null
+
 function loadFromStore(): AppearanceSettings {
   const a = app.settings?.appearance
   return {
@@ -28,6 +31,8 @@ const appearance = ref<AppearanceSettings>(loadFromStore())
 onMounted(() => { appearance.value = loadFromStore() })
 onUnmounted(() => { if (saveTimer) clearTimeout(saveTimer) })
 
+onUnmounted(() => { if (loadoutSaveTimer) clearTimeout(loadoutSaveTimer) })
+
 watch(
   appearance,
   (v) => {
@@ -43,6 +48,20 @@ watch(
     }, 400)
   },
   { deep: true },
+)
+
+watch(
+  () => loadoutScale.value,
+  (v) => {
+    if (loadoutSaveTimer) clearTimeout(loadoutSaveTimer)
+    loadoutSaveTimer = setTimeout(async () => {
+      try {
+        await app.saveSettings({ loadoutCardScale: v })
+      } finally {
+        loadoutSaveTimer = null
+      }
+    }, 300)
+  },
 )
 
 function setNavPosition(pos: AppearanceSettings['navPosition']) {
@@ -172,6 +191,33 @@ function onColorInput(key: 'primaryColor' | 'accentColor' | 'textColor', hex: st
         @click="appearance = { ...appearance, fontSize: FONT_SIZE_DEFAULT }"
         class="text-[10px] text-accent/60 hover:text-accent transition"
       >Réinitialiser ({{ FONT_SIZE_DEFAULT }}px)</button>
+    </div>
+
+    <!-- ── Taille cartes Loadouts ───────────────────────────────────────── -->
+    <div class="rounded-lg border border-th-subtle bg-black/20 p-4 space-y-3">
+      <p class="text-xs font-bold uppercase tracking-wider text-th-muted">Taille cartes Loadouts</p>
+
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] text-th-muted shrink-0">A</span>
+        <input
+          type="range"
+          min="1"
+          max="1.2"
+          step="0.01"
+          :value="loadoutScale"
+          @input="(e) => loadoutScale.value = Number((e.target as HTMLInputElement).value)"
+          class="flex-1 h-1.5 accent-[rgb(var(--accent-rgb))] cursor-pointer"
+        />
+        <span class="w-12 text-center text-xs font-mono text-th-secondary tabular-nums">
+          {{ loadoutScale.toFixed(2) }}×
+        </span>
+      </div>
+
+      <button
+        v-if="loadoutScale !== 1.06"
+        @click="loadoutScale.value = 1.06"
+        class="text-[10px] text-accent/60 hover:text-accent transition"
+      >Réinitialiser (1.06×)</button>
     </div>
 
     <!-- ── Position de la navigation ─────────────────────────────────────── -->

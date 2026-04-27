@@ -17,7 +17,7 @@ const urls = computed(() => app.settings ? createOverlayUrls(app.settings) : nul
 usePushToTalk()
 
 async function initRadioPage() {
-  if (!app.status.authReady || !app.bearerToken || !urls.value?.radioMercureInfo) return
+  if (!app.status.authReady || !app.bearerToken || !urls.value?.radio?.mercureInfo) return
 
   await radio.init()
 
@@ -32,7 +32,7 @@ async function initRadioPage() {
   // - si event ciblé (channelId), rafraîchir uniquement ce canal
   // - sinon, fallback sur tous les participants
   await connectMercure(
-    urls.value.radioMercureInfo,
+    urls.value.radio.mercureInfo,
     `Bearer ${app.bearerToken}`,
     async (payload) => {
       await radio.refreshParticipantsFromMercureEvent(payload)

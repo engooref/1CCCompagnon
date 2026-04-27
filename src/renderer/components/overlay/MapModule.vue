@@ -40,7 +40,7 @@ async function fetchMapInfo(id: number): Promise<MapInfo | null> {
   logger.info('[MapModule] fetchMapInfo →', id, { hasToken: !!token, hasUrls: !!urls })
   if (!token || !urls) { logger.warn('[MapModule] fetchMapInfo: token ou urls manquant'); return null }
   try {
-    const { data } = await http.get(urls.mapShow(id), {
+    const { data } = await http.get(urls.maps.show(id), {
       headers: { Authorization: `Bearer ${token}` },
     })
     const raw = (data?.data ?? data) as MapInfo
@@ -57,7 +57,7 @@ async function fetchAndApplyFeatures(id: number) {
   logger.info('[MapModule] fetchAndApplyFeatures →', id, { hasToken: !!token, hasUrls: !!urls, hasMapInfo: !!currentMapInfo })
   if (!token || !urls || !currentMapInfo) { logger.warn('[MapModule] fetchAndApplyFeatures: prérequis manquants'); return }
   try {
-    const { data } = await http.get(urls.mapFeatures(id), {
+    const { data } = await http.get(urls.maps.features(id), {
       headers: { Authorization: `Bearer ${token}` },
     })
     const raw = data?.data ?? data
@@ -113,7 +113,7 @@ async function loadMap(id: number | null) {
   await fetchAndApplyFeatures(id)
   if (gen !== loadGen) return
 
-  const url = urls?.mapMercureInfo(id)
+  const url = urls?.maps.mercureInfo(id)
   logger.info('[MapModule] loadMap: connexion Mercure →', url)
   if (!url || !token) { logger.warn('[MapModule] loadMap: pas de Mercure url=' + url + ' token=' + !!token); return }
 

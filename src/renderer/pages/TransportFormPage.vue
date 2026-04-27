@@ -128,7 +128,7 @@ function authHeaders() {
 async function loadReference() {
   if (!urls.value) return
   try {
-    const { data } = await http.get(urls.value.shipModels, { headers: authHeaders() })
+    const { data } = await http.get(urls.value.market.shipModels, { headers: authHeaders() })
     const raw = data?.data ?? data
     shipModels.value = (Array.isArray(raw) ? raw.filter(Boolean) : []) as ShipModel[]
   } catch (e: any) {
@@ -143,7 +143,7 @@ async function loadOrder() {
   loading.value = true
   error.value   = null
   try {
-    const { data } = await http.get(urls.value.transportShow(orderId.value), {
+    const { data } = await http.get(urls.value.transports.show(orderId.value), {
       headers: authHeaders(),
     })
     const raw = data?.data ?? data
@@ -312,7 +312,7 @@ async function searchPoi(fieldKey: string, query: string) {
   s.loading = true
   try {
     const { data } = await http.get(
-      `${urls.value.poiSearch}?q=${encodeURIComponent(query)}`,
+      `${urls.value.starmap.poiSearch}?q=${encodeURIComponent(query)}`,
       { headers: authHeaders() },
     )
     s.results = data?.data ?? []
@@ -388,7 +388,7 @@ async function searchCommodity(fieldKey: string, query: string) {
   s.loading = true
   try {
     const { data } = await http.get(
-      `${urls.value.commodities}?q=${encodeURIComponent(query)}`,
+      `${urls.value.market.commodities}?q=${encodeURIComponent(query)}`,
       { headers: authHeaders() },
     )
     s.results = data?.data ?? []
@@ -484,14 +484,14 @@ async function save(): Promise<number | null> {
   try {
     if (savedId.value) {
       const { data } = await http.patch(
-        urls.value.transportShow(savedId.value),
+        urls.value.transports.show(savedId.value),
         payload,
         { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
       )
       return data?.id ?? savedId.value
     } else {
       const { data } = await http.post(
-        urls.value.transports,
+        urls.value.transports.index,
         payload,
         { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
       )
@@ -523,7 +523,7 @@ async function generate() {
   generating.value = true
   try {
     await http.post(
-      urls.value.transportGenerate(id),
+      urls.value.transports.generate(id),
       {},
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
     )
@@ -540,7 +540,7 @@ async function generateItinerary() {
   generatingItinerary.value = true
   try {
     await http.post(
-      urls.value.transportGenerate(savedId.value),
+      urls.value.transports.generate(savedId.value),
       {},
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
     )
@@ -560,7 +560,7 @@ async function deleteDelivery() {
   if (!confirm('Supprimer définitivement cet ordre de transport ?')) return
   deleting.value = true
   try {
-    await http.delete(urls.value.transportShow(savedId.value), {
+    await http.delete(urls.value.transports.show(savedId.value), {
       headers: authHeaders(),
     })
     router.push({ name: 'transport' })

@@ -23,6 +23,9 @@ export function createOverlayWindow(): BrowserWindow {
     resizable: false,
     movable: false,
     fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
     show: false,
     title: '1CC Overlay',
     webPreferences: {
@@ -41,14 +44,19 @@ export function createOverlayWindow(): BrowserWindow {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setMenu(null)
 
+  // Empêcher la titlebar Windows de s'afficher en redirigeant le focus
+  win.on('focus', () => {
+    win?.blur()
+  })
+
   if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/overlay`)
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'), { hash: '/overlay' })
   }
 
-  // Do not open DevTools automatically for overlay window in development.
-  // Developers can still toggle DevTools with F12 (handled elsewhere).
+  // DevTools for the overlay are intentionally disabled to avoid
+  // exposing the overlay renderer or interfering with the overlay UX.
 
   win.on('closed', () => { win = null })
   return win
@@ -62,6 +70,12 @@ export function showOverlay(): void {
   // above the overlay when appropriate.
   win.setAlwaysOnTop(true, 'pop-up-menu')
   win.showInactive()
+  try { if (!win.webContents.isDestroyed()) win.webContents.send('overlay:state', { visible: true }) } catch (e) { /* noop */ }
+}
+
+export function setOverlayInteractive(enabled: boolean): void {
+  if (!win || win.isDestroyed()) return
+  win.setIgnoreMouseEvents(!enabled, { forward: !enabled })
 }
 
 export function hideOverlay(): void {
@@ -70,6 +84,7 @@ export function hideOverlay(): void {
   // state if the window is later shown/hidden.
   try { win.setAlwaysOnTop(false) } catch (e) { /* noop */ }
   win.hide()
+  try { if (!win.webContents.isDestroyed()) win.webContents.send('overlay:state', { visible: false }) } catch (e) { /* noop */ }
 }
 
 export function setOverlayBounds(b: { x: number; y: number; width: number; height: number }): void {

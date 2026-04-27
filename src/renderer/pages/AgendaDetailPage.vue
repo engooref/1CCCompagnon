@@ -121,7 +121,7 @@ function typeRepClass(type: string): string {
 async function fetchDetail() {
   if (!app.bearerToken) return
   const id = Number(route.params.id)
-  const url = urls.value?.agendaShow(id)
+  const url = urls.value?.agenda.show(id)
   if (!url) return
 
   loading.value = true

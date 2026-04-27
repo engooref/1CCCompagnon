@@ -1,24 +1,77 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { LayoutState } from '@shared/general'
+import type { LayoutState, OverlayModuleConfig, OverlayRadioDensity } from '@shared/general'
 import TransportModule from '../components/overlay/TransportModule.vue'
 import MapModule from '../components/overlay/MapModule.vue'
 import RadioModule from '../components/overlay/RadioModule.vue'
+import ModeSelector from '../components/overlay/ModeSelector.vue'
+import NotificationModule from '../components/overlay/NotificationModule.vue'
 import { useOverlayLayout } from '../composables/useOverlayLayout'
 import { usePinnedMap } from '../composables/usePinnedMap'
+import { useOverlayInSituEditor } from '../composables/useOverlayInSituEditor'
+import { useNotificationBus } from '../composables/useNotificationBus'
+import { useModeStore } from '../stores/mode'
+
+const modeStore = useModeStore()
+const { push: pushNotification } = useNotificationBus()
 
 const scBounds  = ref<{ x: number; y: number; width: number; height: number } | null>(null)
 const mapVisible        = ref(false)
 const mapOverlayOpacity = ref(0.85)
 const mapModuleRef      = ref<{ refresh: () => void } | null>(null)
 const mapOnlyMode       = ref(false)
+const settingsPanelOpen = ref(false)
 
 watch(mapVisible, (visible) => {
   if (visible) nextTick(() => mapModuleRef.value?.refresh())
 })
 
 const { pinnedMapId } = usePinnedMap()
-const { modules, getStyle, loadLayout, applyLayout } = useOverlayLayout()
+const { positions, modules, getStyle, loadLayout, applyLayout } = useOverlayLayout()
+const {
+  editMode,
+  selectedId,
+  setEditMode,
+  selectModule,
+  startDrag,
+  startResize,
+  setField,
+  toggleVisibility,
+  toggleMinimized,
+  discardChanges,
+} = useOverlayInSituEditor()
+
+const overlayBounds = computed(() => {
+  const bounds = scBounds.value
+  return {
+    width: bounds?.width ?? window.innerWidth,
+    height: bounds?.height ?? window.innerHeight,
+  }
+})
+
+const selectedModule = computed<OverlayModuleConfig | null>(() => {
+  return modules.find((mod) => mod.id === selectedId.value) ?? null
+})
+
+const selectedPanelStyle = computed(() => {
+  if (!selectedModule.value || !selectedId.value) return null
+
+  const pos = positions[selectedId.value]
+  const width = overlayBounds.value.width
+  const height = overlayBounds.value.height
+  const panelWidth = 260
+  const moduleLeft = Math.round((pos?.xPct ?? 0.02) * width)
+  const moduleTop = Math.round((pos?.yPct ?? 0.02) * height)
+  const moduleWidth = selectedModule.value.width
+  const panelLeft = Math.max(12, Math.min(width - panelWidth - 12, moduleLeft + moduleWidth + 14))
+  const panelTop = Math.max(12, Math.min(height - 260, moduleTop))
+
+  return {
+    left: `${panelLeft}px`,
+    top: `${panelTop}px`,
+    width: `${panelWidth}px`,
+  }
+})
 
 /** Conteneur positionné sur la fenêtre SC. Fallback = plein écran si bounds inconnues. */
 const scContainerStyle = computed(() => {
@@ -34,18 +87,90 @@ const scContainerStyle = computed(() => {
 })
 
 function isVisible(mod: (typeof modules)[number]): boolean {
+  // Notifications : toujours rendu (le composant gère sa file lui-même)
+  if (mod.type === 'notification') return !mapOnlyMode.value
   if (mapOnlyMode.value) return false
+  // En mode édition : toujours afficher pour pouvoir interagir, même si visible=false
+  if (editMode.value) return mod.type === 'transport' || mod.type === 'radio' || mod.type === 'notification'
   if (!mod.visible) return false
   return mod.type === 'transport' || mod.type === 'radio'
 }
+
+function selectForEditing(id: string) {
+  selectModule(id, overlayBounds.value)
+}
+
+function toggleSettingsPanel(id: string) {
+  if (selectedId.value !== id) {
+    selectForEditing(id)
+    settingsPanelOpen.value = true
+    return
+  }
+
+  settingsPanelOpen.value = !settingsPanelOpen.value
+}
+
+async function exitEditMode() {
+  settingsPanelOpen.value = false
+  await discardChanges()
+  setEditMode(false)
+  void window.oneCC.setOverlayEditMode(false)
+}
+
+async function updateField<K extends keyof OverlayModuleConfig>(
+  key: K,
+  value: OverlayModuleConfig[K],
+) {
+  if (!selectedModule.value) return
+  await setField(selectedModule.value.id, key, value)
+}
+
+async function toggleSelectedVisibility() {
+  if (!selectedModule.value) return
+  await toggleVisibility(selectedModule.value.id)
+}
+
+async function toggleSelectedMinimized() {
+  if (!selectedModule.value) return
+  await toggleMinimized(selectedModule.value.id)
+}
+
 
 onMounted(async () => {
   const settings = await window.oneCC.getSettings()
   mapOverlayOpacity.value = settings.mapOverlayOpacity ?? 0.85
 
-  await loadLayout()
+  await Promise.all([loadLayout(), modeStore.load()])
+
+  window.oneCC.onActiveModeChange((modeId) => {
+    const prev = modeStore.activeModeId
+    modeStore.setActiveModeId(modeId)
+    if (modeId !== prev) {
+      const mode = modeStore.modes.find((m) => m.id === modeId)
+      pushNotification({
+        id: `mode-${modeId}-${Date.now()}`,
+        title: 'Mode activé',
+        message: mode?.label ?? modeId,
+        type: 'info',
+        duration: 3000,
+      })
+    }
+  })
 
   window.oneCC.onOverlayLayoutUpdate((l: LayoutState) => applyLayout(l))
+  window.oneCC.onOverlayEditMode(async (enabled) => {
+    if (enabled) {
+      settingsPanelOpen.value = false
+      await loadLayout()
+      setEditMode(true)
+      return
+    }
+    // Skip if already exited (e.g. exitEditMode() already acted locally)
+    if (!editMode.value) return
+    settingsPanelOpen.value = false
+    await discardChanges()
+    setEditMode(false)
+  })
 
   window.oneCC.onOverlayGameBounds((b) => { scBounds.value = b })
 
@@ -63,38 +188,193 @@ onMounted(async () => {
 onUnmounted(() => {
   window.oneCC.offOverlay()
   window.oneCC.offSettingsUpdate()
+  window.oneCC.offActiveModeChange()
 })
 </script>
 
 <template>
-  <div class="fixed inset-0 overflow-hidden select-none pointer-events-none overlay-root">
+  <div class="fixed inset-0 overflow-hidden select-none overlay-root" :class="{ 'overlay-root--editing': editMode }">
 
-    <!-- ── Conteneur calqué sur la fenêtre SC ──────────────────────────── -->
-    <div :style="scContainerStyle" class="overflow-hidden">
+    <!-- Voile de fond en mode édition -->
+    <Transition name="fade">
+      <div v-if="editMode" class="pointer-events-none absolute inset-0" style="background: linear-gradient(180deg, rgba(2,6,23,0.40) 0%, rgba(2,6,23,0.30) 100%), radial-gradient(circle at top, rgba(14,165,233,0.12), transparent 45%)" />
+    </Transition>
 
-      <!-- ── Modules positionnés ────────────────────────────────────────── -->
+    <!-- Panneau de contrôle — haut centre -->
+    <Transition name="fade">
+      <div v-if="editMode" class="pointer-events-auto fixed top-4 left-1/2 -translate-x-1/2 z-[12000]">
+        <div class="rounded-2xl border border-sky-400/35 bg-slate-950/90 px-5 py-3.5 text-[12px] text-sky-100 shadow-[0_20px_60px_rgba(2,6,23,0.55)] backdrop-blur-md min-w-[440px]">
+          <div class="flex items-center justify-between gap-6 mb-3">
+            <div>
+              <div class="font-bold text-[13px] text-white">Édition intégrée</div>
+              <div class="text-[11px] text-sky-300/70 mt-0.5">Glissez les modules · Ctrl+Shift+E pour quitter</div>
+            </div>
+            <button
+              class="shrink-0 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-[12px] font-semibold text-sky-100 hover:bg-sky-500/20 transition"
+              @click="exitEditMode"
+            >
+              Quitter
+            </button>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="mod in modules"
+              :key="`${mod.id}-toggle`"
+              class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium transition"
+              :class="mod.type === 'notification'
+                ? 'border-sky-400/40 bg-sky-500/15 text-sky-100 opacity-50 cursor-default'
+                : mod.visible
+                  ? 'border-sky-400/40 bg-sky-500/15 text-sky-100'
+                  : 'border-white/10 bg-white/5 text-slate-400'"
+              @click="mod.type !== 'notification' && void toggleVisibility(mod.id)"
+            >
+              <span class="h-2 w-2 rounded-full" :class="mod.visible ? 'bg-emerald-400' : 'bg-slate-500'" />
+              {{ mod.title }}
+            </button>
+          </div>
+
+          <!-- Séparateur + Sélecteur de mode -->
+          <div class="mt-3 border-t border-white/8 pt-3">
+            <ModeSelector />
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <div :style="scContainerStyle" class="overflow-hidden" :class="{ 'pointer-events-auto': editMode }">
       <template v-for="mod in modules" :key="mod.id">
         <Transition name="fade">
           <div
             v-if="isVisible(mod)"
-            class="absolute pointer-events-none"
+            class="absolute module-draggable"
+            :data-module-id="mod.id"
+            :class="{
+              'pointer-events-none': !editMode,
+              'pointer-events-auto cursor-move': editMode,
+              'overlay-module--selected': editMode && selectedId === mod.id,
+              'overlay-module--hidden': editMode && !mod.visible,
+            }"
             :style="getStyle(mod.id, scBounds?.width, scBounds?.height)"
+            @mousedown="editMode && startDrag($event, mod.id, overlayBounds)"
           >
             <template v-if="!mod.minimized">
               <div class="w-full overflow-hidden rounded-2xl" :style="{ zoom: mod.fontSize ?? 1 }">
-                <TransportModule v-if="mod.type === 'transport'" />
-                <RadioModule v-else-if="mod.type === 'radio'" :config="mod" />
+                <NotificationModule v-if="mod.type === 'notification'" :preview="editMode" />
+                <TransportModule v-else-if="mod.type === 'transport'" />
+                <RadioModule
+                  v-else-if="mod.type === 'radio'"
+                  :config="mod"
+                  :preview="editMode"
+                  :preview-state="editMode ? {
+                    connected: true,
+                    currentChannel: 'ops-1',
+                    currentChannelName: 'OPS-1',
+                    participantCount: 4,
+                    transmitting: false,
+                    muted: false,
+                    mutedIncoming: false,
+                    activeSpeakers: [{ identity: 'Cdt. Dupont', channel: 'OPS-1', audioLevel: 0.8 }],
+                  } : null"
+                />
               </div>
             </template>
             <div v-else class="rounded-xl border border-white/10 bg-black/60 px-3 py-1 text-[10px] text-th-muted backdrop-blur-sm">
               {{ mod.title }}
             </div>
+
+            <template v-if="editMode && selectedId === mod.id">
+              <div class="overlay-module-frame" />
+
+              <div class="overlay-module-tools">
+                <button
+                  v-if="mod.type !== 'notification'"
+                  class="overlay-module-tool"
+                  :title="mod.visible ? 'Masquer' : 'Afficher'"
+                  @mousedown.stop
+                  @click.stop="void toggleVisibility(mod.id)"
+                >
+                  {{ mod.visible ? 'VIS' : 'OFF' }}
+                </button>
+                <button
+                  class="overlay-module-tool"
+                  title="Parametres"
+                  @mousedown.stop
+                  @click.stop="toggleSettingsPanel(mod.id)"
+                >
+                  ⚙
+                </button>
+              </div>
+
+              <div
+                v-if="!mod.locked"
+                class="overlay-module-resize"
+                title="Redimensionner"
+                @click.stop
+                @mousedown.stop="startResize($event, mod.id, overlayBounds)"
+              />
+            </template>
           </div>
         </Transition>
       </template>
 
-      <!-- ── Carte tactique plein overlay (z-index max, au-dessus de tout) ── -->
-      <!-- Monté dès qu'une carte est épinglée, caché/montré par CSS pour éviter le rechargement -->
+      <Transition name="fade">
+        <div
+          v-if="editMode && settingsPanelOpen && selectedModule && selectedPanelStyle"
+          class="pointer-events-auto absolute z-[11000] rounded-2xl border border-white/12 bg-slate-950/88 p-3 text-[12px] text-slate-100 shadow-[0_18px_60px_rgba(2,6,23,0.45)] backdrop-blur-md"
+          :style="selectedPanelStyle"
+        >
+          <div class="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <div class="font-semibold text-white">{{ selectedModule.title }}</div>
+              <div class="text-[11px] text-slate-400">{{ selectedModule.type === 'radio' ? 'Module radio' : 'Module transport' }}</div>
+            </div>
+            <button class="rounded-md px-2 py-1 text-slate-400 hover:bg-white/5 hover:text-white" @click="settingsPanelOpen = false">×</button>
+          </div>
+
+          <div class="space-y-2">
+            <label v-if="selectedModule.type !== 'notification'" class="overlay-setting-row">
+              <span>Visible</span>
+              <input type="checkbox" :checked="selectedModule.visible" @change="void toggleSelectedVisibility()" />
+            </label>
+            <label class="overlay-setting-row">
+              <span>Mode réduit</span>
+              <input type="checkbox" :checked="selectedModule.minimized" @change="void toggleSelectedMinimized()" />
+            </label>
+            <label class="overlay-setting-block">
+              <span>Opacité</span>
+              <input type="range" min="0.2" max="1" step="0.05" :value="selectedModule.opacity" @input="void updateField('opacity', Number(($event.target as HTMLInputElement).value))" />
+            </label>
+            <label class="overlay-setting-block">
+              <span>Taille du texte</span>
+              <input type="range" min="0.75" max="1.5" step="0.05" :value="selectedModule.fontSize" @input="void updateField('fontSize', Number(($event.target as HTMLInputElement).value))" />
+            </label>
+
+            <template v-if="selectedModule.type === 'radio'">
+              <label class="overlay-setting-block">
+                <span>Densité</span>
+                <select :value="selectedModule.radioDensity ?? 'medium'" @change="void updateField('radioDensity', ($event.target as HTMLSelectElement).value as OverlayRadioDensity)">
+                  <option value="compact">Compact</option>
+                  <option value="medium">Intermédiaire</option>
+                  <option value="detailed">Détaillé</option>
+                </select>
+              </label>
+              <label class="overlay-setting-row">
+                <span>Participants</span>
+                <input type="checkbox" :checked="selectedModule.radioShowParticipants ?? true" @change="void updateField('radioShowParticipants', ($event.target as HTMLInputElement).checked)" />
+              </label>
+              <label class="overlay-setting-row">
+                <span>Speakers actifs</span>
+                <input type="checkbox" :checked="selectedModule.radioShowSpeakers ?? true" @change="void updateField('radioShowSpeakers', ($event.target as HTMLInputElement).checked)" />
+              </label>
+              <label class="overlay-setting-row">
+                <span>Détails avancés</span>
+                <input type="checkbox" :checked="selectedModule.radioShowAdvancedStatus ?? true" @change="void updateField('radioShowAdvancedStatus', ($event.target as HTMLInputElement).checked)" />
+              </label>
+            </template>
+          </div>
+        </div>
+      </Transition>
+
       <div
         v-if="pinnedMapId"
         class="absolute pointer-events-none"
@@ -108,7 +388,6 @@ onUnmounted(() => {
       >
         <MapModule ref="mapModuleRef" />
       </div>
-
     </div>
   </div>
 </template>
@@ -117,6 +396,106 @@ onUnmounted(() => {
 .overlay-root {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  pointer-events: none;
+}
+
+.overlay-root.overlay-root--editing {
+  pointer-events: auto;
+}
+
+.overlay-module--selected {
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.4));
+}
+
+/* Module masqué visible en mode édition uniquement */
+.overlay-module--hidden {
+  opacity: 0.35;
+  outline: 2px dashed rgba(148, 163, 184, 0.5);
+  outline-offset: 2px;
+  border-radius: 18px;
+}
+
+.overlay-module-frame {
+  position: absolute;
+  inset: -3px;
+  border: 2px solid rgba(56, 189, 248, 0.9);
+  border-radius: 18px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(186, 230, 253, 0.25), 0 0 30px rgba(14, 165, 233, 0.15);
+}
+
+.overlay-module-tools {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  display: flex;
+  gap: 6px;
+}
+
+.overlay-module-tool {
+  min-width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  border: 1px solid rgba(186, 230, 253, 0.5);
+  background: rgba(2, 6, 23, 0.88);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.35);
+}
+
+.overlay-module-tool:hover {
+  background: rgba(14, 165, 233, 0.22);
+}
+
+.overlay-module-resize {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  border: 1px solid rgba(186, 230, 253, 0.8);
+  background: rgba(14, 165, 233, 0.95);
+  box-shadow: 0 0 0 2px rgba(2, 6, 23, 0.55);
+  cursor: nwse-resize;
+}
+
+.overlay-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.overlay-setting-block {
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.overlay-setting-block span {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.overlay-setting-block input[type='range'] {
+  width: 100%;
+}
+
+.overlay-setting-block select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.95);
+  padding: 8px 10px;
+  color: white;
 }
 
 .fade-enter-active,

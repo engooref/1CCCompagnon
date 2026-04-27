@@ -23,12 +23,14 @@
     "leaflet": "^1.9.4",
     "livekit-client": "^2.18.0",
     "pinia": "^3.0.1",
+    "three": "^0.183.2",
     "uiohook-napi": "^1.5.4",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
+    "@types/three": "^0.183.1",
     "@vitejs/plugin-vue": "^5.2.1",
     "autoprefixer": "^10.4.27",
     "electron": "^35.0.0",

@@ -141,7 +141,7 @@ async function fetchAll(force = false) {
   loading.value = true
   error.value = null
   try {
-    const { data } = await http.get(urls.value.inventoryIndex, { headers: authHeaders() })
+    const { data } = await http.get(urls.value.inventory.index, { headers: authHeaders() })
     const raw = data?.data ?? data
     items.value = (Array.isArray(raw) ? raw : []).filter(Boolean) as InventoryEntry[]
   } catch (e: any) {
@@ -159,7 +159,7 @@ async function searchItems() {
   if (!urls.value || addModal.q.length < 2) { addModal.results = []; return }
   addModal.searching = true
   try {
-    const { data } = await http.get(urls.value.inventorySearch, { params: { q: addModal.q }, headers: authHeaders() })
+    const { data } = await http.get(urls.value.inventory.search, { params: { q: addModal.q }, headers: authHeaders() })
     addModal.results = (data?.data ?? data ?? []) as SearchResult[]
   } catch { addModal.results = [] }
   finally { addModal.searching = false }
@@ -170,7 +170,7 @@ async function searchItems() {
 async function searchPoi(query: string): Promise<InventoryLocation[]> {
   if (!urls.value || query.length < 2) return []
   try {
-    const { data } = await http.get(urls.value.poiSearch, { params: { q: query }, headers: authHeaders() })
+    const { data } = await http.get(urls.value.starmap.poiSearch, { params: { q: query }, headers: authHeaders() })
     return (data?.data ?? data ?? []) as InventoryLocation[]
   } catch { return [] }
 }
@@ -213,7 +213,7 @@ async function saveEdit() {
   const { id, qty, quality, selectedLocation } = editRow.value
   if (qty <= 0) { await removeEntryById(id); return }
   try {
-    await http.put(urls.value.inventoryShow(id), {
+    await http.put(urls.value.inventory.show(id), {
       quantity: qty,
       quality,
       poiId: selectedLocation?.id ?? null,
@@ -235,7 +235,7 @@ async function removeEntry(entry: InventoryEntry) {
 async function removeEntryById(id: number) {
   if (!urls.value) return
   try {
-    await http.delete(urls.value.inventoryShow(id), { headers: authHeaders() })
+    await http.delete(urls.value.inventory.show(id), { headers: authHeaders() })
     items.value = items.value.filter(i => i.id !== id)
     if (editRow.value?.id === id) editRow.value = null
   } catch (e: any) {
@@ -287,7 +287,7 @@ async function confirmAdd() {
   addModal.status = ''
   try {
     for (const stack of addModal.stacks) {
-      await http.post(urls.value.inventoryIndex, {
+      await http.post(urls.value.inventory.index, {
         externalId: addModal.selected.externalId,
         name: addModal.selected.name,
         section: addModal.selected.section,
@@ -313,9 +313,9 @@ async function confirmAdd() {
 onMounted(() => {
   if (!app.status.authReady) return
   fetchAll()
-  if (urls.value?.inventoryMercureInfo) {
+  if (urls.value?.inventory.mercureInfo) {
     connectMercure(
-      urls.value.inventoryMercureInfo,
+      urls.value.inventory.mercureInfo,
       `Bearer ${app.bearerToken}`,
       (msg: any) => {
         if (msg?.action === 'upsert' && msg.item) {

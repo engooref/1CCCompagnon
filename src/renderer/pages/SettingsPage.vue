@@ -6,8 +6,9 @@ import TransportTab  from '../components/settings/TransportTab.vue'
 import MapsTab       from '../components/settings/MapsTab.vue'
 import AppearanceTab from '../components/settings/AppearanceTab.vue'
 import RadioTab      from '../components/settings/RadioTab.vue'
+import ModesTab      from '../components/settings/ModesTab.vue'
 
-type Tab = 'general' | 'overlay' | 'transport' | 'maps' | 'appearance' | 'radio'
+type Tab = 'general' | 'overlay' | 'transport' | 'maps' | 'appearance' | 'radio' | 'modes'
 const activeTab = ref<Tab>('general')
 </script>
 
@@ -26,6 +27,7 @@ const activeTab = ref<Tab>('general')
         v-for="tab in ([
           { id: 'general',    label: 'Général'    },
           { id: 'overlay',    label: 'Overlay'    },
+          { id: 'modes',      label: 'Modes'      },
           { id: 'transport',  label: 'Transport'  },
           { id: 'maps',       label: 'Cartes'     },
           { id: 'appearance', label: 'Apparence'  },
@@ -45,6 +47,7 @@ const activeTab = ref<Tab>('general')
     <div class="flex-1 min-h-0 overflow-y-auto">
       <GeneralTab    v-if="activeTab === 'general'"    />
       <OverlayTab    v-if="activeTab === 'overlay'"    />
+      <ModesTab      v-if="activeTab === 'modes'"      />
       <TransportTab  v-if="activeTab === 'transport'"  />
       <MapsTab       v-if="activeTab === 'maps'"       />
       <AppearanceTab v-if="activeTab === 'appearance'" />

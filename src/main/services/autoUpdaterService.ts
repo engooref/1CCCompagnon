@@ -71,7 +71,7 @@ export async function installUpdateAndQuit() {
 
 export function setFeedUrl(url: string) {
   try {
-    autoUpdater.setFeedURL({ url })
+    autoUpdater.setFeedURL({ provider: 'generic', url })
   } catch (e: any) {
     logger.warn('[autoUpdater] setFeedURL failed', e?.message ?? e)
   }

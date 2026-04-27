@@ -199,7 +199,7 @@ export class RadioClient {
           { urls: 'stun:stun1.l.google.com:19302' },
         ],
       },
-    })
+    } as any)
     const entry: ChannelEntry = { room, micTrack: null, whisperOnly }
     this.channels.set(channelId, entry)
     this.setupRoomEvents(channelId, room, entry)

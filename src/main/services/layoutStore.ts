@@ -1,12 +1,7 @@
 import { EventEmitter } from 'node:events'
-import type { OverlayLayout, OverlayElementPos, OverlayModuleConfig } from '../../shared/general'
+import type { OverlayLayout, OverlayElementPos, LayoutState } from '../../shared/general'
 import { DEFAULT_OVERLAY_MODULES } from '../../shared/general'
-import { getSettings, setSettings } from './settingsStore'
-
-export interface LayoutState {
-  modules: OverlayModuleConfig[]
-  positions: OverlayLayout
-}
+import { getActiveModeLayout, saveActiveModeLayout } from './modeStore'
 
 const emitter = new EventEmitter()
 
@@ -38,16 +33,15 @@ function migratePositions(saved: Record<string, any>): OverlayLayout {
 }
 
 export function getLayout(): LayoutState {
-  const s = getSettings()
-  const rawPositions = s.overlayLayout ?? {}
+  const activeLayout = getActiveModeLayout()
   return {
-    modules: s.overlayModules?.length ? [...s.overlayModules] : [...DEFAULT_OVERLAY_MODULES],
-    positions: migratePositions(rawPositions as Record<string, any>),
+    modules: activeLayout.modules?.length ? [...activeLayout.modules] : [...DEFAULT_OVERLAY_MODULES],
+    positions: migratePositions((activeLayout.positions ?? {}) as Record<string, any>),
   }
 }
 
 export function saveLayout(layout: LayoutState): void {
-  setSettings({ overlayModules: layout.modules, overlayLayout: layout.positions })
+  saveActiveModeLayout(layout)
   emitter.emit('change', layout)
 }
 

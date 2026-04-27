@@ -2,14 +2,15 @@ import { app, BrowserWindow, shell, screen, globalShortcut, Menu, session } from
 import path from 'node:path'
 import { logger } from './services/logger'
 import { registerAppIpc } from './ipc/app.ipc'
-import { createOverlayWindow, showOverlay, hideOverlay, sendToOverlay, getOverlayWindow } from './windows/overlayWindow'
+import { createOverlayWindow, showOverlay, hideOverlay, sendToOverlay, getOverlayWindow, setOverlayInteractive } from './windows/overlayWindow'
 import { setMainWindow } from './windows/mainWindow'
 import { getOverlayEditorWindow } from './windows/overlayEditorWindow'
 import { startGameWatcher, stopGameWatcher, getGameWindowBounds } from './services/gameWatcher'
 import { loadNativeTracker } from './services/scTrackerNative'
 import { initAutoUpdater, checkForUpdatesNative } from './services/autoUpdaterService'
 import { getSettings } from './services/settingsStore'
-import { onLayoutChange } from './services/layoutStore'
+import { onLayoutChange, getLayout } from './services/layoutStore'
+import { getRegistry, setActiveMode, onRegistryChange } from './services/modeStore'
 import { registerRadioIpc } from './ipc/radio.ipc'
 import { registerPttBindings, setPttTargetWindow } from './services/radioService'
 import { uIOhook } from 'uiohook-napi'
@@ -54,6 +55,26 @@ function accelToUiohook(accel: string): number | null {
   return ACCEL_TO_UIOHOOK[key] ?? null
 }
 
+/**
+ * Vérifie qu'un event uIOhook correspond exactement à un accelerator Electron.
+ * Ex: 'Ctrl+F9' → keycode F9 ET ctrlKey=true ET shiftKey=false ET altKey=false.
+ * Évite qu'un raccourci Ctrl+F9 déclenche aussi le handler F9.
+ */
+function accelMatchesEvent(accel: string, event: any): boolean {
+  const parts  = accel.split('+')
+  const key    = parts[parts.length - 1]
+  const uiCode = ACCEL_TO_UIOHOOK[key]
+  if (uiCode === undefined || event?.keycode !== uiCode) return false
+
+  const needsCtrl  = parts.includes('Ctrl') || parts.includes('CommandOrControl') || parts.includes('CmdOrCtrl')
+  const needsAlt   = parts.includes('Alt')
+  const needsShift = parts.includes('Shift')
+
+  return Boolean(event.ctrlKey)  === needsCtrl  &&
+         Boolean(event.altKey)   === needsAlt   &&
+         Boolean(event.shiftKey) === needsShift
+}
+
 function domKeyCodeToUiohook(domCode: number): number {
   const mapped = DOM_TO_UIOHOOK[domCode]
   if (mapped === undefined) logger.warn('[main] domKeyCodeToUiohook: code clavier non mappé', domCode)
@@ -66,11 +87,17 @@ const RENDERER_DIST = path.join(APP_ROOT, 'out/renderer')
 let mainWindow:       BrowserWindow | null = null
 let ioHookHandler:    ((e: any) => void) | null = null
 let mapIoHookHandler: ((e: any) => void) | null = null
+let editIoHookKeyDown: ((e: any) => void) | null = null
+let editIoHookKeyUp:   ((e: any) => void) | null = null
 let ioHookStarted  = false
 let manuallyHidden = false
 let isGameFocused  = false
 let mapOnlyMode         = false
 let mapCurrentlyVisible = false
+let overlayEditMode     = false
+let editCtrlPressed     = false
+let editShiftPressed    = false
+let lastEditToggleAt    = 0
 
 // ─── Helpers overlay ──────────────────────────────────────────────────────────
 
@@ -90,6 +117,49 @@ function sendGameBounds(b: { x: number; y: number; width: number; height: number
   sendToOverlay('overlay:game-bounds', b ? toLogicalBounds(b) : null)
 }
 
+function setOverlayEditMode(enabled: boolean): boolean {
+  const ow = getOverlayWindow()
+  if (!ow || ow.isDestroyed()) return false
+
+  if (enabled) {
+    if (mapCurrentlyVisible) {
+      logger.info('[overlay] edit mode refused: map visible')
+      return false
+    }
+
+    if (!ow.isVisible()) {
+      const bounds = getGameWindowBounds()
+      if (!bounds && app.isPackaged) {
+        logger.info('[overlay] edit mode refused: SC non détecté')
+        return false
+      }
+
+      if (bounds) sendGameBounds(bounds)
+      manuallyHidden = false
+      showOverlay()
+    }
+
+    overlayEditMode = true
+    setOverlayInteractive(true)
+    sendToOverlay('overlay:edit-mode', true)
+    logger.info('[overlay] edit mode enabled')
+    return true
+  }
+
+  overlayEditMode = false
+  setOverlayInteractive(false)
+  sendToOverlay('overlay:edit-mode', false)
+  logger.info('[overlay] edit mode disabled')
+  return true
+}
+
+function toggleOverlayEditMode() {
+  const now = Date.now()
+  if (now - lastEditToggleAt < 250) return
+  lastEditToggleAt = now
+  setOverlayEditMode(!overlayEditMode)
+}
+
 
 // ─── Main window ──────────────────────────────────────────────────────────────
 
@@ -97,9 +167,20 @@ function createMainWindow() {
   const settings = getSettings()
   const [w, h] = (settings.windowSize ?? '1120x760').split('x').map(Number)
 
+  // Ouvrir la fenêtre sur l'écran où se trouve la souris
+  const cursorPos = screen.getCursorScreenPoint()
+  const display   = screen.getDisplayNearestPoint(cursorPos)
+  const { x: dx, y: dy, width: dw, height: dh } = display.workArea
+  const winW = w || 1120
+  const winH = h || 760
+  const winX = Math.round(dx + (dw - winW) / 2)
+  const winY = Math.round(dy + (dh - winH) / 2)
+
   mainWindow = new BrowserWindow({
-    width:  w || 1120,
-    height: h || 760,
+    width:  winW,
+    height: winH,
+    x: winX,
+    y: winY,
     minWidth: 980,
     minHeight: 680,
     resizable: false,
@@ -124,7 +205,12 @@ function createMainWindow() {
       uIOhook.start()
       ioHookStarted = true
     })
+    // Ouvrir automatiquement les DevTools de la fenêtre principale en dev
+    if (!app.isPackaged) {
+      setTimeout(() => mainWindow?.webContents.openDevTools({ mode: 'detach' }), 100)
+    }
   })
+  
   mainWindow.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') mainWindow?.webContents.toggleDevTools()
   })
@@ -182,12 +268,54 @@ app.whenReady().then(async () => {
   // Charger l'addon natif en premier — synchrone, < 5 ms
   loadNativeTracker()
 
+  // Helper : lit overlayEnabled depuis les settings (synchrone)
+  const isOverlayEnabled = () => getSettings().overlayEnabled !== false
+
   // L'IPC utilise getGameWindowBounds() (synchrone, cache mis à jour par le watcher)
-  registerAppIpc(getGameWindowBounds)
+  registerAppIpc(getGameWindowBounds, (enabled) => {
+    if (!enabled) {
+      // Désactivation immédiate : on cache l'overlay et on sort du mode édition
+      setOverlayEditMode(false)
+      mapOnlyMode = false
+      mapCurrentlyVisible = false
+      hideOverlay()
+    } else if (isGameFocused) {
+      // Réactivation : si SC est au premier plan, on réaffiche l'overlay
+      const b = getGameWindowBounds()
+      if (b) {
+        sendGameBounds(b)
+        showOverlay()
+        logger.info('[overlay] overlayEnabled → true, SC focused → show')
+      }
+    }
+  })
   registerRadioIpc()
 
   createMainWindow()
   createOverlayWindow()
+
+  // Register a dev-only global shortcut to toggle overlay DevTools
+  if (!app.isPackaged) {
+    const overlayDevtoolsShortcut = 'CommandOrControl+Shift+I'
+    try {
+      globalShortcut.register(overlayDevtoolsShortcut, () => {
+        try {
+          const ow = getOverlayWindow()
+          if (!ow || ow.isDestroyed()) return
+          if (ow.webContents.isDevToolsOpened()) ow.webContents.closeDevTools()
+          else ow.webContents.openDevTools({ mode: 'detach' })
+        } catch (e) {
+          logger.warn('[main] overlay devtools toggle failed', e)
+        }
+      })
+    } catch (e) {
+      logger.warn('[main] failed to register overlay devtools shortcut', e)
+    }
+
+    app.on('will-quit', () => {
+      try { globalShortcut.unregister(overlayDevtoolsShortcut) } catch {}
+    })
+  }
 
   // Initialiser le PTT radio sur la mainWindow
   if (mainWindow) {
@@ -218,17 +346,18 @@ app.whenReady().then(async () => {
       isGameFocused = focused
       sendGameBounds(bounds)
 
-      if (!manuallyHidden && focused) {
+      if (!manuallyHidden && focused && isOverlayEnabled()) {
         showOverlay()
         logger.info('[overlay] show → SC lancé (focused)')
       } else {
-        logger.info(`[overlay] SC lancé mais overlay non affiché — focused=${focused} manuallyHidden=${manuallyHidden}`)
+        logger.info(`[overlay] SC lancé mais overlay non affiché — focused=${focused} manuallyHidden=${manuallyHidden} enabled=${isOverlayEnabled()}`)
       }
     },
 
     onStop() {
       logger.info('[overlay] SC fermé — hide overlay')
       isGameFocused = false
+      setOverlayEditMode(false)
       mapOnlyMode = false
       mapCurrentlyVisible = false
       sendGameBounds(null)
@@ -239,6 +368,7 @@ app.whenReady().then(async () => {
     onMinimize() {
       logger.info('[overlay] SC minimisé — hide overlay')
       isGameFocused = false
+      setOverlayEditMode(false)
       mapOnlyMode = false
       mapCurrentlyVisible = false
       sendGameBounds(null)
@@ -248,7 +378,7 @@ app.whenReady().then(async () => {
     onRestore(foreground: boolean) {
       logger.info(`[overlay] SC restauré — foreground=${foreground} manuallyHidden=${manuallyHidden}`)
       isGameFocused = foreground
-      if (manuallyHidden || !foreground) return
+      if (manuallyHidden || !foreground || !isOverlayEnabled()) return
       const b = getGameWindowBounds()
       if (b) sendGameBounds(b)
       showOverlay()
@@ -258,7 +388,7 @@ app.whenReady().then(async () => {
     onFocus() {
       logger.info(`[overlay] SC focus — manuallyHidden=${manuallyHidden}`)
       isGameFocused = true
-      if (manuallyHidden) return
+      if (manuallyHidden || !isOverlayEnabled()) return
       const b = getGameWindowBounds()
       if (b) sendGameBounds(b)
       showOverlay()
@@ -268,6 +398,7 @@ app.whenReady().then(async () => {
     onUnfocus() {
       logger.info('[overlay] SC perd le focus — hide overlay')
       isGameFocused = false
+      setOverlayEditMode(false)
       mapOnlyMode = false
       mapCurrentlyVisible = false
       sendGameBounds(null)
@@ -315,14 +446,22 @@ app.whenReady().then(async () => {
 
   let _registeredMapKey: string | null = null
 
-  function registerMapIoHook(domKeyCode?: number) {
+  function registerMapIoHook(domKeyCode?: number, accel?: string) {
     if (mapIoHookHandler) { uIOhook.off('keydown', mapIoHookHandler); mapIoHookHandler = null }
     if (typeof domKeyCode !== 'number') return
     try { if (_registeredMapKey) globalShortcut.unregister(_registeredMapKey) } catch {}
     _registeredMapKey = null
     const uiCode = domKeyCodeToUiohook(domKeyCode)
     mapIoHookHandler = (event: any) => {
-      if (event?.keycode === uiCode) toggleMapVisibility()
+      if (event?.keycode !== uiCode) return
+      // If an accel (accelerator string) is provided, ensure modifiers match exactly.
+      if (accel) {
+        if (!accelMatchesEvent(accel, event)) return
+      } else {
+        // Otherwise require no modifiers for a plain keyCode mapping.
+        if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return
+      }
+      toggleMapVisibility()
     }
     uIOhook.on('keydown', mapIoHookHandler)
   }
@@ -340,7 +479,7 @@ app.whenReady().then(async () => {
 
   const initialMapSettings = getSettings()
   if (initialMapSettings.mapToggleKey)                            registerMapToggleKey(initialMapSettings.mapToggleKey)
-  if (typeof initialMapSettings.mapToggleKeyCode === 'number')   registerMapIoHook(initialMapSettings.mapToggleKeyCode)
+  if (typeof initialMapSettings.mapToggleKeyCode === 'number')   registerMapIoHook(initialMapSettings.mapToggleKeyCode, initialMapSettings.mapToggleKey)
 
   ;(global as any).__setMapToggleKey = (newKey: string | ToggleKeyObject) => {
     if (typeof newKey === 'string') {
@@ -352,7 +491,7 @@ app.whenReady().then(async () => {
         try { globalShortcut.unregister(newKey.accel) } catch {}
         registerMapToggleKey(newKey.accel)
       }
-      if (typeof newKey.keyCode === 'number') { unregisterMapIoHook(); registerMapIoHook(newKey.keyCode) }
+      if (typeof newKey.keyCode === 'number') { unregisterMapIoHook(); registerMapIoHook(newKey.keyCode, newKey.accel) }
     }
   }
 
@@ -360,14 +499,25 @@ app.whenReady().then(async () => {
 
   let currentKey = getSettings().toggleKey || 'F10'
   const currentKeyCode = getSettings().toggleKeyCode
+  const overlayEditShortcut = 'CommandOrControl+Shift+E'
 
+  let lastToggleAt = 0
   const toggleOverlay = () => {
+    const now = Date.now()
+    if (now - lastToggleAt < 100) {
+      logger.debug('[overlay] toggle ignoré (debounce)')
+      return
+    }
+    lastToggleAt = now
+
     if (mapCurrentlyVisible) return
+    if (!isOverlayEnabled()) return
     const ow = getOverlayWindow()
     if (!ow) return
 
     if (ow.isVisible()) {
       logger.info('[overlay] toggle → hide (manuallyHidden)')
+      setOverlayEditMode(false)
       mapOnlyMode = false
       mapCurrentlyVisible = false
       sendToOverlay('overlay:map-only-mode', false)
@@ -389,7 +539,7 @@ app.whenReady().then(async () => {
       return
     }
 
-    logger.info('[overlay] toggle → SC non détecté, overlay non affiché')
+    logger.info('[overlay] toggle → SC non détecté, affiche en dev')
 
     if (app.isPackaged) return
 
@@ -397,12 +547,18 @@ app.whenReady().then(async () => {
     showOverlay()
   }
 
-  function registerIoHook(domKeyCode?: number) {
+  function registerIoHook(domKeyCode?: number, accel?: string) {
     if (ioHookHandler) { uIOhook.off('keydown', ioHookHandler); ioHookHandler = null }
     if (typeof domKeyCode !== 'number') return
     const uiCode = domKeyCodeToUiohook(domKeyCode)
     ioHookHandler = (event: any) => {
-      if (event?.keycode === uiCode) toggleOverlay()
+      if (event?.keycode !== uiCode) return
+      if (accel) {
+        if (!accelMatchesEvent(accel, event)) return
+      } else {
+        if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return
+      }
+      toggleOverlay()
     }
     uIOhook.on('keydown', ioHookHandler)
   }
@@ -422,18 +578,46 @@ app.whenReady().then(async () => {
     }
     // Fallback uIOhook via table accel (fonctionne même quand le jeu a le focus)
     const uiCode = accelToUiohook(key)
-    if (uiCode !== null) registerIoHook2(uiCode)
+    if (uiCode !== null) registerIoHook2(uiCode, key)
   }
 
   /** Enregistre uIOhook sans toucher au keyCode persisté (utilisé par registerToggleKey). */
-  function registerIoHook2(uiCode: number) {
+  function registerIoHook2(uiCode: number, accel?: string) {
     if (ioHookHandler) { uIOhook.off('keydown', ioHookHandler); ioHookHandler = null }
-    ioHookHandler = (event: any) => { if (event?.keycode === uiCode) toggleOverlay() }
+    ioHookHandler = (event: any) => {
+      if (event?.keycode !== uiCode) return
+      if (accel) {
+        if (!accelMatchesEvent(accel, event)) return
+      } else {
+        if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return
+      }
+      toggleOverlay()
+    }
     uIOhook.on('keydown', ioHookHandler)
   }
 
   registerToggleKey(currentKey)
-  if (typeof currentKeyCode === 'number') registerIoHook(currentKeyCode)
+  if (typeof currentKeyCode === 'number') registerIoHook(currentKeyCode, currentKey)
+
+  try { globalShortcut.unregister(overlayEditShortcut) } catch {}
+  globalShortcut.register(overlayEditShortcut, toggleOverlayEditMode)
+
+  if (editIoHookKeyDown) uIOhook.off('keydown', editIoHookKeyDown)
+  if (editIoHookKeyUp) uIOhook.off('keyup', editIoHookKeyUp)
+
+  editIoHookKeyDown = (event: any) => {
+    if (event?.keycode === 29 || event?.keycode === 3613) editCtrlPressed = true
+    if (event?.keycode === 42 || event?.keycode === 54) editShiftPressed = true
+    if (event?.keycode === 18 && editCtrlPressed && editShiftPressed) toggleOverlayEditMode()
+  }
+
+  editIoHookKeyUp = (event: any) => {
+    if (event?.keycode === 29 || event?.keycode === 3613) editCtrlPressed = false
+    if (event?.keycode === 42 || event?.keycode === 54) editShiftPressed = false
+  }
+
+  uIOhook.on('keydown', editIoHookKeyDown)
+  uIOhook.on('keyup', editIoHookKeyUp)
 
   ;(global as any).__setToggleKey = (newKey: string | ToggleKeyObject) => {
     if (typeof newKey === 'string') {
@@ -441,7 +625,94 @@ app.whenReady().then(async () => {
       registerToggleKey(newKey)
     } else if (newKey && typeof newKey === 'object') {
       if (newKey.accel) { currentKey = newKey.accel; registerToggleKey(newKey.accel) }
-      if (typeof newKey.keyCode === 'number') { unregisterIoHook(); registerIoHook(newKey.keyCode) }
+      if (typeof newKey.keyCode === 'number') { unregisterIoHook(); registerIoHook(newKey.keyCode, newKey.accel) }
+    }
+  }
+
+  ;(global as any).__setOverlayEditMode = (enabled: boolean) => {
+    return setOverlayEditMode(Boolean(enabled))
+  }
+
+  // ── Hotkeys de modes ─────────────────────────────────────────────────────────
+
+  const modeHotkeyHandlers = new Map<string, (e: any) => void>()
+
+  function registerModeHotkeys() {
+    // Nettoyer les anciens handlers
+    for (const handler of modeHotkeyHandlers.values()) {
+      uIOhook.off('keydown', handler)
+    }
+    modeHotkeyHandlers.clear()
+
+    const registry = getRegistry()
+    for (const mode of registry.modes) {
+      const uiCode = mode.hotkey
+        ? accelToUiohook(mode.hotkey)
+        : typeof mode.hotkeyCode === 'number'
+          ? DOM_TO_UIOHOOK[mode.hotkeyCode] ?? null
+          : null
+
+      if (uiCode === null) continue
+
+      const modeId  = mode.id
+      const hotkey  = mode.hotkey ?? null
+      const handler = (event: any) => {
+        // Si on a un accelerator complet, vérifier aussi les modificateurs
+        if (hotkey ? !accelMatchesEvent(hotkey, event) : event?.keycode !== uiCode) return
+        setActiveMode(modeId)
+        sendToOverlay('overlay:layout-update', getLayout())
+        sendToOverlay('overlay:active-mode', modeId)
+      }
+      uIOhook.on('keydown', handler)
+      modeHotkeyHandlers.set(modeId, handler)
+    }
+  }
+
+  registerModeHotkeys()
+  onRegistryChange(() => registerModeHotkeys())
+
+  // ── Touche de cycle de modes ──────────────────────────────────────────────────
+
+  let cycleModeHandler: ((e: any) => void) | null = null
+
+  function cycleToNextMode() {
+    const registry = getRegistry()
+    const idx = registry.modes.findIndex((m) => m.id === registry.activeModeId)
+    const nextIdx = (idx + 1) % registry.modes.length
+    const nextMode = registry.modes[nextIdx]
+    if (!nextMode) return
+    setActiveMode(nextMode.id)
+    sendToOverlay('overlay:layout-update', getLayout())
+    sendToOverlay('overlay:active-mode', nextMode.id)
+  }
+
+  function registerCycleModeKey(accel?: string | null, keyCode?: number | null) {
+    if (cycleModeHandler) { uIOhook.off('keydown', cycleModeHandler); cycleModeHandler = null }
+
+    if (accel) {
+      const uiCode = accelToUiohook(accel)
+      if (uiCode !== null) {
+        cycleModeHandler = (e: any) => { if (accelMatchesEvent(accel, e)) cycleToNextMode() }
+        uIOhook.on('keydown', cycleModeHandler)
+      }
+    } else if (typeof keyCode === 'number') {
+      const uiCode = DOM_TO_UIOHOOK[keyCode]
+      if (uiCode !== undefined) {
+        cycleModeHandler = (e: any) => { if (e?.keycode === uiCode && !e.ctrlKey && !e.altKey && !e.shiftKey) cycleToNextMode() }
+        uIOhook.on('keydown', cycleModeHandler)
+      }
+    }
+  }
+
+  const initialCycleKey = getSettings().cycleModeKey
+  const initialCycleKeyCode = getSettings().cycleModeKeyCode
+  registerCycleModeKey(initialCycleKey, initialCycleKeyCode)
+
+  ;(global as any).__setCycleModeKey = (payload: string | { accel: string; keyCode: number | null }) => {
+    if (typeof payload === 'string') {
+      registerCycleModeKey(payload, null)
+    } else if (payload && typeof payload === 'object') {
+      registerCycleModeKey(payload.accel || null, payload.keyCode)
     }
   }
 

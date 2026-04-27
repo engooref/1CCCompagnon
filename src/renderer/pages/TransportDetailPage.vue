@@ -107,7 +107,7 @@ async function fetchAllOpportunities() {
   loadingOpp.value = true
   try {
     const { data } = await http.post(
-      urls.value.marketOpportunities,
+      urls.value.transports.opportunities,
       JSON.stringify({
         legs: indexed.map(({ leg }) => ({
           legIndex:        leg.orderIndex,
@@ -138,7 +138,7 @@ async function toggleMarketOpp() {
   showMarketOpp.value = next
   try {
     await http.post(
-      urls.value.transportSettings(orderId.value),
+      urls.value.transports.settings(orderId.value),
       JSON.stringify({ marketOpportunitiesEnabled: next }),
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
     )
@@ -154,7 +154,7 @@ async function saveMarketBudget() {
   if (!urls.value || !app.bearerToken) return
   try {
     await http.post(
-      urls.value.transportSettings(orderId.value),
+      urls.value.transports.settings(orderId.value),
       JSON.stringify({ marketBudget: marketBudget.value }),
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
     )
@@ -203,17 +203,17 @@ async function fetchOrder() {
   loading.value = true
   error.value = null
   try {
-    const { data } = await http.get(urls.value.transportShow(orderId.value), {
+    const { data } = await http.get(urls.value.transports.show(orderId.value), {
       headers: authHeaders()
     })
     const raw = data?.data ?? data
     order.value = (raw?.order ?? raw) as TransportOrder | null
 
     connectMercure(
-      urls.value.mercureInfo,
+      urls.value.transports.mercureInfo,
       `Bearer ${app.bearerToken}`,
       async (_payload) => {
-        const { data } = await http.get(urls.value!.transportShow(orderId.value), {
+        const { data } = await http.get(urls.value!.transports.show(orderId.value), {
           headers: authHeaders()
         })
         const raw = data?.data ?? data
@@ -233,7 +233,7 @@ async function deleteOrder() {
 
   deleting.value = true
   try {
-    await http.delete(urls.value.transportShow(orderId.value), {
+    await http.delete(urls.value.transports.show(orderId.value), {
       headers: authHeaders()
     })
     app.transportsLoaded = false
@@ -253,7 +253,7 @@ async function toggleLeg(leg: ItineraryLine) {
   const next = !leg.completed
   try {
     await http.post(
-      urls.value.transportProgress(leg.legId),
+      urls.value.transports.progress(leg.legId),
       JSON.stringify({ completed: next }),
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
     )
@@ -281,7 +281,7 @@ async function generateItinerary() {
   generatingItinerary.value = true
   try {
     await http.post(
-      urls.value.transportGenerate(orderId.value),
+      urls.value.transports.generate(orderId.value),
       {},
       { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
     )

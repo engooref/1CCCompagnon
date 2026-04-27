@@ -56,7 +56,14 @@ export function useMercure() {
       await window.oneCC.mercureDisconnect()
 
       window.oneCC.onMercureMessage((raw) => {
-        onMessage(parseMercureMessage(raw))
+        try {
+          logger.debug('[useMercure] raw message received', raw)
+          const parsed = parseMercureMessage(raw)
+          logger.info('[useMercure] parsed message', parsed)
+          onMessage(parsed)
+        } catch (err) {
+          logger.error('[useMercure] failed to parse/forward message', err)
+        }
       })
 
       window.oneCC.onMercureError((reason: string) => {
@@ -71,9 +78,20 @@ export function useMercure() {
       logger.info('[useMercure] mercureConnect résolu, connected = true')
       connected.value = true
       currentUrl.value = urlStr
-    } catch (e) {
+    } catch (e: any) {
       logger.error('[useMercure] erreur connexion:', e)
-      sseError.value = 'Impossible de se connecter au flux temps réel'
+      try {
+        const resp = e?.response
+        if (resp) {
+          logger.error('[useMercure] http status=', resp.status, 'data=', resp.data)
+          sseError.value = `Erreur serveur Mercure: ${resp.status}`
+        } else {
+          sseError.value = 'Impossible de se connecter au flux temps réel'
+        }
+      } catch (err) {
+        logger.error('[useMercure] erreur logging response:', err)
+        sseError.value = 'Impossible de se connecter au flux temps réel'
+      }
     }
   }
 

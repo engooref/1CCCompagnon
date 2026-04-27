@@ -71,6 +71,8 @@ export function registerPttBindings(bindings: Array<{ channelId: string; keyCode
     entry.keyDown = (event: any) => {
       logger.debug(`[radio][uIOhook] keydown keycode=${event?.keycode} attendu=${entry.uiCode} canal=${channelId} déjàPress=${entry.pressed}`)
       if (event?.keycode !== entry.uiCode) return
+      // Ignore events with modifier keys to avoid triggering on e.g. Ctrl+F9
+      if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return
       if (entry.pressed) return
       entry.pressed = true
       sendPttEvent('radio:ptt-start', channelId)
@@ -79,6 +81,8 @@ export function registerPttBindings(bindings: Array<{ channelId: string; keyCode
     entry.keyUp = (event: any) => {
       logger.debug(`[radio][uIOhook] keyup keycode=${event?.keycode} attendu=${entry.uiCode} canal=${channelId} pressed=${entry.pressed}`)
       if (event?.keycode !== entry.uiCode) return
+      // Ignore modifier variants
+      if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return
       if (!entry.pressed) return
       entry.pressed = false
       sendPttEvent('radio:ptt-stop', channelId)

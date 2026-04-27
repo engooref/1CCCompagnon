@@ -103,7 +103,7 @@ async function fetchMarketOpps() {
   if (freeScu <= 0) { marketOpps.value = []; return }
   try {
     const { data } = await http.post(
-      urls.marketOpportunities,
+      urls.transports.opportunities,
       JSON.stringify({
         legs: [{ legIndex: leg.orderIndex, fromPoi: leg.pickup, toPoi: leg.dropoff, freeSpace: freeScu, budgetRemaining: marketOppsBudget }],
         limit: 3,
@@ -123,7 +123,7 @@ async function fetchActiveOrder() {
     // Priorité à l'ordre épinglé
     if (pinnedId.value) {
       try {
-        const { data } = await http.get(urls.transportShow(pinnedId.value), {
+        const { data } = await http.get(urls.transports.show(pinnedId.value), {
           headers: { Authorization: `Bearer ${token}` },
         })
         const raw = data?.data ?? data
@@ -135,7 +135,7 @@ async function fetchActiveOrder() {
     }
 
     // Fallback : premier ordre avec des étapes restantes
-    const { data } = await http.get(urls.transports, {
+    const { data } = await http.get(urls.transports.index, {
       headers: { Authorization: `Bearer ${token}` },
     })
     const raw = data?.data ?? data

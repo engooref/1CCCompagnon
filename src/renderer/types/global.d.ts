@@ -1,4 +1,4 @@
-import type { AppSettings, ConnectionState, OverlayAuthResponse, OverlayProfile, LayoutState, OverlayContext } from '@shared/general'
+import type { AppSettings, ConnectionState, OverlayAuthResponse, OverlayProfile, LayoutState, OverlayContext, ModeRegistry, OverlayMode, OverlayModeUpdate, OverlayNotification } from '@shared/general'
 import type { LogEntry } from '../../main/services/logger'
 import type { RadioSettings, PttBinding } from '@shared/radio'
 
@@ -13,6 +13,11 @@ declare global {
       checkConnection: () => Promise<ConnectionState>
       overlayAuth: () => Promise<OverlayAuthResponse>
       overlayMe: (token: string) => Promise<OverlayProfile>
+      ackRefineryNotification: (payload: {
+        ackUrl: string
+        notificationToken: string
+        authHeader?: string
+      }) => Promise<{ status: number }>
       mercureConnect: (url: string) => Promise<void>
       mercureDisconnect: () => Promise<void>
       onMercureMessage: (cb: (data: string) => void) => void
@@ -23,6 +28,7 @@ declare global {
       setWindowSize: (size: string) => Promise<boolean>
       setToggleKey:    (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
       setMapToggleKey: (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
+      setCycleModeKey: (key: string | { accel: string; keyCode: number | null } | null) => Promise<boolean>
       // Overlay logs
       getLogs:         () => Promise<LogEntry[]>
       subscribeLogs:   () => Promise<LogEntry[]>
@@ -32,7 +38,9 @@ declare global {
 
       // Passive overlay
       overlayGetLayout:      () => Promise<LayoutState>
+      setOverlayEditMode:    (enabled: boolean) => Promise<boolean>
       onOverlayLayoutUpdate: (cb: (l: LayoutState) => void) => void
+      onOverlayEditMode:     (cb: (enabled: boolean) => void) => void
       onMapToggle:           (cb: () => void) => void
       offMapToggle:          () => void
       onMapOnlyMode:         (cb: (v: boolean) => void) => void
@@ -84,6 +92,23 @@ declare global {
 
       // Game bounds
       onOverlayGameBounds: (cb: (b: { x: number; y: number; width: number; height: number } | null) => void) => void
+
+      onOverlayState: (cb: (s: { visible: boolean }) => void) => void
+
+      // Mode system
+      getModeRegistry:     () => Promise<ModeRegistry>
+      setActiveMode:       (modeId: string) => Promise<{ success: boolean; mode?: OverlayMode; error?: string }>
+      createMode:          (label: string, baseId?: string) => Promise<OverlayMode>
+      deleteMode:          (modeId: string) => Promise<boolean>
+      updateModeMetadata:  (modeId: string, update: OverlayModeUpdate) => Promise<OverlayMode | null>
+      saveModeLayout:      (modeId: string, layout: LayoutState) => Promise<boolean>
+      onActiveModeChange:  (cb: (modeId: string) => void) => void
+      offActiveModeChange: () => void
+
+      // Notifications overlay
+      pushOverlayNotification:  (notif: OverlayNotification) => Promise<boolean>
+      onOverlayNotification?:   (cb: (notif: OverlayNotification) => void) => void
+      offOverlayNotification?:  () => void
     }
   }
 }

@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('oneCC', {
   checkConnection: () => ipcRenderer.invoke('app:check-connection'),
   overlayAuth: () => ipcRenderer.invoke('app:overlay-auth'),
   overlayMe: (token: string) => ipcRenderer.invoke('app:overlay-me', token),
+  ackRefineryNotification: (payload: { ackUrl: string; notificationToken: string; authHeader?: string }) =>
+    ipcRenderer.invoke('app:refinery-notify-ack', payload),
 
   mercureConnect: (url: string) => ipcRenderer.invoke('mercure:connect', url),
   mercureDisconnect: () => ipcRenderer.invoke('mercure:disconnect'),
@@ -20,8 +22,9 @@ contextBridge.exposeInMainWorld('oneCC', {
   offMercureError: () => ipcRenderer.removeAllListeners('mercure:error'),
   pickFolder: () => ipcRenderer.invoke('app:pick-folder'),
   setWindowSize: (size: string) => ipcRenderer.invoke('app:set-window-size', size),
-  setToggleKey: (payload: any) => ipcRenderer.invoke('app:set-toggle-key', payload),
+  setToggleKey:    (payload: any) => ipcRenderer.invoke('app:set-toggle-key', payload),
   setMapToggleKey: (payload: any) => ipcRenderer.invoke('app:set-map-toggle-key', payload),
+  setCycleModeKey: (payload: any) => ipcRenderer.invoke('app:set-cycle-mode-key', payload),
 
   // ── Logs overlay ─────────────────────────────────────────────────────────
   getLogs:         () => ipcRenderer.invoke('app:get-logs'),
@@ -32,12 +35,16 @@ contextBridge.exposeInMainWorld('oneCC', {
 
   // ── Overlay passif ────────────────────────────────────────────────────────
   overlayGetLayout:   () => ipcRenderer.invoke('overlay:get-layout'),
+  setOverlayEditMode: (enabled: boolean) => ipcRenderer.invoke('overlay:set-edit-mode', enabled),
   onOverlayLayoutUpdate: (cb: (l: unknown) => void) => ipcRenderer.on('overlay:layout-update', (_e, l) => cb(l)),
+  onOverlayEditMode: (cb: (enabled: boolean) => void) => ipcRenderer.on('overlay:edit-mode', (_e, enabled) => cb(enabled)),
   onMapToggle:  (cb: () => void) => ipcRenderer.on('overlay:map-toggle', () => cb()),
   offMapToggle: () => ipcRenderer.removeAllListeners('overlay:map-toggle'),
   /** Bounds logiques (CSS px) de la fenêtre SC sur l'écran. null = SC absent/minimisé. */
   onOverlayGameBounds: (cb: (b: { x: number; y: number; width: number; height: number } | null) => void) =>
     ipcRenderer.on('overlay:game-bounds', (_e, b) => cb(b)),
+
+  onOverlayState: (cb: (s: { visible: boolean }) => void) => ipcRenderer.on('overlay:state', (_e, s) => cb(s)),
 
   onMapOnlyMode: (cb: (v: boolean) => void) => ipcRenderer.on('overlay:map-only-mode', (_e, v) => cb(v)),
 
@@ -45,10 +52,29 @@ contextBridge.exposeInMainWorld('oneCC', {
     ipcRenderer.removeAllListeners('overlay:state')
     ipcRenderer.removeAllListeners('overlay:event')
     ipcRenderer.removeAllListeners('overlay:layout-update')
+    ipcRenderer.removeAllListeners('overlay:edit-mode')
     ipcRenderer.removeAllListeners('overlay:map-toggle')
     ipcRenderer.removeAllListeners('overlay:game-bounds')
     ipcRenderer.removeAllListeners('overlay:map-only-mode')
+    ipcRenderer.removeAllListeners('overlay:active-mode')
   },
+
+  // ── Système de modes ──────────────────────────────────────────────────────
+  getModeRegistry:    () => ipcRenderer.invoke('mode:get-registry'),
+  setActiveMode:      (modeId: string) => ipcRenderer.invoke('mode:set-active', modeId),
+  createMode:         (label: string, baseId?: string) => ipcRenderer.invoke('mode:create', label, baseId),
+  deleteMode:         (modeId: string) => ipcRenderer.invoke('mode:delete', modeId),
+  updateModeMetadata: (modeId: string, update: unknown) => ipcRenderer.invoke('mode:update-metadata', modeId, update),
+  saveModeLayout:     (modeId: string, layout: unknown) => ipcRenderer.invoke('mode:save-layout', modeId, layout),
+  onActiveModeChange: (cb: (modeId: string) => void) =>
+    ipcRenderer.on('overlay:active-mode', (_e, modeId) => cb(modeId)),
+  offActiveModeChange: () => ipcRenderer.removeAllListeners('overlay:active-mode'),
+
+  // ── Notifications overlay ─────────────────────────────────────────────────
+  pushOverlayNotification: (notif: unknown) => ipcRenderer.invoke('overlay:push-notification', notif),
+  onOverlayNotification:   (cb: (notif: unknown) => void) =>
+    ipcRenderer.on('overlay:notification', (_e, notif) => cb(notif)),
+  offOverlayNotification:  () => ipcRenderer.removeAllListeners('overlay:notification'),
 
   // ── Editeur overlay ───────────────────────────────────────────────────────
   openOverlayEditor:  () => ipcRenderer.invoke('overlay:open-editor'),

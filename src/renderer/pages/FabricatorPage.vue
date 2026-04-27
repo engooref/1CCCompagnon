@@ -218,7 +218,7 @@ const filteredCatalogSections = computed(() => {
 async function fetchSections() {
   if (!urls.value) return
   try {
-    const { data } = await http.get(urls.value.fabricatorIndex, { headers: authHeaders() })
+    const { data } = await http.get(urls.value.fabricator.index, { headers: authHeaders() })
     const raw = data?.data ?? data
     const rawSections = raw?.sections ?? raw ?? []
     sections.value = rawSections.map((s: any) => typeof s === 'string' ? { name: s } : s)
@@ -270,7 +270,7 @@ async function fetchItems() {
   try {
     const params: Record<string, any> = { section: selectedSection.value }
     if (selectedCategoryId.value != null) params.categoryId = selectedCategoryId.value
-    const { data } = await http.get(urls.value.fabricatorItems, { headers: authHeaders(), params })
+    const { data } = await http.get(urls.value.fabricator.items, { headers: authHeaders(), params })
     const raw = data?.data ?? data
     const list: any[] = Array.isArray(raw) ? raw : (raw?.items ?? [])
     allItems.value = list.map(normalizeId)
@@ -286,7 +286,7 @@ async function fetchDetail(itemId: number) {
   detailLoading.value = true
   detail.value = null
   try {
-    const { data } = await http.get(urls.value.fabricatorDetail(itemId), { headers: authHeaders() })
+    const { data } = await http.get(urls.value.fabricator.detail(itemId), { headers: authHeaders() })
     const itemName = allItems.value.find(i => i.id === itemId)?.name
     detail.value = normalizeDetail(data, itemId, itemName)
   } catch (e) {
@@ -300,7 +300,7 @@ async function fetchCatalog() {
   if (!urls.value) return
   catalogLoading.value = true
   try {
-    const { data } = await http.get(urls.value.fabricatorCatalog, { headers: authHeaders() })
+    const { data } = await http.get(urls.value.fabricator.catalog, { headers: authHeaders() })
     const raw = data?.data ?? data
     let secs: any[]
     if (Array.isArray(raw)) {
@@ -342,7 +342,7 @@ async function fetchGlobalSearch(q: string) {
   globalSearchLoading.value = true
   globalSearchOpen.value = true
   try {
-    const { data } = await http.get(urls.value.fabricatorItemSearch, {
+    const { data } = await http.get(urls.value.fabricator.itemSearch, {
       headers: authHeaders(),
       params: { q },
     })
@@ -373,7 +373,7 @@ async function openModal(itemId: number) {
   modalLoading.value = true
   modalDetail.value = null
   try {
-    const { data } = await http.get(urls.value!.fabricatorDetail(itemId), { headers: authHeaders() })
+    const { data } = await http.get(urls.value!.fabricator.detail(itemId), { headers: authHeaders() })
     const itemName = allItems.value.find(i => i.id === itemId)?.name
       ?? catalogSections.value.flatMap(s => s.items).find((i: any) => i.id === itemId)?.name
     modalDetail.value = normalizeDetail(data, itemId, itemName)
@@ -428,7 +428,7 @@ async function toggleBlueprint(itemId: number) {
   if (!urls.value || blueprintLoading.value) return
   blueprintLoading.value = true
   try {
-    const { data } = await http.post(urls.value.fabricatorBlueprintToggle(itemId), null, { headers: authHeaders() })
+    const { data } = await http.post(urls.value.fabricator.blueprintToggle(itemId), null, { headers: authHeaders() })
     const newOwn = data?.iOwn ?? data?.data?.iOwn
     if (newOwn === undefined) return
     // Update catalog
@@ -449,7 +449,7 @@ async function toggleBlueprint(itemId: number) {
     if (needRefresh && urls.value) {
       const u = urls.value
       const name = modalDetail.value?.id === itemId ? modalDetail.value.name : allItems.value.find(i => i.id === itemId)?.name
-      http.get(u.fabricatorDetail(itemId), { headers: authHeaders() }).then(({ data: d2 }) => {
+      http.get(u.fabricator.detail(itemId), { headers: authHeaders() }).then(({ data: d2 }) => {
         const normalized = normalizeDetail(d2, itemId, name)
         if (modalDetail.value?.id === itemId) modalDetail.value = normalized
         if (detail.value?.id === itemId)      detail.value      = normalized

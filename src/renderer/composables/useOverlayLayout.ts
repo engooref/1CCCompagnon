@@ -43,7 +43,13 @@ export function useOverlayLayout() {
   function applyLayout(state: LayoutState) {
     for (const key of Object.keys(positions)) delete positions[key]
     Object.assign(positions, state.positions ?? {})
-    replaceModules(state.modules?.length ? state.modules : DEFAULT_OVERLAY_MODULES)
+    let mods = state.modules?.length ? state.modules : DEFAULT_OVERLAY_MODULES
+    // Garantit que le module notification est toujours présent même dans les layouts qui ne l'incluent pas
+    if (!mods.find((m) => m.type === 'notification')) {
+      const notifDefault = DEFAULT_OVERLAY_MODULES.find((m) => m.type === 'notification')!
+      mods = [...mods, notifDefault]
+    }
+    replaceModules(mods)
   }
 
   function getModule(id: string) {
@@ -97,5 +103,5 @@ export function useOverlayLayout() {
     return style
   }
 
-  return { positions, modules, loadLayout, applyLayout, getStyle }
+  return { positions, modules, loadLayout, applyLayout, getModule, getStyle }
 }

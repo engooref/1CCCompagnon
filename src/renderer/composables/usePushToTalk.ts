@@ -19,8 +19,13 @@ export function usePushToTalk() {
     return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
   }
 
+  function hasModifier(e: KeyboardEvent): boolean {
+    return Boolean(e.ctrlKey || e.altKey || e.metaKey || e.shiftKey)
+  }
+
   function onKeyDown(e: KeyboardEvent) {
     if (isTypingTarget(e)) return
+    if (hasModifier(e)) return
 
     for (const binding of radio.settings.pttBindings) {
       if (!binding.keyCode || e.keyCode !== binding.keyCode) continue
@@ -37,6 +42,7 @@ export function usePushToTalk() {
 
   function onKeyUp(e: KeyboardEvent) {
     if (isTypingTarget(e)) return
+    if (hasModifier(e)) return
 
     for (const binding of radio.settings.pttBindings) {
       if (!binding.keyCode || e.keyCode !== binding.keyCode) continue

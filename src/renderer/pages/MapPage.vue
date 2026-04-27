@@ -33,7 +33,7 @@ function authHeaders() {
 
 async function fetchAll() {
   if (!app.bearerToken) return
-  const url = urls.value?.mapsIndex
+  const url = urls.value?.maps.index
   if (!url) return
   loading.value = true
   error.value   = null

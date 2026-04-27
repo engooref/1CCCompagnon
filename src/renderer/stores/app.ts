@@ -26,6 +26,7 @@ const defaultStatus: ConnectionState = {
 export const useAppStore = defineStore('app', {
   state: () => ({
     settings: null as AppSettings | null,
+    overlayVisible: false,
     apiKeyPresent: false,
     status: defaultStatus,
     bearerToken: null as string | null,
@@ -52,6 +53,7 @@ export const useAppStore = defineStore('app', {
           window.oneCC.getApiKey(),
         ])
         this.settings = settings
+        window.oneCC.onOverlayState((s: any) => { this.overlayVisible = Boolean(s?.visible) })
         this.apiKeyPresent = Boolean(apiKey)
         if (settings.appearance) {
           applyAppearance(settings.appearance)
@@ -142,7 +144,7 @@ export const useAppStore = defineStore('app', {
 
     async fetchTransports() {
       if (!this.bearerToken || !this.settings) return
-      const url = createOverlayUrls(this.settings).transports
+      const url = createOverlayUrls(this.settings).transports.index
       if (!url) return
       this.transportsLoading = true
       try {
@@ -160,7 +162,7 @@ export const useAppStore = defineStore('app', {
 
     async fetchAgendaEvents() {
       if (!this.bearerToken || !this.settings) return
-      const url = createOverlayUrls(this.settings).agendaIndex
+      const url = createOverlayUrls(this.settings).agenda.index
       if (!url) return
       try {
         const { data } = await http.get(url, {

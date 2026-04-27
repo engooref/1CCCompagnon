@@ -311,7 +311,7 @@ export const useRadioStore = defineStore('radio', {
 
     async _fetchChannelParticipants(channelId: string): Promise<RadioParticipant[] | null> {
       const appStore = useAppStore()
-      const participantsUrl = appStore.settings ? createOverlayUrls(appStore.settings).radioParticipants(channelId) : ''
+      const participantsUrl = appStore.settings ? createOverlayUrls(appStore.settings).radio.participants(channelId) : ''
       if (!participantsUrl) return null
 
       try {
@@ -344,7 +344,7 @@ export const useRadioStore = defineStore('radio', {
 
     async _notifyChannelEvent(channelId: string, event: 'participant_joined' | 'participant_left') {
       const appStore = useAppStore()
-      const notifyUrl = appStore.settings ? createOverlayUrls(appStore.settings).radioWebhook : ''
+      const notifyUrl = appStore.settings ? createOverlayUrls(appStore.settings).radio.webhook : ''
       if (!notifyUrl) return
 
       try {
@@ -483,7 +483,7 @@ export const useRadioStore = defineStore('radio', {
 
       try {
         const appStore = useAppStore()
-        const channelsBaseUrl = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
+        const channelsBaseUrl = appStore.settings ? createOverlayUrls(appStore.settings).radio.channels : ''
 
         const res = await fetch(`${channelsBaseUrl}/${encodeURIComponent(channelId)}/token`, {
           headers: { Authorization: `Bearer ${appStore.bearerToken}` },
@@ -668,7 +668,15 @@ export const useRadioStore = defineStore('radio', {
         }
 
         for (const channelId of filtered) {
-          try { await this.startTransmit(channelId) } catch (e) { console.debug(`[RADIO][PTT] startTransmit catégorie échoué canal=${channelId}:`, e) }
+          if (!this._pttActive[targetId]) break
+          try {
+            await this.startTransmit(channelId)
+            // Si la touche a été relâchée pendant l'await startTransmit, couper immédiatement
+            if (!this._pttActive[targetId]) {
+              try { await this.stopTransmit(channelId) } catch {}
+              break
+            }
+          } catch (e) { console.debug(`[RADIO][PTT] startTransmit catégorie échoué canal=${channelId}:`, e) }
         }
 
         return
@@ -684,6 +692,7 @@ export const useRadioStore = defineStore('radio', {
           let liveCount = 0
           try {
             const live = await this._fetchChannelParticipants(channelId)
+            if (!this._pttActive[targetId]) return
             if (Array.isArray(live)) liveCount = live.length
           } catch {}
 
@@ -716,7 +725,17 @@ export const useRadioStore = defineStore('radio', {
         return
       }
 
-      await this.startPttTarget(targetId)
+      for (const channelId of this._resolvePttTargetChannelIds(targetId)) {
+        if (!this._pttActive[targetId]) break
+        try {
+          await this.startTransmit(channelId)
+          // Si la touche a été relâchée pendant l'await startTransmit, couper immédiatement
+          if (!this._pttActive[targetId]) {
+            try { await this.stopTransmit(channelId) } catch {}
+            break
+          }
+        } catch (e) { console.debug(`[RADIO][PTT] startTransmit canal échoué canal=${channelId}:`, e) }
+      }
     },
 
     async handlePttStop(targetId: string) {
@@ -890,7 +909,7 @@ export const useRadioStore = defineStore('radio', {
 
       if (channelId) {
         console.debug('[RADIO][Mercure] refresh ciblé canal=', channelId)
-        await this._fetchChannelParticipants(channelId)
+        await this._fetchChannelParticipants(String(channelId))
       } else {
         console.debug('[RADIO][Mercure] payload sans channelId, refresh complet. Payload:', JSON.stringify(payload))
         await this.fetchAllParticipants(true)
@@ -899,7 +918,7 @@ export const useRadioStore = defineStore('radio', {
 
     async createChannel(payload: ChannelCreatePayload) {
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.channels : ''
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
@@ -912,7 +931,7 @@ export const useRadioStore = defineStore('radio', {
 
     async updateChannel(id: string, payload: ChannelUpdatePayload) {
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.channels : ''
       const res = await fetch(`${url}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
@@ -931,7 +950,7 @@ export const useRadioStore = defineStore('radio', {
       }
 
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioChannels : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.channels : ''
       const res = await fetch(`${url}/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${appStore.bearerToken}` },
@@ -946,7 +965,7 @@ export const useRadioStore = defineStore('radio', {
 
     async fetchCategories() {
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.categories : ''
       if (!url) return
       try {
         const res = await fetch(url, { headers: { Authorization: `Bearer ${appStore.bearerToken}` } })
@@ -962,7 +981,7 @@ export const useRadioStore = defineStore('radio', {
 
     async createCategory(payload: { name: string; description?: string }) {
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.categories : ''
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
@@ -975,7 +994,7 @@ export const useRadioStore = defineStore('radio', {
 
     async updateCategory(id: number, payload: { name?: string; description?: string }) {
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.categories : ''
       const res = await fetch(`${url}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appStore.bearerToken}` },
@@ -987,7 +1006,7 @@ export const useRadioStore = defineStore('radio', {
 
     async deleteCategory(id: number) {
       const appStore = useAppStore()
-      const url = appStore.settings ? createOverlayUrls(appStore.settings).radioCategories : ''
+      const url = appStore.settings ? createOverlayUrls(appStore.settings).radio.categories : ''
       const res = await fetch(`${url}/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${appStore.bearerToken}` },

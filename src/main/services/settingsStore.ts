@@ -66,6 +66,28 @@ const defaults: AppSettings = {
       participants: '/radio/channels/{id}/participants',
       webhook:   '/radio/livekit-webhook',
     },
+    mining: {
+      minerals: '/mining/api/minerals',
+      refineries: '/mining/api/refineries',
+      refinery: {
+        methods: '/mining/api/refinery/methods',
+        compare: '/mining/api/refinery/compare',
+        orders: '/mining/api/refinery/orders',
+        mercureInfo: '/mining/api/refinery/mercure-info',
+        previewTime: '/mining/api/refinery/preview-time',
+        notifyAck: '/mining/api/refinery/orders/notify-ack',
+        yieldsBonus: '/mining/api/refinery/yields',
+      },
+      zones: {
+        index: '/mining/api/zones',
+        suggest: '/mining/api/zones/suggest',
+      },
+      systems: '/mining/api/systems',
+      bodies: {
+        search: '/mining/api/bodies/search',
+      },
+      rocks: '/mining/api/rocks',
+    },
   },
   
   rememberConnection: true,

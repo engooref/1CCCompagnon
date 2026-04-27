@@ -1,11 +1,16 @@
 import { app as electronApp, ipcMain, dialog, BrowserWindow, screen, Notification } from 'electron'
+import axios from 'axios'
 import { clearApiKey, getApiKey, setApiKey } from '../services/secureStore'
 import { authenticateOverlay, checkConnection, getAppVersion } from '../services/overlayService'
 import { initAutoUpdater, checkForUpdatesNative, downloadUpdateNative, installUpdateAndQuit, setFeedUrl } from '../services/autoUpdaterService'
 import { getSettings, setSettings } from '../services/settingsStore'
 import { startMercureSse, stopMercureSse } from '../services/mercureService'
 import { getLayout, saveLayout } from '../services/layoutStore'
-import type { OverlayContext } from '../../shared/general'
+import {
+  getRegistry, setActiveMode, createCustomMode, deleteCustomMode,
+  updateModeMetadata, saveModeLayout,
+} from '../services/modeStore'
+import type { OverlayContext, OverlayModeUpdate, LayoutState, OverlayNotification } from '../../shared/general'
 import type { LogEntry } from '../services/logger'
 import { sendToOverlay } from '../windows/overlayWindow'
 import { openOverlayEditor, sendToEditor, closeOverlayEditor } from '../windows/overlayEditorWindow'
@@ -15,11 +20,17 @@ type GetGameBounds = () => { x: number; y: number; width: number; height: number
 
 let logSubscriberCb: ((entry: LogEntry) => void) | null = null
 
-export function registerAppIpc(getGameBounds: GetGameBounds) {
+export function registerAppIpc(
+  getGameBounds: GetGameBounds,
+  onOverlayEnabledChange?: (enabled: boolean) => void,
+) {
   ipcMain.handle('app:get-settings', async () => getSettings())
   ipcMain.handle('app:update-settings', async (_e, partial) => {
     const updated = setSettings(partial)
     sendToOverlay('overlay:settings-update', updated)
+    if ('overlayEnabled' in partial && onOverlayEnabledChange) {
+      onOverlayEnabledChange(Boolean(updated.overlayEnabled ?? true))
+    }
     return updated
   })
 
@@ -45,6 +56,20 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
       const accel = payload.accel ?? payload.accelerator ?? payload.key ?? ''
       const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
       setSettings({ toggleKey: accel, toggleKeyCode: keyCode })
+      setKey?.({ accel, keyCode })
+    }
+    return true
+  })
+
+  ipcMain.handle('app:set-cycle-mode-key', async (_e, payload: any) => {
+    const setKey = (global as any).__setCycleModeKey
+    if (typeof payload === 'string') {
+      setSettings({ cycleModeKey: payload, cycleModeKeyCode: null })
+      setKey?.(payload)
+    } else if (payload && typeof payload === 'object') {
+      const accel = payload.accel ?? payload.key ?? ''
+      const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
+      setSettings({ cycleModeKey: accel || null, cycleModeKeyCode: keyCode })
       setKey?.({ accel, keyCode })
     }
     return true
@@ -76,6 +101,43 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
   ipcMain.handle('app:clear-api-key', async () => { await clearApiKey(); return true })
   ipcMain.handle('app:check-connection', async () => checkConnection())
   ipcMain.handle('app:overlay-auth', async () => authenticateOverlay())
+
+  // POST server-side ack for refinery notifications (bypasses renderer CORS).
+  ipcMain.handle('app:refinery-notify-ack', async (_e, payload: {
+    ackUrl: string
+    notificationToken: string
+    authHeader?: string
+  }) => {
+    const ackUrl = String(payload?.ackUrl ?? '')
+    const notificationToken = String(payload?.notificationToken ?? '')
+    const authHeader = String(payload?.authHeader ?? '')
+
+    if (!ackUrl || !notificationToken) {
+      throw new Error('Invalid ack payload')
+    }
+
+    // Limit requests to the configured site origin to avoid arbitrary SSRF.
+    const siteOrigin = new URL(getSettings().siteUrl).origin
+    const targetOrigin = new URL(ackUrl).origin
+    if (siteOrigin !== targetOrigin) {
+      throw new Error('Ack target origin not allowed')
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Origin: siteOrigin,
+      Referer: `${siteOrigin}/`,
+    }
+    if (authHeader) headers.Authorization = authHeader
+
+    const response = await axios.post(
+      ackUrl,
+      { notificationToken },
+      { headers, timeout: 10000 },
+    )
+
+    return { status: response.status }
+  })
 
   ipcMain.handle('mercure:connect', (event, url: string) => {
     const sender = event.sender
@@ -111,6 +173,11 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
 
   // -- Overlay layout API ----------------------------------------------------
   ipcMain.handle('overlay:get-layout', () => getLayout())
+  ipcMain.handle('overlay:set-edit-mode', (_e, enabled: boolean) => {
+    const setEditMode = (global as any).__setOverlayEditMode
+    setEditMode?.(Boolean(enabled))
+    return true
+  })
   ipcMain.handle('overlay:get-context', (): OverlayContext => ({ layout: getLayout(), gameBounds: getGameBounds() }))
 
   // -- Open editor -----------------------------------------------------------
@@ -175,6 +242,46 @@ export function registerAppIpc(getGameBounds: GetGameBounds) {
   ipcMain.handle('overlay:refresh-transport', () => {
     sendToOverlay('overlay:transport-refresh')
     return true
+  })
+
+  // ── Système de modes ───────────────────────────────────────────────────────
+
+  ipcMain.handle('mode:get-registry', () => getRegistry())
+
+  ipcMain.handle('mode:set-active', (_e, modeId: string) => {
+    const mode = setActiveMode(modeId)
+    if (!mode) return { success: false, error: 'Mode not found' }
+    // Pousse le layout du nouveau mode vers l'overlay via le canal existant
+    sendToOverlay('overlay:layout-update', getLayout())
+    return { success: true, mode }
+  })
+
+  ipcMain.handle('mode:create', (_e, label: string, baseId?: string) => {
+    return createCustomMode(label, baseId)
+  })
+
+  ipcMain.handle('mode:delete', (_e, modeId: string) => {
+    return deleteCustomMode(modeId)
+  })
+
+  ipcMain.handle('mode:update-metadata', (_e, modeId: string, update: OverlayModeUpdate) => {
+    return updateModeMetadata(modeId, update)
+  })
+
+  // ── Notifications overlay ─────────────────────────────────────────────────
+
+  ipcMain.handle('overlay:push-notification', (_e, notif: OverlayNotification) => {
+    sendToOverlay('overlay:notification', notif)
+    return true
+  })
+
+  ipcMain.handle('mode:save-layout', (_e, modeId: string, layout: LayoutState) => {
+    const ok = saveModeLayout(modeId, layout)
+    // Si le mode sauvegardé est l'actif, pousse la mise à jour vers l'overlay
+    if (ok && getRegistry().activeModeId === modeId) {
+      sendToOverlay('overlay:layout-update', layout)
+    }
+    return ok
   })
 
 }

@@ -44,7 +44,7 @@ function authHeaders() { return { Authorization: `Bearer ${app.bearerToken}` } }
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 async function fetchMap() {
-  const url = urls.value?.mapShow(mapId.value)
+  const url = urls.value?.maps.show(mapId.value)
   if (!url || !app.bearerToken) return
   loading.value = true
   try {
@@ -65,7 +65,7 @@ async function fetchMap() {
 }
 
 async function fetchFeatures() {
-  const url = urls.value?.mapFeatures(mapId.value)
+  const url = urls.value?.maps.features(mapId.value)
   if (!url || !app.bearerToken || !mapInfo.value) return
   try {
     const { data } = await http.get(url, { headers: authHeaders() })
@@ -82,7 +82,7 @@ async function initMap() {
   mapReady.value = true
   await fetchFeatures()
   connectMercure(
-    urls.value!.mapMercureInfo(mapId.value),
+    urls.value!.maps.mercureInfo(mapId.value),
     `Bearer ${app.bearerToken}`,
     async (msg: any) => {
       if (!mapInfo.value) return

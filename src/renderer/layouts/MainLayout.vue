@@ -3,10 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import StatusBar from '../components/StatusBar.vue'
 import { useAppStore } from '../stores/app'
+import { useMiningStore } from '../stores/mining'
 import { http } from '../services/http'
 import { createOverlayUrls } from '../config/api'
+import { useMercure } from '../composables/useMercure'
 
 const app = useAppStore()
+const mining = useMiningStore()
+const { connect: connectMercure, disconnect: disconnectMercure } = useMercure()
 const route = useRoute()
 const router = useRouter()
 const canShowAppTabs = computed(() => app.status.authReady)
@@ -30,7 +34,7 @@ watch(
   { immediate: true },
 )
 
-const NAV_ORDER = ['/', '/radio', '/transport', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
+const NAV_ORDER = ['/', '/radio', '/transport', '/mining', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
 
 function isActive(path: string): boolean {
   if (path === '/') return route.path === '/'
@@ -74,7 +78,7 @@ function toggleGroup(key: string) {
 
 // Un groupe est "actif" si une de ses routes est active
 const groupRoutes: Record<string, string[]> = {
-  operations: ['/radio', '/transport', '/inventory', '/fabricator'],
+  operations: ['/radio', '/transport', '/mining', '/inventory', '/fabricator'],
   outils:     ['/maps', '/agenda'],
   admin:      ['/profils', '/logs'],
 }
@@ -129,9 +133,9 @@ async function checkUpcomingEvents() {
   if (!app.bearerToken || !app.settings) return
   if (app.settings.agendaNotificationsEnabled === false) return
   const urls = createOverlayUrls(app.settings)
-  if (!urls.agendaIndex) return
+  if (!urls.agenda.index) return
   try {
-    const { data } = await http.get(urls.agendaIndex, {
+    const { data } = await http.get(urls.agenda.index, {
       headers: { Authorization: `Bearer ${app.bearerToken}` },
       params: { limit: 20 },
     })
@@ -148,8 +152,41 @@ async function checkUpcomingEvents() {
   } catch { /* silencieux */ }
 }
 
-onMounted(() => { checkUpcomingEvents(); agendaTimer = setInterval(checkUpcomingEvents, 60_000) })
-onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
+async function connectRefineryMercure() {
+  if (!app.settings || !app.bearerToken || !app.status.authReady) return
+  const urls = createOverlayUrls(app.settings)
+  const mercureInfoUrl = urls?.mining?.refineryMercureInfo
+  if (!mercureInfoUrl) return
+
+  await connectMercure(
+    mercureInfoUrl,
+    `Bearer ${app.bearerToken}`,
+    async (data) => {
+      await mining.handleRefineryMercureEvent(data)
+    },
+  )
+}
+
+watch(
+  [() => app.status.authReady, () => app.bearerToken, () => app.settings?.siteUrl],
+  async ([authReady, token]) => {
+    if (!authReady || !token) return
+
+    await connectRefineryMercure()
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  checkUpcomingEvents()
+  agendaTimer = setInterval(checkUpcomingEvents, 60_000)
+  void connectRefineryMercure()
+})
+
+onUnmounted(() => {
+  if (agendaTimer) clearInterval(agendaTimer)
+  void disconnectMercure()
+})
 </script>
 
 <template>
@@ -210,6 +247,10 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
             <RouterLink to="/transport"  class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/transport') }">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
               Transport
+            </RouterLink>
+            <RouterLink to="/mining" class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/mining') }">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6-6 6 6-6 12-6-12z M3 9h18"/></svg>
+              Minage
             </RouterLink>
             <RouterLink to="/inventory"  class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/inventory') }">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8L5 5h14l2 3H3M5 8v13h14V8M5 14h14M12 8v13"/></svg>
@@ -340,6 +381,10 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
                   Transport
                 </RouterLink>
+                <RouterLink to="/mining" class="nav-v" :class="{ 'nav-v-active': isActive('/mining') }">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6-6 6 6-6 12-6-12z M3 9h18"/></svg>
+                  Minage
+                </RouterLink>
                 <RouterLink to="/inventory"  class="nav-v" :class="{ 'nav-v-active': isActive('/inventory') }">
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8L5 5h14l2 3H3M5 8v13h14V8M5 14h14M12 8v13"/></svg>
                   Inventaire
@@ -397,6 +442,9 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
               </RouterLink>
               <RouterLink to="/transport"  class="nav-v nav-v-icon" :class="{ 'nav-v-active': isActive('/transport') }"  title="Transport">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8"/></svg>
+              </RouterLink>
+              <RouterLink to="/mining" class="nav-v nav-v-icon" :class="{ 'nav-v-active': isActive('/mining') }" title="Minage">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6-6 6 6-6 12-6-12z M3 9h18"/></svg>
               </RouterLink>
               <RouterLink to="/inventory"  class="nav-v nav-v-icon" :class="{ 'nav-v-active': isActive('/inventory') }"  title="Inventaire">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8L5 5h14l2 3H3M5 8v13h14V8M5 14h14M12 8v13"/></svg>
@@ -460,7 +508,7 @@ onUnmounted(() => { if (agendaTimer) clearInterval(agendaTimer) })
         </aside>
 
         <!-- ── Contenu page ─────────────────────────────────────────── -->
-        <main class="h-full min-h-0 overflow-hidden p-6">
+        <main class="h-full min-h-0 overflow-y-auto scrollbar-none p-6">
           <RouterView v-slot="{ Component }">
             <Transition :name="transitionName" mode="out-in">
               <component :is="Component" :key="route.path" />

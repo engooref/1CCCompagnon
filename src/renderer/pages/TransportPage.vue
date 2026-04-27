@@ -36,7 +36,7 @@ function orderProgress(order: TransportOrder): number {
 async function deleteOrder(order: TransportOrder, e: MouseEvent) {
   e.stopPropagation()
   if (!confirm(`Supprimer « ${order.name ?? `Ordre #${order.id}` } » ?`)) return
-  const url = urls.value?.transportShow(order.id)
+  const url = urls.value?.transports.show(order.id)
   if (!url) return
   deletingId.value = order.id
   try {

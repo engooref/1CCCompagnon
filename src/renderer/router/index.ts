@@ -19,9 +19,9 @@ export const router = createRouter({
     { path: '/agenda/:id', name: 'agenda-detail', component: () => import('../pages/AgendaDetailPage.vue') },
     { path: '/inventory', name: 'inventory', component: () => import('../pages/InventoryPage.vue') },
     { path: '/fabricator', name: 'fabricator', component: () => import('../pages/FabricatorPage.vue') },
+    { path: '/mining',     name: 'mining',     component: () => import('../pages/MiningPage.vue') },
     { path: '/logs', name: 'logs', component: () => import('../pages/OverlayLogsPage.vue') },
     { path: '/settings', name: 'settings', component: () => import('../pages/SettingsPage.vue') },
     { path: '/overlay', name: 'overlay', component: () => import('../pages/OverlayPage.vue') },
-    { path: '/overlay-editor', name: 'overlay-editor', component: () => import('../pages/OverlayEditorPage.vue') },
   ]
 })
