@@ -2,7 +2,6 @@ import ElectronStore from 'electron-store'
 import type { AppSettings, AppearanceSettings } from '@shared/general'
 
 const PROD_URL    = 'https://www.1ercorpscolonial.fr/compagnon'
-const PREPROD_URL = 'https://www.preprod.1ercorpscolonial.fr/compagnon'
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
   primaryColor: '#22d3ee',
@@ -125,7 +124,7 @@ export function getSettings(): AppSettings {
   return {
     ...defaults,
     ...(saved ?? {}),
-    siteUrl: preProd ? PREPROD_URL : PROD_URL,
+    siteUrl: PROD_URL,
     urls: defaults.urls,
     overlayLayout: {
       ...(defaults.overlayLayout ?? {}),
@@ -141,7 +140,7 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
   const next: AppSettings = {
     ...current,
     ...partial,
-    siteUrl: preProd ? PREPROD_URL : PROD_URL,
+    siteUrl: PROD_URL,
     urls: defaults.urls,
     overlayLayout: 'overlayLayout' in partial
       ? (partial.overlayLayout ?? {})
