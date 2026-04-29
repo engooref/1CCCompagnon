@@ -6,6 +6,7 @@ import {
   fetchBootstrap,
   fetchWorkOrders,
   createWorkOrder as svcCreateWorkOrder,
+  suggestZone as svcSuggestZone,
   deleteWorkOrder as svcDeleteWorkOrder,
   postCompleteWorkOrder as svcPostCompleteWorkOrder,
   getRefineryPoiYields as svcGetRefineryPoiYields,
@@ -30,6 +31,17 @@ import {
   updateLoadout as svcUpdateLoadout,
   deleteLoadout as svcDeleteLoadout,
   fetchPublicLoadouts as svcFetchPublicLoadouts,
+  fetchMiningShips as svcFetchMiningShips,
+  deleteRock as svcDeleteRock,
+  assignRock as svcAssignRock,
+  updateParticipant as svcUpdateParticipant,
+  assignSubCaptain as svcAssignSubCaptain,
+  leaveParticipant as svcLeaveParticipant,
+  updateSessionDefaultBody as svcUpdateSessionDefaultBody,
+  updateSessionDefaultRefinery as svcUpdateSessionDefaultRefinery,
+  pickupCargo as svcPickupCargo,
+  createSessionOperation as svcCreateSessionOperation,
+  searchMiningShips as svcSearchMiningShips,
 } from '../services/miningService'
 import type {
   MiningMineral,
@@ -130,11 +142,20 @@ export const useMiningStore = defineStore('mining', {
     sessionList:   [] as MiningSession[],
     sessionActive: null as MiningSessionDetail | null,
     sessionView:   'list' as 'list' | 'active',
+    sessionShips:  [] as any[],
+    sessionShipsLoaded: false,
+    crewStatusOverrides: {} as Record<string, string>,
     sessionCreateForm: {
       show:    false,
       name:    '',
       saving:  false,
       error:   null as string | null,
+      bodySearch:   '',
+      bodyResults:  [] as any[],
+      selectedBody: null as any | null,
+      refineryQuery: '',
+      selectedRefineryId: null as number | null,
+      refineryOpen: false,
     },
     sessionJoinForm: {
       show:            false,
@@ -142,42 +163,103 @@ export const useMiningStore = defineStore('mining', {
       role:            'miner' as string,
       saving:          false,
       error:           null as string | null,
+      shipId:          null as number | null,
+      selectedShip:    null as any | null,
+      shipSearch:      '',
+      shipResults:     [] as any[],
+      crewKey:         null as string | null,
+      crewTotal:       1,
     },
     rockForm: {
-      show:             false,
-      saving:           false,
-      error:            null as string | null,
-      bodyName:         '',
-      sizeScuEstimate:  '' as string | number,
-      minerals:         [] as Array<{ commodityId: number | null; percentage: string }>,
+      show:            false,
+      saving:          false,
+      error:           null as string | null,
+      editRockId:      null as number | null,
+      posX:            '' as string,
+      posY:            '' as string,
+      posZ:            '' as string,
+      bodySearch:      '',
+      bodyResults:     [] as any[],
+      selectedBody:    null as any | null,
+      sizeScuEstimate: '' as string,
+      mass:            '' as string,
+      instability:     '' as string,
+      resistance:      '' as string,
+      notes:           '',
+      minerals:        [] as Array<{ commodityId: number | null; percentage: string; quality: number; _name: string; _query: string; _open: boolean }>,
+      zoneQuery:         '' as string,
+      zoneQueryId:       null as number | null,
+      zoneQueryOpen:     false,
+      zoneSearchState:   'idle' as 'idle' | 'loading' | 'found' | 'not_found',
+      zoneLocationName:  null as string | null,
+      zoneCreate: {
+        show:              false,
+        primaryQualityMax: 500,
+        secondary:         { commodityId: null as number | null, _query: '', _open: false, qualityMax: 500 },
+        tertiary:          { commodityId: null as number | null, _query: '', _open: false, qualityMax: 500 },
+        saving:            false,
+        error:             null as string | null,
+      },
     },
     collectForm: {
-      show:    false,
-      saving:  false,
-      error:   null as string | null,
-      rockId:  null as number | null,
-      lines:   [] as Array<{ commodityId: number | null; commodityName: string; quantityScuActual: string }>,
+      show:           false,
+      saving:         false,
+      error:          null as string | null,
+      rockId:         null as number | null,
+      mode:           'complete' as 'partial' | 'complete',
+      rockMineralIds: [] as number[],
+      lines:          [] as Array<{ commodityId: number | null; commodityName: string; quantityScuActual: string; scanEstimateScu: number; alreadyCollectedScu: number }>,
     },
-    rockFilter:       'all' as 'all' | 'active' | 'done',
+    changeZone: {
+      show:         false,
+      bodySearch:   '',
+      bodyResults:  [] as any[],
+      selectedBody: null as any | null,
+    },
+    changeRefinery: {
+      show:               false,
+      refineryQuery:      '',
+      selectedRefineryId: null as number | null,
+    },
+    claimConfirm: {
+      show:   false,
+      rockId: null as number | null,
+    },
+    leaveConfirm: {
+      show:              false,
+      sessionId:         null as number | null,
+      participantId:     null as number | null,
+      selectedCaptainId: null as number | null,
+      candidates:        [] as any[],
+    },
+    createOpLoadingId: null as number | null,
+    rockFilter:       'all' as 'all' | 'available' | 'inprogress' | 'done',
     _currentUserId:   null as number | null,
 
     loading: {
-      bootstrap:        false,
-      workOrders:       false,
-      createWO:         false,
-      deleteWO:         false,
-      completeWO:       false,
-      collectAll:       false,
-      session:          false,
-      sessionDetail:    false,
-      createSession:    false,
-      joinSession:      false,
-      leaveSession:     false,
-      addRock:          false,
-      claimRock:        false,
-      collectRock:      false,
-      closeSession:     false,
-      updateRockStatus: false,
+      bootstrap:            false,
+      workOrders:           false,
+      createWO:             false,
+      deleteWO:             false,
+      completeWO:           false,
+      collectAll:           false,
+      session:              false,
+      sessionDetail:        false,
+      createSession:        false,
+      joinSession:          false,
+      leaveSession:         false,
+      addRock:              false,
+      claimRock:            false,
+      collectRock:          false,
+      closeSession:         false,
+      updateRockStatus:     false,
+      deleteRock:           false,
+      assignRock:           false,
+      pickupCargo:          false,
+      loadShips:            false,
+      updateSessionBody:    false,
+      updateSessionRefinery: false,
+      createOp:             false,
     },
     errors: {
       global:     null as string | null,
@@ -238,9 +320,18 @@ export const useMiningStore = defineStore('mining', {
 
     rockFilteredList: (state): MiningRock[] => {
       const rocks = state.sessionActive?.rocks ?? []
-      if (state.rockFilter === 'active') return rocks.filter((r) => r.status !== 'depleted' && r.status !== 'completed')
-      if (state.rockFilter === 'done')   return rocks.filter((r) => r.status === 'depleted' || r.status === 'completed')
+      if (state.rockFilter === 'available')  return rocks.filter((r) => r.status === 'available')
+      if (state.rockFilter === 'inprogress') return rocks.filter((r) => ['en_route', 'fracturing', 'extraction'].includes(r.status))
+      if (state.rockFilter === 'done')       return rocks.filter((r) => ['completed', 'depleted'].includes(r.status))
       return rocks
+    },
+
+    rockFilterCount: (state) => (key: string): number => {
+      const rocks = state.sessionActive?.rocks ?? []
+      if (key === 'available')  return rocks.filter((r) => r.status === 'available').length
+      if (key === 'inprogress') return rocks.filter((r) => ['en_route', 'fracturing', 'extraction'].includes(r.status)).length
+      if (key === 'done')       return rocks.filter((r) => ['completed', 'depleted'].includes(r.status)).length
+      return rocks.length
     },
 
     myParticipant: (state) =>
@@ -723,9 +814,16 @@ export const useMiningStore = defineStore('mining', {
 
     showJoinForm(sessionId: number) {
       this.sessionJoinForm.targetSessionId = sessionId
-      this.sessionJoinForm.role  = 'miner'
-      this.sessionJoinForm.error = null
-      this.sessionJoinForm.show  = true
+      this.sessionJoinForm.role       = 'miner'
+      this.sessionJoinForm.error      = null
+      this.sessionJoinForm.shipId     = null
+      this.sessionJoinForm.selectedShip = null
+      this.sessionJoinForm.shipSearch = ''
+      this.sessionJoinForm.shipResults = []
+      this.sessionJoinForm.crewKey    = null
+      this.sessionJoinForm.crewTotal  = 1
+      this.sessionJoinForm.show       = true
+      this.loadSessionShips()
     },
 
     async joinSession() {
@@ -735,7 +833,12 @@ export const useMiningStore = defineStore('mining', {
       this.sessionJoinForm.error  = null
       this.loading.joinSession    = true
       try {
-        await svcJoinSession(sessionId, { role: this.sessionJoinForm.role })
+        await svcJoinSession(sessionId, {
+          role:     this.sessionJoinForm.role,
+          shipId:   this.sessionJoinForm.shipId ?? undefined,
+          crewKey:  this.sessionJoinForm.crewKey ?? undefined,
+          crewSize: this.sessionJoinForm.crewTotal,
+        })
         this.sessionJoinForm.show = false
         await this.openSession(sessionId)
       } catch (err: any) {
@@ -761,11 +864,76 @@ export const useMiningStore = defineStore('mining', {
     },
 
     openRockForm() {
-      this.rockForm.show = true
-      this.rockForm.bodyName = ''
-      this.rockForm.sizeScuEstimate = ''
-      this.rockForm.minerals = [{ commodityId: null, percentage: '' }]
-      this.rockForm.error = null
+      this.rockForm = {
+        show: true, saving: false, error: null, editRockId: null,
+        posX: '', posY: '', posZ: '',
+        bodySearch: this.sessionActive?.defaultBodyName ?? '',
+        bodyResults: [],
+        selectedBody: this.sessionActive?.defaultBodyId
+          ? { id: this.sessionActive.defaultBodyId, name: this.sessionActive.defaultBodyName ?? '' }
+          : null,
+        sizeScuEstimate: '', mass: '', instability: '', resistance: '', notes: '',
+        minerals: [{ commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _open: false }],
+        zoneQuery: '', zoneQueryId: null, zoneQueryOpen: false,
+        zoneSearchState: 'idle', zoneLocationName: null,
+        zoneCreate: {
+          show: false, primaryQualityMax: 500, saving: false, error: null,
+          secondary: { commodityId: null, _query: '', _open: false, qualityMax: 500 },
+          tertiary:  { commodityId: null, _query: '', _open: false, qualityMax: 500 },
+        },
+      }
+    },
+
+    async rockFormLookupZone() {
+      const f = this.rockForm
+      if (!f.zoneQueryId) return
+      f.zoneSearchState = 'loading'
+      f.zoneLocationName = null
+      try {
+        const bodyId = f.selectedBody?.id ?? this.sessionActive?.defaultBodyId ?? undefined
+        await this.loadZones(String(f.zoneQueryId), bodyId)
+        const zone = this.where.results[0]
+        if (!zone) { f.zoneSearchState = 'not_found'; return }
+        f.zoneSearchState  = 'found'
+        f.zoneLocationName = zone.locationName ?? zone.bodyName ?? null
+        f.minerals = (zone.minerals ?? []).map((m: any) => ({
+          commodityId: m.commodityId ?? null,
+          percentage:  String(m.percentage ?? ''),
+          quality:     m.qualityMax ?? m.quality ?? 500,
+          _name:       m.commodityName ?? '',
+          _query:      m.commodityName ?? '',
+          _open:       false,
+        }))
+        if (!f.minerals.length) f.minerals = [{ commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _open: false }]
+      } catch {
+        f.zoneSearchState = 'not_found'
+      }
+    },
+
+    async rockFormSuggestZone() {
+      const f = this.rockForm
+      const bodyId = f.selectedBody?.id ?? this.sessionActive?.defaultBodyId
+      if (!f.zoneQueryId || !bodyId) { f.zoneCreate.error = 'Corps céleste requis.'; return }
+      f.zoneCreate.saving = true
+      f.zoneCreate.error  = null
+      try {
+        const slots: Array<{ slot: string; commodityId: string; qualityMax: number }> = [
+          { slot: 'primary', commodityId: String(f.zoneQueryId), qualityMax: f.zoneCreate.primaryQualityMax },
+        ]
+        if (f.zoneCreate.secondary.commodityId) {
+          slots.push({ slot: 'secondary', commodityId: String(f.zoneCreate.secondary.commodityId), qualityMax: f.zoneCreate.secondary.qualityMax })
+        }
+        if (f.zoneCreate.tertiary.commodityId) {
+          slots.push({ slot: 'tertiary', commodityId: String(f.zoneCreate.tertiary.commodityId), qualityMax: f.zoneCreate.tertiary.qualityMax })
+        }
+        await svcSuggestZone({ locationId: String(bodyId), locationType: 'body', minerals: slots })
+        await this.rockFormLookupZone()
+        f.zoneCreate.show = false
+      } catch (err: any) {
+        f.zoneCreate.error = err?.message ?? 'Erreur enregistrement zone.'
+      } finally {
+        f.zoneCreate.saving = false
+      }
     },
 
     async addRock() {
@@ -775,16 +943,25 @@ export const useMiningStore = defineStore('mining', {
       this.loading.addRock = true
       try {
         const minerals = this.rockForm.minerals
-          .filter((m) => m.commodityId !== null && m.percentage !== '')
-          .map((m) => ({ commodityId: m.commodityId as number, percentage: Number(m.percentage) }))
+          .filter((m) => m.commodityId !== null)
+          .map((m) => ({ commodityId: m.commodityId as number, percentage: Number(m.percentage) || 0, quality: m.quality ?? 500 }))
+        const n = (v: string) => v !== '' ? Number(v) : undefined
         const rock = await svcAddRock(this.sessionActive.id, {
-          bodyName:        this.rockForm.bodyName.trim() || undefined,
-          sizeScuEstimate: this.rockForm.sizeScuEstimate !== '' ? Number(this.rockForm.sizeScuEstimate) : undefined,
+          bodyId:          this.rockForm.selectedBody?.id ?? undefined,
+          bodyName:        this.rockForm.bodySearch.trim() || undefined,
+          posX:            n(this.rockForm.posX),
+          posY:            n(this.rockForm.posY),
+          posZ:            n(this.rockForm.posZ),
+          sizeScuEstimate: n(this.rockForm.sizeScuEstimate),
+          mass:            n(this.rockForm.mass),
+          instability:     n(this.rockForm.instability),
+          resistance:      n(this.rockForm.resistance),
+          notes:           this.rockForm.notes.trim() || undefined,
           minerals,
         })
         if (rock) this._applyRockUpdate(rock)
         this.rockForm.show = false
-        this._pushSessionLog('🪨', `Rocher signalé${this.rockForm.bodyName ? ' — ' + this.rockForm.bodyName : ''}.`, 'info')
+        this._pushSessionLog('🪨', `Rocher signalé.`, 'info')
       } catch (err: any) {
         this.rockForm.error = err?.response?.data?.message ?? err?.message ?? 'Erreur ajout rocher.'
       } finally {
@@ -819,16 +996,37 @@ export const useMiningStore = defineStore('mining', {
       }
     },
 
-    openCollectForm(rockId: number) {
+    openCollectForm(rockId: number, mode: 'partial' | 'complete' = 'complete') {
       const rock = this.sessionActive?.rocks.find((r) => r.id === rockId)
       if (!rock) return
-      const scanMinerals = rock.minerals.filter((m) => m.phase === 'scan')
-      this.collectForm.rockId = rockId
-      this.collectForm.lines  = scanMinerals.length
-        ? scanMinerals.map((m) => ({ commodityId: m.commodityId, commodityName: m.commodityName, quantityScuActual: '' }))
-        : [{ commodityId: null, commodityName: '', quantityScuActual: '' }]
-      this.collectForm.error = null
-      this.collectForm.show  = true
+      const scu = rock.sizeScuEstimate ?? 0
+      const scanMap: Record<number, any> = {}
+      const actualMap: Record<number, number> = {}
+      for (const m of (rock.minerals ?? [])) {
+        if (!m.commodityId) continue
+        if (m.phase === 'actual') {
+          actualMap[m.commodityId] = (actualMap[m.commodityId] ?? 0) + Number(m.quantityScuActual ?? 0)
+        } else if (!scanMap[m.commodityId]) {
+          scanMap[m.commodityId] = m
+        }
+      }
+      const rockMineralIds = Object.keys(scanMap).map(Number)
+      const scanEntries: any[] = Object.values(scanMap)
+      this.collectForm = {
+        show: true, saving: false, error: null, rockId, mode, rockMineralIds,
+        lines: (scanEntries.length ? scanEntries : [{}]).map((m: any) => {
+          const cid = m.commodityId || null
+          const alreadyCollectedScu = cid ? (actualMap[cid] ?? 0) : 0
+          const scanEstimateScu = cid && m.percentage ? (Number(m.percentage) / 100 * Number(scu)) : 0
+          return {
+            commodityId: cid,
+            commodityName: m.commodityName || '',
+            quantityScuActual: mode === 'partial' ? '' : String(alreadyCollectedScu > 0 ? alreadyCollectedScu : ''),
+            scanEstimateScu,
+            alreadyCollectedScu,
+          }
+        }),
+      }
     },
 
     async collectRock() {
@@ -838,10 +1036,14 @@ export const useMiningStore = defineStore('mining', {
       this.collectForm.error    = null
       this.loading.collectRock  = true
       try {
-        const lines = this.collectForm.lines
+        const minerals = this.collectForm.lines
           .filter((l) => l.quantityScuActual !== '' && Number(l.quantityScuActual) > 0)
           .map((l) => ({ commodityId: l.commodityId, quantityScuActual: Number(l.quantityScuActual) }))
-        const rock = await svcCollectRock(rockId, { lines })
+        if (!minerals.length) {
+          this.collectForm.error = 'Veuillez saisir au moins une quantité positive.'
+          return
+        }
+        const rock = await svcCollectRock(rockId, { mode: this.collectForm.mode, minerals, lines: minerals })
         if (rock) this._applyRockUpdate(rock)
         this.collectForm.show = false
         this._pushSessionLog('✅', `Rocher #${rockId} collecté.`, 'success')
@@ -864,6 +1066,223 @@ export const useMiningStore = defineStore('mining', {
         this.errors.session = err?.response?.data?.message ?? err?.message ?? 'Erreur fermeture session.'
       } finally {
         this.loading.closeSession = false
+      }
+    },
+
+    // ─── Session ships ─────────────────────────────────────────────────────
+
+    async loadSessionShips() {
+      if (this.sessionShipsLoaded) return
+      this.loading.loadShips = true
+      try {
+        if (this.loadout.catalogLoaded && this.loadout.ships.length) {
+          this.sessionShips = this.loadout.ships
+        } else {
+          this.sessionShips = await svcFetchMiningShips()
+        }
+        this.sessionShipsLoaded = true
+      } catch {
+        this.sessionShips = []
+      } finally {
+        this.loading.loadShips = false
+      }
+    },
+
+    getAvailableCrews(role: string): any[] {
+      const participants = (this.sessionActive?.participants ?? []).filter((p) => p.shipId && p.role === role)
+      const crewMap = new Map<string, any>()
+      for (const p of participants) {
+        const key = p.crewKey || `solo_${p.id}`
+        if (!crewMap.has(key)) {
+          crewMap.set(key, { crewKey: p.crewKey, shipId: p.shipId, shipName: p.shipName, crewTotal: p.crewTotal ?? p.crewSize ?? 1, members: [] })
+        }
+        crewMap.get(key).members.push(p)
+      }
+      return Array.from(crewMap.values())
+        .filter((c) => c.members.length < (c.crewTotal ?? 1))
+        .map((c) => {
+          const captain = c.members.find((m: any) => m.isCaptain || m.rank === 'captain') ?? c.members[0]
+          return { ...c, crewUsed: c.members.length, captainName: captain?.username ?? null }
+        })
+    },
+
+    // ─── Rock extended actions ──────────────────────────────────────────────
+
+    async deleteRock(rockId: number) {
+      if (!this.sessionActive) return
+      this.loading.deleteRock = true
+      try {
+        await svcDeleteRock(rockId)
+        this.sessionActive.rocks = this.sessionActive.rocks.filter((r) => r.id !== rockId)
+        this._pushSessionLog('🗑️', `Rocher #${rockId} supprimé.`, 'warning')
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur suppression rocher.'
+      } finally {
+        this.loading.deleteRock = false
+      }
+    },
+
+    async assignRock(rockId: number) {
+      this.loading.assignRock = true
+      try {
+        const rock = await svcAssignRock(rockId)
+        if (rock) this._applyRockUpdate(rock)
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur assignation.'
+      } finally {
+        this.loading.assignRock = false
+      }
+    },
+
+    // ─── Participant management ─────────────────────────────────────────────
+
+    async updateParticipantDuty(sessionId: number, participantId: number, duty: string) {
+      try {
+        const p = await svcUpdateParticipant(sessionId, participantId, { duty })
+        if (p && this.sessionActive) {
+          const idx = this.sessionActive.participants.findIndex((x) => x.id === participantId)
+          if (idx !== -1) this.sessionActive.participants.splice(idx, 1, p)
+        }
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur mise à jour participant.'
+      }
+    },
+
+    async assignSubCaptain(sessionId: number, participantId: number) {
+      try {
+        const p = await svcAssignSubCaptain(sessionId, participantId)
+        if (p && this.sessionActive) {
+          const idx = this.sessionActive.participants.findIndex((x) => x.id === participantId)
+          if (idx !== -1) this.sessionActive.participants.splice(idx, 1, p)
+        }
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur assignation sous-capitaine.'
+      }
+    },
+
+    async leaveParticipant(sessionId: number, participantId: number) {
+      try {
+        await svcLeaveParticipant(sessionId, participantId)
+        if (this.sessionActive) {
+          this.sessionActive.participants = this.sessionActive.participants.filter((p) => p.id !== participantId)
+        }
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur départ session.'
+      }
+    },
+
+    leaveParticipantWithCheck(sessionId: number, participantId: number) {
+      const me = (this.sessionActive?.participants ?? []).find((p) => p.id === participantId)
+      if (me && (me.isCaptain || me.rank === 'captain')) {
+        const others = (this.sessionActive?.participants ?? []).filter((p) => p.id !== participantId)
+        if (others.length > 0) {
+          this.leaveConfirm = {
+            show: true, sessionId, participantId,
+            selectedCaptainId: others[0].id,
+            candidates: others,
+          }
+          return
+        }
+      }
+      this.leaveParticipant(sessionId, participantId)
+    },
+
+    async confirmLeaveParticipant() {
+      const { sessionId, participantId, selectedCaptainId } = this.leaveConfirm
+      if (!sessionId || !participantId) return
+      try {
+        await svcLeaveParticipant(sessionId, participantId, selectedCaptainId)
+        if (this.sessionActive) {
+          this.sessionActive.participants = this.sessionActive.participants.filter((p) => p.id !== participantId)
+        }
+        this.leaveConfirm = { show: false, sessionId: null, participantId: null, selectedCaptainId: null, candidates: [] }
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur départ session.'
+      }
+    },
+
+    async createSessionOperation(sessionId: number) {
+      this.createOpLoadingId = sessionId
+      this.loading.createOp  = true
+      try {
+        await svcCreateSessionOperation(sessionId)
+        if (this.sessionActive) this.sessionActive.operationCreated = true
+        this._pushSessionLog('🚀', 'Opération créée depuis la session.', 'success')
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur création opération.'
+      } finally {
+        this.createOpLoadingId = null
+        this.loading.createOp  = false
+      }
+    },
+
+    async searchSessionShips(q: string) {
+      if (!q || q.length < 2) { this.sessionJoinForm.shipResults = []; return }
+      try {
+        this.sessionJoinForm.shipResults = await svcSearchMiningShips(q)
+      } catch {
+        this.sessionJoinForm.shipResults = []
+      }
+    },
+
+    setCrewStatusOverride(key: string, status: string | null) {
+      if (!key) return
+      if (status) this.crewStatusOverrides[key] = status
+      else delete this.crewStatusOverrides[key]
+    },
+
+    // ─── Session default body / refinery ───────────────────────────────────
+
+    async updateSessionDefaultBody(sessionId: number, bodyId: number | null) {
+      this.loading.updateSessionBody = true
+      try {
+        await svcUpdateSessionDefaultBody(sessionId, bodyId)
+        if (this.sessionActive) {
+          this.sessionActive.defaultBodyId   = bodyId
+          this.sessionActive.defaultBodyName = this.changeZone.selectedBody?.name ?? null
+        }
+        this.changeZone = { show: false, bodySearch: '', bodyResults: [], selectedBody: null }
+        this._pushSessionLog('🗺️', `Zone par défaut changée.`)
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur changement de zone.'
+      } finally {
+        this.loading.updateSessionBody = false
+      }
+    },
+
+    async updateSessionDefaultRefinery(sessionId: number, refineryId: number | null) {
+      this.loading.updateSessionRefinery = true
+      try {
+        await svcUpdateSessionDefaultRefinery(sessionId, refineryId)
+        if (this.sessionActive) {
+          const r = this.refineries.find((x) => Number(x.id) === Number(refineryId))
+          this.sessionActive.defaultRefineryId   = refineryId
+          this.sessionActive.defaultRefineryName = r?.name ?? null
+        }
+        this.changeRefinery = { show: false, refineryQuery: '', selectedRefineryId: null }
+        this._pushSessionLog('🏭', `Raffinerie par défaut changée.`)
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur changement raffinerie.'
+      } finally {
+        this.loading.updateSessionRefinery = false
+      }
+    },
+
+    // ─── Cargo ─────────────────────────────────────────────────────────────
+
+    async pickupCargo(sessionId: number, cargoId: number) {
+      this.loading.pickupCargo = true
+      try {
+        const cargo = await svcPickupCargo(sessionId, cargoId)
+        if (cargo && this.sessionActive) {
+          const ci = this.sessionActive.cargos.findIndex((c: any) => c.id === cargo.id)
+          if (ci !== -1) this.sessionActive.cargos.splice(ci, 1, cargo)
+          else this.sessionActive.cargos.push(cargo)
+        }
+      } catch (err: any) {
+        this.errors.session = err?.message ?? 'Erreur prise en charge cargo.'
+      } finally {
+        this.loading.pickupCargo = false
       }
     },
 

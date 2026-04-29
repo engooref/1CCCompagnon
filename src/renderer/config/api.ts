@@ -82,11 +82,12 @@ export function createOverlayUrls(settings: AppSettings) {
       rocks: url(base, o, 'mining', 'rocks'),
       refineryNotifyAck: url(base, o, 'mining', 'refinery', 'notifyAck'),
       refineryYieldsBonus: url(base, o, 'mining', 'refinery', 'yieldsBonus'),
-      sessions: `${base}/mining/api/sessions`,
-      loadoutShips:   `${base}/mining/api/loadout/ships`,
-      loadoutLasers:  `${base}/mining/api/loadout/lasers`,
-      loadoutModules: `${base}/mining/api/loadout/modules`,
-      loadouts:       `${base}/mining/api/loadouts`,
+      sessions:      url(base, o, 'mining', 'sessions'),
+      ships:         url(base, o, 'mining', 'ships'),
+      loadoutShips:  url(base, o, 'mining', 'loadout', 'ships'),
+      loadoutLasers: url(base, o, 'mining', 'loadout', 'lasers'),
+      loadoutModules:url(base, o, 'mining', 'loadout', 'modules'),
+      loadouts:      url(base, o, 'mining', 'loadouts'),
     },
   }
 }

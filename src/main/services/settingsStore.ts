@@ -86,6 +86,14 @@ const defaults: AppSettings = {
         search: '/mining/api/bodies/search',
       },
       rocks: '/mining/api/rocks',
+      sessions: '/mining/api/sessions',
+      ships: '/mining/api/ships',
+      loadout: {
+        ships:   '/mining/api/loadout/ships',
+        lasers:  '/mining/api/loadout/lasers',
+        modules: '/mining/api/loadout/modules',
+      },
+      loadouts: '/mining/api/loadouts',
     },
   },
   

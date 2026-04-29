@@ -303,17 +303,24 @@ export interface MiningSession {
   name: string
   status: 'active' | 'closed' | string
   participantsCount?: number
+  participantCount?: number
+  rockCount?: number
   createdAt?: string | null
+  createdBy?: string | null
+  createdById?: number | null
+  systemName?: string | null
   defaultBodyId?: number | null
   defaultBodyName?: string | null
   defaultRefineryId?: number | null
   defaultRefineryName?: string | null
+  operationCreated?: boolean
 }
 
 export interface MiningSessionParticipant {
   id: number
   userId: number
   username: string
+  avatar?: string | null
   role: 'miner' | 'prospector' | 'support' | string
   isCaptain?: boolean
   isSubCaptain?: boolean
@@ -322,6 +329,8 @@ export interface MiningSessionParticipant {
   shipId?: number | null
   shipName?: string | null
   crewKey?: string | null
+  crewTotal?: number | null
+  crewUsed?: number | null
   status?: string | null
   crewSize?: number | null
   crewIsManual?: boolean
@@ -346,9 +355,22 @@ export interface MiningRock {
   bodyName?: string | null
   status: 'available' | 'en_route' | 'fracturing' | 'extraction' | 'completed' | 'depleted' | string
   sizeScuEstimate?: number | null
+  mass?: number | null
+  instability?: number | null
+  resistance?: number | null
+  posX?: number | null
+  posY?: number | null
+  posZ?: number | null
+  notes?: string | null
   minerals: MiningRockMineral[]
   reportedBy?: string | null
+  reportedByUserId?: number | null
+  claimedBy?: string | null
   claimedByUserId?: number | null
+  assignedTo?: string | null
+  assignedToUserId?: number | null
+  transportedBy?: string | null
+  transportedAt?: string | null
 }
 
 export interface MiningSessionLog {
@@ -367,8 +389,11 @@ export interface MiningCargo {
   commodityName?: string | null
   commodityCode?: string | null
   quantityScu?: number | null
-  status?: 'pending' | 'assigned' | 'picked_up' | 'delivered' | 'refined' | string
+  status?: 'pending' | 'in_transit' | 'assigned' | 'picked_up' | 'delivered' | 'refined' | string
+  collectedBy?: string | null
   transporterName?: string | null
+  transporterAssigned?: string | null
+  transporterAssignedId?: number | null
 }
 
 export interface MiningSessionDetail extends MiningSession {

@@ -129,7 +129,7 @@ export async function previewRefineryTime(method: string, lines: any[]) {
   return data?.data ?? data
 }
 
-export async function joinSession(sessionId: number, payload: { role: string; shipId?: number | null; crewSize?: number | null }) {
+export async function joinSession(sessionId: number, payload: { role: string; shipId?: number | null; crewSize?: number | null; crewKey?: string | null }) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const sessionsUrl = urls?.mining?.sessions ?? `${_base()}/mining/api/sessions`
@@ -144,7 +144,14 @@ export async function leaveSession(sessionId: number) {
   await http.post(`${sessionsUrl}/${sessionId}/leave`, null, { headers })
 }
 
-export async function addRock(sessionId: number, payload: { bodyName?: string; sizeScuEstimate?: number | null; minerals?: Array<{ commodityId: number | null; percentage: number }> }) {
+export async function addRock(sessionId: number, payload: {
+  bodyId?: number | null; bodyName?: string;
+  posX?: number | null; posY?: number | null; posZ?: number | null;
+  sizeScuEstimate?: number | null; mass?: number | null;
+  instability?: number | null; resistance?: number | null;
+  notes?: string;
+  minerals?: Array<{ commodityId: number | null; percentage: number; quality?: number }>
+}) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const sessionsUrl = urls?.mining?.sessions ?? `${_base()}/mining/api/sessions`
@@ -154,20 +161,27 @@ export async function addRock(sessionId: number, payload: { bodyName?: string; s
 
 export async function claimRock(rockId: number) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
-  const base = _base()
-  await http.post(`${base}/mining/api/rocks/${rockId}/claim`, null, { headers })
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  await http.post(`${rocksUrl}/${rockId}/claim`, null, { headers })
 }
 
 export async function unclaimRock(rockId: number) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
-  const base = _base()
-  await http.post(`${base}/mining/api/rocks/${rockId}/unclaim`, null, { headers })
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  await http.post(`${rocksUrl}/${rockId}/unclaim`, null, { headers })
 }
 
-export async function collectRock(rockId: number, payload: { lines: Array<{ commodityId: number | null; quantityScuActual: number }> }) {
+export async function collectRock(rockId: number, payload: {
+  mode?: 'partial' | 'complete';
+  minerals?: Array<{ commodityId: number | null; quantityScuActual: number }>;
+  lines?: Array<{ commodityId: number | null; quantityScuActual: number }>;
+}) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
-  const base = _base()
-  const { data } = await http.post(`${base}/mining/api/rocks/${rockId}/collect`, payload, { headers })
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  const { data } = await http.post(`${rocksUrl}/${rockId}/collect`, payload, { headers })
   return data?.data ?? data
 }
 
@@ -180,8 +194,9 @@ export async function closeSessionApi(sessionId: number) {
 
 export async function updateRockStatus(rockId: number, status: string) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
-  const base = _base()
-  const { data } = await http.patch(`${base}/mining/api/rocks/${rockId}`, { status }, { headers })
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  const { data } = await http.patch(`${rocksUrl}/${rockId}`, { status }, { headers })
   return data?.data ?? data
 }
 
@@ -191,9 +206,9 @@ export async function fetchLoadoutCatalog() {
   const headers = _headers()
   const base = _base()
   const urls = _urls()
-  const shipsUrl   = (urls?.mining as any)?.loadoutShips   ?? `${base}/mining/api/loadout/ships`
-  const lasersUrl  = (urls?.mining as any)?.loadoutLasers  ?? `${base}/mining/api/loadout/lasers`
-  const modulesUrl = (urls?.mining as any)?.loadoutModules ?? `${base}/mining/api/loadout/modules`
+  const shipsUrl   = urls?.mining?.loadoutShips   ?? `${base}/mining/api/loadout/ships`
+  const lasersUrl  = urls?.mining?.loadoutLasers  ?? `${base}/mining/api/loadout/lasers`
+  const modulesUrl = urls?.mining?.loadoutModules ?? `${base}/mining/api/loadout/modules`
   const [sRes, lRes, mRes] = await Promise.all([
     http.get(shipsUrl,   { headers }),
     http.get(lasersUrl,  { headers }),
@@ -209,7 +224,7 @@ export async function fetchUserLoadouts(): Promise<MiningLoadout[]> {
   const headers = _headers()
   const base = _base()
   const urls = _urls()
-  const url = (urls?.mining as any)?.loadouts ?? `${base}/mining/api/loadouts`
+  const url = urls?.mining?.loadouts ?? `${base}/mining/api/loadouts`
   const { data } = await http.get(url, { headers })
   return Array.isArray(data) ? data : (data?.data ?? [])
 }
@@ -218,7 +233,7 @@ export async function createLoadout(payload: Omit<MiningLoadout, 'id'>): Promise
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const base = _base()
   const urls = _urls()
-  const url = (urls?.mining as any)?.loadouts ?? `${base}/mining/api/loadouts`
+  const url = urls?.mining?.loadouts ?? `${base}/mining/api/loadouts`
   const { data } = await http.post(url, payload, { headers })
   return data?.data ?? data
 }
@@ -227,7 +242,7 @@ export async function updateLoadout(id: number, payload: Partial<Omit<MiningLoad
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const base = _base()
   const urls = _urls()
-  const url = (urls?.mining as any)?.loadouts ?? `${base}/mining/api/loadouts`
+  const url = urls?.mining?.loadouts ?? `${base}/mining/api/loadouts`
   const { data } = await http.put(`${url}/${id}`, payload, { headers })
   return data?.data ?? data
 }
@@ -236,7 +251,7 @@ export async function deleteLoadout(id: number): Promise<void> {
   const headers = _headers()
   const base = _base()
   const urls = _urls()
-  const url = (urls?.mining as any)?.loadouts ?? `${base}/mining/api/loadouts`
+  const url = urls?.mining?.loadouts ?? `${base}/mining/api/loadouts`
   await http.delete(`${url}/${id}`, { headers })
 }
 
@@ -244,7 +259,7 @@ export async function fetchPublicLoadouts(): Promise<MiningLoadout[]> {
   const headers = _headers()
   const base = _base()
   const urls = _urls()
-  const url = (urls?.mining as any)?.loadouts ?? `${base}/mining/api/loadouts`
+  const url = urls?.mining?.loadouts ?? `${base}/mining/api/loadouts`
   const { data } = await http.get(`${url}?isPublic=1`, { headers })
   return Array.isArray(data) ? data : (data?.data ?? [])
 }
@@ -297,6 +312,115 @@ export async function searchWhereBodies(q: string): Promise<any[]> {
   } catch {
     return []
   }
+}
+
+// ─── Session ships ────────────────────────────────────────────────────────────
+
+export async function fetchMiningShips(): Promise<any[]> {
+  const headers = _headers()
+  const urls = _urls()
+  const shipsUrl = urls?.mining?.ships ?? `${_base()}/mining/api/ships`
+  try {
+    const { data } = await http.get(shipsUrl, { headers })
+    return Array.isArray(data) ? data : (data?.data ?? [])
+  } catch {
+    const fallback = urls?.mining?.loadoutShips ?? `${_base()}/mining/api/loadout/ships`
+    const { data } = await http.get(fallback, { headers })
+    return Array.isArray(data) ? data : (data?.data ?? [])
+  }
+}
+
+export async function searchMiningShips(q: string): Promise<any[]> {
+  if (!q || q.length < 2) return []
+  const headers = _headers()
+  const urls = _urls()
+  const shipsUrl = urls?.mining?.ships ?? `${_base()}/mining/api/ships`
+  const { data } = await http.get(`${shipsUrl}?q=${encodeURIComponent(q)}`, { headers })
+  return Array.isArray(data) ? data : (data?.data ?? [])
+}
+
+// ─── Rock operations ──────────────────────────────────────────────────────────
+
+export async function deleteRock(rockId: number): Promise<void> {
+  const headers = _headers()
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  await http.delete(`${rocksUrl}/${rockId}`, { headers })
+}
+
+export async function assignRock(rockId: number): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  const { data } = await http.post(`${rocksUrl}/${rockId}/assign`, null, { headers })
+  return data?.data ?? data
+}
+
+// ─── Session participant operations ───────────────────────────────────────────
+
+export async function updateParticipant(sessionId: number, participantId: number, updates: { duty?: string; status?: string }): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  const { data } = await http.patch(`${sessionsUrl}/${sessionId}/participants/${participantId}`, updates, { headers })
+  return data?.data ?? data
+}
+
+export async function assignSubCaptain(sessionId: number, participantId: number): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  const { data } = await http.post(`${sessionsUrl}/${sessionId}/participants/${participantId}/sub-captain`, null, { headers })
+  return data?.data ?? data
+}
+
+export async function leaveParticipant(sessionId: number, participantId: number, newCaptainId?: number | null): Promise<void> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  await http.post(`${sessionsUrl}/${sessionId}/participants/${participantId}/leave`, newCaptainId ? { newCaptainId } : null, { headers })
+}
+
+export async function createSessionOperation(sessionId: number): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${_base()}/mining/api/sessions`
+  const { data } = await http.post(`${sessionsUrl}/${sessionId}/operation`, null, { headers })
+  return data?.data ?? data
+}
+
+// ─── Session default body / refinery ─────────────────────────────────────────
+
+export async function updateSessionDefaultBody(sessionId: number, bodyId: number | null): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  const { data } = await http.patch(`${sessionsUrl}/${sessionId}`, { defaultBodyId: bodyId }, { headers })
+  return data?.data ?? data
+}
+
+export async function updateSessionDefaultRefinery(sessionId: number, refineryId: number | null): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  const { data } = await http.patch(`${sessionsUrl}/${sessionId}`, { defaultRefineryId: refineryId }, { headers })
+  return data?.data ?? data
+}
+
+// ─── Cargo ────────────────────────────────────────────────────────────────────
+
+export async function pickupCargo(sessionId: number, cargoId: number): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  const { data } = await http.post(`${sessionsUrl}/${sessionId}/cargos/${cargoId}/pickup`, null, { headers })
+  return data?.data ?? data
 }
 
 export async function suggestZone(payload: {
