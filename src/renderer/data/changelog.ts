@@ -8,8 +8,8 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '2.0.0-draft',
-    date: '2026-04-15',
+    version: '2.0.1-draft',
+    date: '2026-05-06',
     changes: [
       { type: 'feature', text: 'Premiere implementation du module de minage' },
       
