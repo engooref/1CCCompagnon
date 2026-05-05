@@ -1,13 +1,11 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
-const STORAGE_KEY = '1cc:pinnedTransportId'
+const STORAGE_KEY = '1cc:pinnedTransport'
 
-// Partagé entre toutes les instances (singleton module-level)
 const pinnedId = ref<number | null>(
   Number(localStorage.getItem(STORAGE_KEY)) || null
 )
 
-// Sync inter-fenêtres Electron (storage event propagé sur le même origin)
 window.addEventListener('storage', (e) => {
   if (e.key === STORAGE_KEY) {
     pinnedId.value = e.newValue ? Number(e.newValue) : null
@@ -15,6 +13,8 @@ window.addEventListener('storage', (e) => {
 })
 
 export function usePinnedTransport() {
+  const pinnedTransport = computed(() => pinnedId.value !== null)
+
   function pin(id: number) {
     pinnedId.value = id
     localStorage.setItem(STORAGE_KEY, String(id))
@@ -33,5 +33,5 @@ export function usePinnedTransport() {
     return pinnedId.value === id
   }
 
-  return { pinnedId, pin, unpin, toggle, isPinned }
+  return { pinnedId, pinnedTransport, pin, unpin, toggle, isPinned }
 }

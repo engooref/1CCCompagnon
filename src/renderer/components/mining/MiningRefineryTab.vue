@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onUnmounted, nextTick, watch } from 'vue'
 import { useMiningStore } from '../../stores/mining'
 import {
   formatRemaining,
@@ -8,7 +8,6 @@ import {
   isNearReady,
   workOrderNotified,
   formatDateTime,
-  formatMinutes,
   woDisplayDuration,
 } from '../../lib/miningHelpers'
 
@@ -19,7 +18,9 @@ type FormLine = {
   commodityId: string
   scuInput: string
   query: string
+  search: string
   open: boolean
+  hi: number
 }
 
 import { useNow } from '../../composables/useNow'
@@ -32,14 +33,16 @@ const confirmDeleteId = ref<number | null>(null)
 const completingId = ref<number | null>(null)
 
 const refineryQuery = ref('')
+const refinerySearch = ref('')
 const showRefineryList = ref(false)
 const methodQuery = ref('')
+const methodSearch = ref('')
 const showMethodList = ref(false)
 
 let formLineUid = 0
 
 function createEmptyLine(): FormLine {
-  return { uid: formLineUid++, commodityId: '', scuInput: '', query: '', open: false }
+  return { uid: formLineUid++, commodityId: '', scuInput: '', query: '', search: '', open: false, hi: -1 }
 }
 
 const form = ref({
@@ -52,6 +55,10 @@ const form = ref({
 
 const durationOverride = ref(0)
 const durStr = ref('')
+const previewSeconds = ref<number | null>(null)
+const previewHasConfig = ref<boolean | null>(null)
+const previewLoading = ref(false)
+let previewTimer: ReturnType<typeof setTimeout> | null = null
 
 const refineryActive = ref<number>(-1)
 const methodActive = ref<number>(-1)
@@ -207,16 +214,10 @@ function getLineOutput(
   return Math.round(input * getMethodYieldFactor(methodKey) * 10) / 10
 }
 
-function getLineDuration(line: { scuInput?: number | string; quantityScuInput?: number | string }, methodKey: string): number {
-  const input = getLineInput(line)
-  if (!input) return 0
-  return input * getMethodDurationMultiplier(methodKey)
-}
-
 const selectedMethod = computed(() => mining.methodByKey(form.value.method))
 
 const filteredRefineries = computed(() => {
-  const query = refineryQuery.value.trim().toLowerCase()
+  const query = refinerySearch.value.trim().toLowerCase()
   if (!query) return mining.refineries.slice(0, 20)
   return mining.refineries
     .filter((refinery) => {
@@ -227,7 +228,7 @@ const filteredRefineries = computed(() => {
 })
 
 const filteredMethods = computed(() => {
-  const query = methodQuery.value.trim().toLowerCase()
+  const query = methodSearch.value.trim().toLowerCase()
   if (!query) return mining.refineryMethods.slice(0, 20)
   return mining.refineryMethods
     .filter((method) => {
@@ -246,22 +247,27 @@ watch(filteredMethods, (list) => {
   methodActive.value = list.length ? clampIndex(methodActive.value, list.length) : -1
 })
 
-const formEstimatedTotalMinutes = computed(() => {
-  return form.value.lines.reduce((total, line) => total + getLineDuration(line, form.value.method), 0)
-})
-
 function currentYieldPct(): number | null {
   return getMethodYieldPct(form.value.method)
 }
 
-function previewDurationMinutes(): number {
-  return formEstimatedTotalMinutes.value
+function previewLinesForTime() {
+  return form.value.lines
+    .filter((line) => line.commodityId && getLineInput(line) > 0)
+    .map((line) => ({
+      commodityId: Number(line.commodityId),
+      scuInput: Math.max(1, Math.trunc(Number(line.scuInput) || 0)) / 100,
+    }))
+}
+
+function hasDurationPreviewInputs(): boolean {
+  return Boolean(form.value.method && previewLinesForTime().length > 0)
 }
 
 function previewCostAuec(): number | null {
   const cost = getMethodCostPerScu(form.value.method)
   if (cost == null) return null
-  return form.value.lines.reduce((total, line) => total + getLineInput(line) * cost, 0)
+  return form.value.lines.reduce((total, line) => total + (getLineInput(line) / 100) * cost, 0)
 }
 
 function totalValidScuInput(): number {
@@ -271,9 +277,70 @@ function totalValidScuInput(): number {
 }
 
 function effectiveDurationSeconds(): number | null {
-  if (durationOverride.value > 0) return durationOverride.value
-  const mins = previewDurationMinutes()
-  return mins > 0 ? Math.round(mins * 60) : null
+  if (durationOverride.value > 0) return Math.trunc(durationOverride.value)
+  if (previewSeconds.value != null && previewSeconds.value > 0) return Math.trunc(previewSeconds.value)
+  return null
+}
+
+function canShowDurationBlock(): boolean {
+  return durationOverride.value > 0 || hasDurationPreviewInputs()
+}
+
+function durationBadgeLabel(): string {
+  if (durationOverride.value > 0) return 'manuel'
+  if (previewLoading.value) return 'calcul…'
+  if (!hasDurationPreviewInputs()) return 'en attente'
+  if (previewHasConfig.value === false) return 'imprécis'
+  if (previewSeconds.value != null) return 'calculé'
+  return 'en attente'
+}
+
+function durationBadgeClass(): string {
+  if (durationOverride.value > 0) return 'border-accent/25 bg-accent/8 text-accent'
+  if (previewHasConfig.value === false) return 'border-amber-400/25 bg-amber-400/10 text-amber-300'
+  if (previewSeconds.value != null) return 'border-sky-400/25 bg-sky-400/8 text-sky-300'
+  return 'border-white/8 bg-white/3 text-th-muted'
+}
+
+function durationDisplayLabel(): string {
+  if (previewLoading.value && durationOverride.value <= 0) return 'calcul…'
+  const seconds = effectiveDurationSeconds()
+  return seconds != null ? woDisplayDuration(seconds) : '—'
+}
+
+function schedulePreviewTime() {
+  if (previewTimer) clearTimeout(previewTimer)
+
+  if (durationOverride.value > 0) {
+    previewLoading.value = false
+    return
+  }
+
+  const method = form.value.method
+  const lines = previewLinesForTime()
+
+  if (!method || lines.length === 0) {
+    previewSeconds.value = null
+    previewHasConfig.value = null
+    previewLoading.value = false
+    return
+  }
+
+  previewLoading.value = true
+  previewTimer = setTimeout(async () => {
+    try {
+      const data = await mining.previewRefineryTime(method, lines)
+      const hasConfig = Boolean(data?.hasConfig)
+      const seconds = Number(data?.durationSeconds ?? 0)
+      previewHasConfig.value = hasConfig
+      previewSeconds.value = hasConfig && Number.isFinite(seconds) && seconds > 0 ? Math.trunc(seconds) : null
+    } catch {
+      previewHasConfig.value = false
+      previewSeconds.value = null
+    } finally {
+      previewLoading.value = false
+    }
+  }, 300)
 }
 
 function parseDurationStr(str: string): number {
@@ -286,8 +353,9 @@ function parseDurationStr(str: string): number {
 
 function enterDurationEdit() {
   const s = effectiveDurationSeconds()
-  durationOverride.value = s && s > 0 ? s : 0
-  durStr.value = s && s > 0 ? woDisplayDuration(s) : '0:00:00'
+  const next = s && s > 0 ? s : 60
+  durationOverride.value = next
+  durStr.value = woDisplayDuration(next)
 }
 
 function handleDurationInput(e: Event) {
@@ -363,16 +431,14 @@ function filteredMinerals(query: string) {
   return minerals.slice(0, 20)
 }
 
-function handleRefineryInput() {
-  form.value.refineryPoiId = ''
+function setRefinerySearch(event: Event) {
+  refinerySearch.value = (event.target as HTMLInputElement).value
+  refineryActive.value = filteredRefineries.value.length ? 0 : -1
   showRefineryList.value = true
 }
 
 function openRefineryList() {
-  const selectedLabel = refineryDisplayNameById(form.value.refineryPoiId)
-  if (refineryQuery.value && refineryQuery.value === selectedLabel) {
-    refineryQuery.value = ''
-  }
+  refinerySearch.value = ''
   showRefineryList.value = true
   addRefineryOutsideListener()
   nextTick(() => {
@@ -383,17 +449,14 @@ function openRefineryList() {
   })
 }
 
-function handleMethodInput() {
-  form.value.method = ''
-  methodQuery.value = ''
+function setMethodSearch(event: Event) {
+  methodSearch.value = (event.target as HTMLInputElement).value
+  methodActive.value = filteredMethods.value.length ? 0 : -1
   showMethodList.value = true
 }
 
 function openMethodList() {
-  const selectedLabel = mining.methodByKey(form.value.method)?.label ?? ''
-  if (methodQuery.value && methodQuery.value === selectedLabel) {
-    methodQuery.value = ''
-  }
+  methodSearch.value = ''
   showMethodList.value = true
   addMethodOutsideListener()
   nextTick(() => {
@@ -407,13 +470,66 @@ function openMethodList() {
 function clearMethod() {
   form.value.method = ''
   methodQuery.value = ''
+  methodSearch.value = ''
   showMethodList.value = false
   removeMethodOutsideListener()
 }
 
-function handleMineralInput(line: FormLine) {
-  line.commodityId = ''
+function mineralNameById(id: string | number | null | undefined): string {
+  if (id === null || id === undefined || id === '') return ''
+  return String(mining.minerals.find((mineral: any) => String(mineral.id) === String(id))?.name ?? '')
+}
+
+function mineralDisplayName(line: FormLine): string {
+  return String(line.query || mineralNameById(line.commodityId) || '').trim()
+}
+
+function filteredMineralsForLine(line: FormLine) {
+  return filteredMinerals(line.search ?? '')
+}
+
+function setMineralSearch(line: FormLine, event: Event) {
+  line.search = (event.target as HTMLInputElement).value
+  line.hi = filteredMineralsForLine(line).length ? 0 : -1
+}
+
+function openMineralList(line: FormLine, event?: Event) {
   line.open = true
+  line.search = ''
+  const selectedIndex = filteredMineralsForLine(line).findIndex((mineral: any) => String(mineral.id) === String(line.commodityId))
+  line.hi = selectedIndex >= 0 ? selectedIndex : (filteredMineralsForLine(line).length ? 0 : -1)
+  const root = (event?.currentTarget as HTMLElement | null)?.closest('.relative')
+  nextTick(() => root?.querySelector<HTMLInputElement>('.mineral-dropdown-search')?.focus())
+}
+
+function clearMineral(line: FormLine) {
+  line.commodityId = ''
+  line.query = ''
+  line.search = ''
+  line.open = false
+  line.hi = -1
+}
+
+function handleMineralKeydown(event: KeyboardEvent, line: FormLine) {
+  const list = filteredMineralsForLine(line)
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    line.hi = Math.min(Number(line.hi ?? -1) + 1, list.length - 1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    line.hi = Math.max(Number(line.hi ?? 0) - 1, 0)
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    const item = list[Number(line.hi ?? -1)] ?? list[0]
+    if (item) selectMineral(line, item)
+  } else if (event.key === 'Escape') {
+    line.open = false
+  }
+
+  nextTick(() => {
+    const root = (event.currentTarget as HTMLElement | null)?.closest('.relative')
+    root?.querySelectorAll<HTMLElement>('.mineral-dropdown-item')?.[Number(line.hi ?? -1)]?.scrollIntoView({ block: 'nearest' })
+  })
 }
 
 const refineryContainer = ref<HTMLElement | null>(null)
@@ -470,12 +586,13 @@ function clampCscuInput(e: Event, line: FormLine) {
 }
 
 function closeMineralListSoon(line: FormLine) {
-  window.setTimeout(() => { line.open = false }, 120)
+  window.setTimeout(() => { line.open = false }, 140)
 }
 
 function selectRefinery(refinery: { id: string | number; name: string; systemName?: string | null }) {
   form.value.refineryPoiId = String(refinery.id)
   refineryQuery.value = refinery.systemName ? `${refinery.name} (${refinery.systemName})` : refinery.name
+  refinerySearch.value = ''
   showRefineryList.value = false
   removeRefineryOutsideListener()
 }
@@ -483,6 +600,7 @@ function selectRefinery(refinery: { id: string | number; name: string; systemNam
 function clearRefinery() {
   form.value.refineryPoiId = ''
   refineryQuery.value = ''
+  refinerySearch.value = ''
   showRefineryList.value = false
   removeRefineryOutsideListener()
 }
@@ -490,6 +608,7 @@ function clearRefinery() {
 function selectMethod(method: { method: string; label: string }) {
   form.value.method = method.method
   methodQuery.value = method.label ?? method.method
+  methodSearch.value = ''
   showMethodList.value = false
   removeMethodOutsideListener()
 }
@@ -497,7 +616,9 @@ function selectMethod(method: { method: string; label: string }) {
 function selectMineral(line: FormLine, mineral: { id: string | number; name: string }) {
   line.commodityId = String(mineral.id)
   line.query = mineral.name
+  line.search = ''
   line.open = false
+  line.hi = -1
 }
 
 function resetForm() {
@@ -509,11 +630,17 @@ function resetForm() {
     lines: [createEmptyLine()],
   }
   refineryQuery.value = ''
+  refinerySearch.value = ''
   methodQuery.value = ''
+  methodSearch.value = ''
   showRefineryList.value = false
   showMethodList.value = false
   durationOverride.value = 0
   durStr.value = ''
+  previewSeconds.value = null
+  previewHasConfig.value = null
+  previewLoading.value = false
+  if (previewTimer) clearTimeout(previewTimer)
   formError.value = null
 }
 
@@ -560,6 +687,7 @@ async function submitForm() {
       startedAt: null,
       notes: form.value.notes || null,
       notifyOnComplete: form.value.notifyOnComplete,
+      durationSeconds: effectiveDurationSeconds(),
       lines,
     })
     showForm.value = false
@@ -612,7 +740,13 @@ const refineryYieldsPivot = computed(() => {
   return { commodities, systems }
 })
 
+watch(
+  () => `${form.value.method}|${form.value.lines.map((line) => `${line.commodityId}:${line.scuInput}`).join('|')}|${durationOverride.value}`,
+  () => schedulePreviewTime(),
+)
+
 onUnmounted(() => {
+  if (previewTimer) clearTimeout(previewTimer)
   removeRefineryOutsideListener()
   removeMethodOutsideListener()
 })
@@ -676,11 +810,11 @@ onUnmounted(() => {
           <label class="mb-1.5 block text-xs font-medium text-th-muted">Raffinerie</label>
           <div class="relative" ref="refineryContainer">
             <input
-              v-model="refineryQuery"
+              :value="form.refineryPoiId ? refineryDisplayNameById(form.refineryPoiId) : ''"
               autocomplete="off"
               readonly
               class="w-full rounded-xl border border-th-subtle bg-black/30 px-3 py-2.5 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none cursor-pointer"
-              :placeholder="form.refineryPoiId ? refineryQuery : 'Sélectionnez une raffinerie...'"
+              placeholder="Sélectionnez une raffinerie..."
               @click="openRefineryList"
               @keydown="handleRefineryKeydown"
             />
@@ -695,11 +829,11 @@ onUnmounted(() => {
               <div class="p-2">
                 <input
                   ref="refinerySearchInput"
-                  v-model="refineryQuery"
+                  :value="refinerySearch"
                   autocomplete="off"
                   class="w-full rounded-md border border-th-subtle bg-black/20 px-3 py-2 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none"
                   placeholder="Rechercher une raffinerie..."
-                  @input="handleRefineryInput"
+                  @input="setRefinerySearch($event)"
                   @keydown="handleRefineryKeydown"
                 />
               </div>
@@ -727,7 +861,7 @@ onUnmounted(() => {
           <label class="mb-1.5 block text-xs font-medium text-th-muted">Méthode de raffinage</label>
           <div class="relative" ref="methodContainer">
             <input
-              v-model="methodQuery"
+              :value="form.method ? (mining.methodByKey(form.method)?.label ?? form.method) : ''"
               autocomplete="off"
               readonly
               class="w-full rounded-xl border border-th-subtle bg-black/30 px-3 py-2.5 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none cursor-pointer"
@@ -746,11 +880,11 @@ onUnmounted(() => {
               <div class="p-2">
                 <input
                   ref="methodSearchInput"
-                  v-model="methodQuery"
+                  :value="methodSearch"
                   autocomplete="off"
                   class="w-full rounded-md border border-th-subtle bg-black/20 px-3 py-2 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none"
                   placeholder="Rechercher une méthode..."
-                  @input="handleMethodInput"
+                  @input="setMethodSearch($event)"
                   @keydown="handleMethodKeydown"
                 />
               </div>
@@ -850,32 +984,55 @@ onUnmounted(() => {
           >
             <div class="relative">
               <input
-                v-model="line.query"
+                :value="mineralDisplayName(line)"
+                readonly
                 autocomplete="off"
-                class="w-full rounded-lg border border-th-subtle bg-black/30 px-3 py-2 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none"
+                class="w-full cursor-pointer rounded-lg border border-th-subtle bg-black/30 px-3 py-2 pr-8 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none"
                 :placeholder="`Minerai ${index + 1}`"
-                @blur="closeMineralListSoon(line)"
-                @focus="line.open = true"
-                @input="handleMineralInput(line)"
+                @click="openMineralList(line, $event)"
+                @focus="openMineralList(line, $event)"
+                @keydown="handleMineralKeydown($event, line)"
               />
+              <button
+                v-if="line.commodityId"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-th-muted transition hover:text-rose-300"
+                type="button"
+                @click="clearMineral(line)"
+              >×</button>
 
-              <div v-if="line.open && filteredMinerals(line.query).length" class="absolute inset-x-0 top-full z-20 mt-2 max-h-52 overflow-y-auto rounded-xl border border-th-subtle bg-[#05080d]/95 p-1.5 shadow-2xl backdrop-blur-md">
-                <button
-                  v-for="mineral in filteredMinerals(line.query)"
-                  :key="mineral.id"
-                  class="flex w-full items-center justify-between gap-2 rounded-lg border border-transparent px-3 py-2 text-left transition hover:border-white/10 hover:bg-white/5"
-                  type="button"
-                  @mousedown.prevent="selectMineral(line, mineral)"
-                >
-                  <span class="text-sm text-th-primary">{{ mineral.name }}</span>
-                  <span v-if="mineralMetaLabel(mineral as unknown as Record<string, unknown>)" class="text-[11px] text-th-muted">
-                    {{ mineralMetaLabel(mineral as unknown as Record<string, unknown>) }}
-                  </span>
-                </button>
-              </div>
+              <div v-if="line.open" class="absolute inset-x-0 top-full z-20 mt-2 h-60 overflow-hidden rounded-xl border border-th-subtle bg-[#05080d]/95 shadow-2xl backdrop-blur-md">
+                <div class="p-2">
+                  <input
+                    :value="line.search"
+                    autocomplete="off"
+                    class="mineral-dropdown-search sticky top-0 z-10 w-full rounded-lg border border-th-subtle bg-black/25 px-3 py-2 text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none"
+                    placeholder="Rechercher un minerai..."
+                    @input="setMineralSearch(line, $event)"
+                    @blur="closeMineralListSoon(line)"
+                    @keydown="handleMineralKeydown($event, line)"
+                  />
+                </div>
 
-              <div v-else-if="line.open && line.query.trim()" class="absolute inset-x-0 top-full z-20 mt-2 rounded-xl border border-th-subtle bg-[#05080d]/95 p-3 text-xs text-th-muted shadow-2xl backdrop-blur-md">
-                Aucun minerai trouvé.
+                <div v-if="filteredMineralsForLine(line).length" class="max-h-44 overflow-y-auto p-1.5 space-y-0.5">
+                  <button
+                    v-for="(mineral, mi) in filteredMineralsForLine(line)"
+                    :key="mineral.id"
+                    class="mineral-dropdown-item flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition"
+                    :class="mi === line.hi ? 'border-accent/25 bg-accent/10 text-accent' : 'border-transparent hover:border-white/10 hover:bg-white/5'"
+                    type="button"
+                    @mouseenter="line.hi = mi"
+                    @mousedown.prevent="selectMineral(line, mineral)"
+                  >
+                    <span class="text-sm text-th-primary">{{ mineral.name }}</span>
+                    <span v-if="mineralMetaLabel(mineral as unknown as Record<string, unknown>)" class="text-[11px] text-th-muted">
+                      {{ mineralMetaLabel(mineral as unknown as Record<string, unknown>) }}
+                    </span>
+                  </button>
+                </div>
+
+                <div v-else class="p-3 text-xs text-th-muted">
+                  Aucun minerai trouvé.
+                </div>
               </div>
             </div>
 
@@ -908,26 +1065,32 @@ onUnmounted(() => {
       </div>
 
       <div
-        v-if="effectiveDurationSeconds() !== null"
-        class="mt-4 flex items-center gap-3 rounded-xl border bg-black/20 px-4 py-2.5"
-        :class="durationOverride > 0 ? 'border-accent/25' : 'border-th-subtle'"
+        v-if="canShowDurationBlock()"
+        class="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-black/20 px-4 py-2.5"
+        :class="durationOverride > 0 ? 'border-accent/25' : (previewHasConfig === false ? 'border-amber-400/20' : 'border-th-subtle')"
       >
         <div class="flex shrink-0 items-center gap-2">
           <span class="text-xs font-medium text-th-muted">Durée</span>
           <span
             class="rounded-full border px-2 py-0.5 text-[0.6rem] uppercase tracking-widest"
-            :class="durationOverride > 0 ? 'border-accent/25 bg-accent/8 text-accent' : 'border-white/8 bg-white/3 text-th-muted'"
-          >{{ durationOverride > 0 ? 'manuel' : 'estimé' }}</span>
+            :class="durationBadgeClass()"
+          >{{ durationBadgeLabel() }}</span>
         </div>
+
+        <div v-if="previewHasConfig === false && durationOverride === 0" class="w-full text-xs text-amber-300 md:order-last" style="font-family:'Share Tech Mono',monospace;letter-spacing:0.03em">
+          ⚠ Calcul incomplet — coefficient ou base temps manquante. Saisis une durée manuelle si besoin.
+        </div>
+
         <div class="flex flex-1 items-center justify-end gap-2">
           <template v-if="durationOverride === 0">
             <button
               type="button"
-              class="font-bold tabular-nums text-accent hover:opacity-75 transition"
+              class="font-bold tabular-nums text-accent transition hover:opacity-75 disabled:cursor-not-allowed disabled:opacity-45"
               style="font-family:'Share Tech Mono',monospace;font-size:1.1rem;letter-spacing:.05em"
-              :title="'Cliquer pour saisie manuelle'"
+              :title="hasDurationPreviewInputs() ? 'Cliquer pour saisie manuelle' : 'Ajoutez une méthode et au moins un minerai'"
+              :disabled="!hasDurationPreviewInputs()"
               @click="enterDurationEdit()"
-            >{{ woDisplayDuration(effectiveDurationSeconds()!) }}</button>
+            >{{ durationDisplayLabel() }}</button>
           </template>
           <template v-else>
             <input
@@ -973,8 +1136,10 @@ onUnmounted(() => {
         </button>
 
         <div v-if="woIsValid() && totalValidScuInput() > 0" class="flex flex-wrap items-center gap-2 text-xs">
-          <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-th-primary">⏱ {{ formatMinutes(previewDurationMinutes()) }}</span>
-          <span v-if="previewCostAuec() != null" class="rounded-full border border-accent/20 bg-accent/[0.08] px-3 py-1.5 text-accent">aUEC {{ previewCostAuec()?.toLocaleString('fr-FR') }}</span>
+          <span v-if="effectiveDurationSeconds() !== null" class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-th-primary">⏱ {{ woDisplayDuration(effectiveDurationSeconds()!) }}</span>
+          <span v-else-if="previewLoading" class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-th-muted">⏱ calcul…</span>
+          <span v-else-if="previewHasConfig === false" class="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-amber-300">⚠ temps imprécis</span>
+          <span v-if="previewCostAuec() != null" class="rounded-full border border-accent/20 bg-accent/[0.08] px-3 py-1.5 text-accent">aUEC {{ Math.ceil(previewCostAuec() ?? 0).toLocaleString('fr-FR') }}</span>
         </div>
       </div>
     </div>

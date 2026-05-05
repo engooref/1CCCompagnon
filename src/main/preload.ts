@@ -24,7 +24,12 @@ contextBridge.exposeInMainWorld('oneCC', {
   setWindowSize: (size: string) => ipcRenderer.invoke('app:set-window-size', size),
   setToggleKey:    (payload: any) => ipcRenderer.invoke('app:set-toggle-key', payload),
   setMapToggleKey: (payload: any) => ipcRenderer.invoke('app:set-map-toggle-key', payload),
-  setCycleModeKey: (payload: any) => ipcRenderer.invoke('app:set-cycle-mode-key', payload),
+  setCycleModeKey:       (payload: any) => ipcRenderer.invoke('app:set-cycle-mode-key', payload),
+  setCycleBuiltInKey:    (payload: any) => ipcRenderer.invoke('app:set-cycle-builtin-key', payload),
+  setCycleCustomKey:     (payload: any) => ipcRenderer.invoke('app:set-cycle-custom-key', payload),
+  setInteractionKey:     (payload: any) => ipcRenderer.invoke('app:set-interaction-key', payload),
+  setInteractionKeyMode: (mode: 'hold' | 'toggle') => ipcRenderer.invoke('app:set-interaction-key-mode', mode),
+  setOverlayEditKey:     (payload: any) => ipcRenderer.invoke('app:set-overlay-edit-key', payload),
 
   // ── Logs overlay ─────────────────────────────────────────────────────────
   getLogs:         () => ipcRenderer.invoke('app:get-logs'),
@@ -46,7 +51,8 @@ contextBridge.exposeInMainWorld('oneCC', {
 
   onOverlayState: (cb: (s: { visible: boolean }) => void) => ipcRenderer.on('overlay:state', (_e, s) => cb(s)),
 
-  onMapOnlyMode: (cb: (v: boolean) => void) => ipcRenderer.on('overlay:map-only-mode', (_e, v) => cb(v)),
+  onMapOnlyMode:     (cb: (v: boolean) => void) => ipcRenderer.on('overlay:map-only-mode', (_e, v) => cb(v)),
+  onInteractionMode: (cb: (active: boolean) => void) => ipcRenderer.on('overlay:interaction-mode', (_e, active) => cb(active)),
 
   offOverlay: () => {
     ipcRenderer.removeAllListeners('overlay:state')
@@ -57,6 +63,7 @@ contextBridge.exposeInMainWorld('oneCC', {
     ipcRenderer.removeAllListeners('overlay:game-bounds')
     ipcRenderer.removeAllListeners('overlay:map-only-mode')
     ipcRenderer.removeAllListeners('overlay:active-mode')
+    ipcRenderer.removeAllListeners('overlay:interaction-mode')
   },
 
   // ── Système de modes ──────────────────────────────────────────────────────

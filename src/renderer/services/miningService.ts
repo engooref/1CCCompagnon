@@ -3,6 +3,59 @@ import { createOverlayUrls } from '../config/api'
 import { useAppStore } from '../stores/app'
 import type { MiningLoadout } from '@shared/general'
 
+// ─── Interprétation des erreurs API ──────────────────────────────────────────
+
+const API_ERROR_CODES: Record<string, string> = {
+  minerals_required:        'Ajoutez au moins un minéral avec une quantité non nulle.',
+  mineral_over_cap:         'La quantité totale de minéraux dépasse la capacité du rocher.',
+  mineral_quantity_invalid: 'La quantité saisie est invalide.',
+  rock_not_found:           'Ce rocher est introuvable.',
+  rock_already_claimed:     'Ce rocher est déjà revendiqué par quelqu\'un d\'autre.',
+  rock_not_claimed:         'Ce rocher n\'est pas revendiqué.',
+  session_not_found:        'Session introuvable.',
+  session_closed:           'Cette session est déjà fermée.',
+  session_already_joined:   'Vous participez déjà à cette session.',
+  not_participant:          'Vous ne participez pas à cette session.',
+  not_captain:              'Vous devez être capitaine pour effectuer cette action.',
+  work_order_not_found:     'Bon de travail introuvable.',
+  work_order_already_ready: 'Ce bon de travail est déjà terminé.',
+  invalid_method:           'Méthode de raffinage invalide.',
+  refinery_not_found:       'Raffinerie introuvable.',
+  unauthorized:             'Action non autorisée.',
+  unauthenticated:          'Session expirée. Reconnectez-vous.',
+}
+
+export function parseApiError(err: any, fallback = 'Une erreur est survenue.'): string {
+  const data = err?.response?.data
+
+  // Champ "error" (code machine) — priorité sur message
+  const errorCode: string | undefined = data?.error
+  if (errorCode && API_ERROR_CODES[errorCode]) return API_ERROR_CODES[errorCode]
+
+  // Champ "message" (texte serveur)
+  const serverMsg: string | undefined = data?.message
+  if (serverMsg) return serverMsg
+
+  // Code HTTP
+  const status: number | undefined = err?.response?.status
+  switch (status) {
+    case 400: return 'Requête invalide. Vérifiez les données saisies.'
+    case 401: return 'Session expirée. Reconnectez-vous.'
+    case 403: return 'Action non autorisée.'
+    case 404: return 'Ressource introuvable.'
+    case 409: return 'Conflit : action impossible dans l\'état actuel.'
+    case 422: return 'Données incorrectes. Vérifiez le formulaire.'
+    case 429: return 'Trop de requêtes. Attendez un moment avant de réessayer.'
+    case 500: return 'Erreur serveur interne. Réessayez plus tard.'
+    case 502:
+    case 503:
+    case 504: return 'Service temporairement indisponible.'
+    default:
+      if (!err?.response) return 'Problème de connexion. Vérifiez votre réseau.'
+      return fallback
+  }
+}
+
 function _base() {
   const app = useAppStore()
   return (app.settings?.siteUrl ?? '').replace(/\/$/, '')
@@ -163,14 +216,16 @@ export async function claimRock(rockId: number) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
-  await http.post(`${rocksUrl}/${rockId}/claim`, null, { headers })
+  const { data } = await http.post(`${rocksUrl}/${rockId}/claim`, null, { headers })
+  return data?.data ?? data ?? null
 }
 
 export async function unclaimRock(rockId: number) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
-  await http.post(`${rocksUrl}/${rockId}/unclaim`, null, { headers })
+  const { data } = await http.post(`${rocksUrl}/${rockId}/unclaim`, null, { headers })
+  return data?.data ?? data ?? null
 }
 
 export async function collectRock(rockId: number, payload: {
@@ -181,7 +236,9 @@ export async function collectRock(rockId: number, payload: {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
-  const { data } = await http.post(`${rocksUrl}/${rockId}/collect`, payload, { headers })
+  const endpoint = payload.mode === 'partial' ? 'partial-collect' : 'collect'
+  const minerals = payload.minerals ?? payload.lines ?? []
+  const { data } = await http.post(`${rocksUrl}/${rockId}/${endpoint}`, { minerals }, { headers })
   return data?.data ?? data
 }
 
@@ -192,11 +249,27 @@ export async function closeSessionApi(sessionId: number) {
   await http.post(`${sessionsUrl}/${sessionId}/close`, null, { headers })
 }
 
+export async function updateRock(rockId: number, payload: {
+  bodyId?: number | null; bodyName?: string;
+  posX?: number | null; posY?: number | null; posZ?: number | null;
+  sizeScuEstimate?: number | null; mass?: number | null;
+  instability?: number | null; resistance?: number | null;
+  notes?: string;
+  minerals?: Array<{ commodityId: number | null; percentage: number; quality?: number }>;
+  status?: string;
+}) {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const urls = _urls()
+  const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
+  const { data } = await http.patch(`${rocksUrl}/${rockId}`, payload, { headers })
+  return data?.data ?? data
+}
+
 export async function updateRockStatus(rockId: number, status: string) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const rocksUrl = urls?.mining?.rocks ?? `${_base()}/mining/api/rocks`
-  const { data } = await http.patch(`${rocksUrl}/${rockId}`, { status }, { headers })
+  const { data } = await http.patch(`${rocksUrl}/${rockId}/status`, { status }, { headers })
   return data?.data ?? data
 }
 
@@ -316,26 +389,21 @@ export async function searchWhereBodies(q: string): Promise<any[]> {
 
 // ─── Session ships ────────────────────────────────────────────────────────────
 
-export async function fetchMiningShips(): Promise<any[]> {
-  const headers = _headers()
-  const urls = _urls()
-  const shipsUrl = urls?.mining?.ships ?? `${_base()}/mining/api/ships`
-  try {
-    const { data } = await http.get(shipsUrl, { headers })
-    return Array.isArray(data) ? data : (data?.data ?? [])
-  } catch {
-    const fallback = urls?.mining?.loadoutShips ?? `${_base()}/mining/api/loadout/ships`
-    const { data } = await http.get(fallback, { headers })
-    return Array.isArray(data) ? data : (data?.data ?? [])
-  }
-}
-
 export async function searchMiningShips(q: string): Promise<any[]> {
   if (!q || q.length < 2) return []
   const headers = _headers()
   const urls = _urls()
-  const shipsUrl = urls?.mining?.ships ?? `${_base()}/mining/api/ships`
+  const shipsUrl = urls?.mining?.sessionsShipsSearch;
   const { data } = await http.get(`${shipsUrl}?q=${encodeURIComponent(q)}`, { headers })
+  return Array.isArray(data) ? data : (data?.data ?? [])
+}
+
+export async function fetchSessionShips(): Promise<any[]> {
+  const headers = _headers()
+  const urls = _urls()
+  const shipsUrl = urls?.mining?.sessionsShips;
+  if (!shipsUrl) return [];
+  const { data } = await http.get(shipsUrl, { headers })
   return Array.isArray(data) ? data : (data?.data ?? [])
 }
 

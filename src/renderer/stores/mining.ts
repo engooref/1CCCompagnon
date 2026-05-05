@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { logger } from '../services/logger'
 import { createOverlayUrls } from '../config/api'
 import { useAppStore } from './app'
+import { useMercure } from '@renderer/composables/useMercure'
 import {
   fetchBootstrap,
   fetchWorkOrders,
@@ -25,13 +26,13 @@ import {
   previewRefineryTime as svcPreviewRefineryTime,
   searchWhereBodies as svcSearchWhereBodies,
   updateRockStatus as svcUpdateRockStatus,
+  updateRock as svcUpdateRock,
   fetchLoadoutCatalog as svcFetchLoadoutCatalog,
   fetchUserLoadouts as svcFetchUserLoadouts,
   createLoadout as svcCreateLoadout,
   updateLoadout as svcUpdateLoadout,
   deleteLoadout as svcDeleteLoadout,
   fetchPublicLoadouts as svcFetchPublicLoadouts,
-  fetchMiningShips as svcFetchMiningShips,
   deleteRock as svcDeleteRock,
   assignRock as svcAssignRock,
   updateParticipant as svcUpdateParticipant,
@@ -42,6 +43,8 @@ import {
   pickupCargo as svcPickupCargo,
   createSessionOperation as svcCreateSessionOperation,
   searchMiningShips as svcSearchMiningShips,
+  fetchSessionShips as svcFetchSessionShips,
+  parseApiError,
 } from '../services/miningService'
 import type {
   MiningMineral,
@@ -54,6 +57,7 @@ import type {
   MiningSession,
   MiningSessionDetail,
   MiningRock,
+  MiningCargo,
   MiningSessionLog,
   MiningZone,
   MiningShip,
@@ -61,6 +65,8 @@ import type {
   MiningModule,
   MiningLoadout,
 } from '@shared/general'
+
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -127,6 +133,7 @@ function getReadyOverlayContent(count?: number): { title: string; message: strin
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
+const { connect: connectMercure, disconnect: disconnectMercure } = useMercure()
 
 export const useMiningStore = defineStore('mining', {
   state: () => ({
@@ -186,17 +193,19 @@ export const useMiningStore = defineStore('mining', {
       instability:     '' as string,
       resistance:      '' as string,
       notes:           '',
-      minerals:        [] as Array<{ commodityId: number | null; percentage: string; quality: number; _name: string; _query: string; _open: boolean }>,
+      minerals:        [] as Array<{ commodityId: number | null; percentage: string; quality: number; _name: string; _query: string; _search?: string; _open: boolean; _hi?: number }>,
       zoneQuery:         '' as string,
       zoneQueryId:       null as number | null,
       zoneQueryOpen:     false,
+      zoneQuerySearch:   '' as string,
+      zoneQueryHi:       -1,
       zoneSearchState:   'idle' as 'idle' | 'loading' | 'found' | 'not_found',
       zoneLocationName:  null as string | null,
       zoneCreate: {
         show:              false,
         primaryQualityMax: 500,
-        secondary:         { commodityId: null as number | null, _query: '', _open: false, qualityMax: 500 },
-        tertiary:          { commodityId: null as number | null, _query: '', _open: false, qualityMax: 500 },
+        secondary:         { commodityId: null as number | null, _query: '', _search: '', _open: false, _hi: -1, qualityMax: 500 },
+        tertiary:          { commodityId: null as number | null, _query: '', _search: '', _open: false, _hi: -1, qualityMax: 500 },
         saving:            false,
         error:             null as string | null,
       },
@@ -208,7 +217,7 @@ export const useMiningStore = defineStore('mining', {
       rockId:         null as number | null,
       mode:           'complete' as 'partial' | 'complete',
       rockMineralIds: [] as number[],
-      lines:          [] as Array<{ commodityId: number | null; commodityName: string; quantityScuActual: string; scanEstimateScu: number; alreadyCollectedScu: number }>,
+      lines:          [] as Array<{ commodityId: number | null; commodityName: string; quantityScuActual: string; scanEstimateScu: number; alreadyCollectedScu: number; _name?: string; _query?: string; _search?: string; _open?: boolean; _hi?: number }>,
     },
     changeZone: {
       show:         false,
@@ -268,7 +277,7 @@ export const useMiningStore = defineStore('mining', {
       session:    null as string | null,
     },
 
-    _sessionEs: null as EventSource | null,
+    _sessionSseActive: false,
 
     // ── Où Miner ─────────────────────────────────────────────────────────
     where: {
@@ -512,9 +521,14 @@ export const useMiningStore = defineStore('mining', {
       } finally {
         this.loading.bootstrap = false
       }
+      this.loadSessionShips()
     },
 
     // ─── Work Orders ────────────────────────────────────────────────────────
+
+    async previewRefineryTime(method: string, lines: Array<{ commodityId: number | string; scuInput: number }>) {
+      return await svcPreviewRefineryTime(method, lines)
+    },
 
     async loadWorkOrders() {
       this.loading.workOrders = true
@@ -548,7 +562,7 @@ export const useMiningStore = defineStore('mining', {
         if (wo?.id) this._applyWorkOrderUpdate(wo)
         return wo
       } catch (err: any) {
-        const msg = err?.response?.data?.message ?? err?.message ?? 'Erreur création work order.'
+        const msg = parseApiError(err, 'Erreur création work order.')
         this.errors.createWO = msg
         throw new Error(msg)
       } finally {
@@ -676,6 +690,7 @@ export const useMiningStore = defineStore('mining', {
       this._destroySessionSse()
       this.sessionActive = null
       this.sessionView   = 'list'
+      this.loadSessionList()
     },
 
     async createSession(name: string) {
@@ -692,53 +707,34 @@ export const useMiningStore = defineStore('mining', {
         }
       } catch (err: any) {
         logger.error('[mining] createSession failed', err)
-        this.sessionCreateForm.error = err?.response?.data?.message ?? err?.message ?? 'Erreur création session.'
+        this.sessionCreateForm.error = parseApiError(err, 'Erreur création session.')
       } finally {
         this.sessionCreateForm.saving = false
       }
     },
 
-    _openSessionSse(sessionId: number) {
-      this._destroySessionSse()
-      const urls = this._urls()
+    async _openSessionSse(sessionId: number) {
+      const urls        = this._urls()
       const sessionsUrl = urls?.mining?.sessions ?? `${this._base()}/mining/api/sessions`
-      const mercureUrl  = `${sessionsUrl}/${sessionId}/mercure`
-      const headers     = this._headers()
+      const infoUrl     = `${sessionsUrl}/${sessionId}/mercure`
+      const authHeader  = `Bearer ${useAppStore().bearerToken ?? ''}`
 
-      fetch(mercureUrl, {
-        credentials: 'include',
-        headers,
+      await connectMercure(infoUrl, authHeader, (data) => {
+        this._handleSessionEvent(data)
       })
-        .then((res) => res.ok ? res.json() : null)
-        .then((info) => {
-          if (!info?.subscribeUrl) return
-
-          // Pose le cookie JWT si tokenUrl fourni
-          const tokenPromise = info.tokenUrl
-            ? fetch(info.tokenUrl, { method: 'POST', credentials: 'include', headers }).then(() => {})
-            : Promise.resolve()
-
-          return tokenPromise.then(() => {
-            this._sessionEs = new EventSource(info.subscribeUrl, { withCredentials: true })
-            this._sessionEs.onmessage = (e) => {
-              try { this._handleSessionEvent(JSON.parse(e.data)) } catch { /* ignore parse errors */ }
-            }
-          })
-        })
-        .catch(() => { /* SSE optional - no block on failure */ })
     },
 
     _destroySessionSse() {
-      if (this._sessionEs) {
-        try { this._sessionEs.close() } catch { /* ignore */ }
-        this._sessionEs = null
-      }
+      disconnectMercure()
     },
 
     _handleSessionEvent(data: any) {
       if (!data?.action) return
       const session = this.sessionActive
       if (!session) return
+
+      const eventSessionId = data.sessionId ?? data.rock?.sessionId ?? data.cargo?.sessionId
+      if (eventSessionId && Number(eventSessionId) !== Number(session.id)) return
 
       switch (data.action) {
         case 'session_closed':
@@ -779,20 +775,109 @@ export const useMiningStore = defineStore('mining', {
           break
         case 'cargo_created':
         case 'cargo_updated':
-          if (data.cargo && session.cargos) {
-            const ci = session.cargos.findIndex((c: any) => c.id === data.cargo.id)
-            if (ci === -1) session.cargos.push(data.cargo)
-            else session.cargos.splice(ci, 1, data.cargo)
+        case 'cargo_assigned_transporter':
+        case 'cargo_delivered':
+          if (Array.isArray(data.cargos)) {
+            data.cargos.forEach((cargo: any) => this._applyCargoUpdate(cargo))
+          } else if (data.cargo) {
+            this._applyCargoUpdate(data.cargo)
           }
           break
       }
     },
 
-    _applyRockUpdate(rock: MiningRock | null | undefined) {
-      if (!rock || !this.sessionActive) return
-      const idx = this.sessionActive.rocks.findIndex((r) => r.id === rock.id)
-      if (idx === -1) this.sessionActive.rocks.unshift(rock)
-      else this.sessionActive.rocks.splice(idx, 1, rock)
+    _definedPatch<T extends Record<string, any>>(patch: T): Partial<T> {
+      return Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined),
+      ) as Partial<T>
+    },
+
+    _mineralPhase(mineral: any): 'actual' | 'scan' {
+      return mineral?.phase === 'actual' ? 'actual' : 'scan'
+    },
+
+    _mineralMergeKey(mineral: any): string {
+      if (mineral?.id != null) return `id:${mineral.id}`
+      const phase = this._mineralPhase(mineral)
+      const commodity = mineral?.commodityId ?? mineral?.commodityCode ?? mineral?.commodityName ?? 'unknown'
+      return `${phase}:${commodity}`
+    },
+
+    _dedupeMinerals(minerals: any[]): any[] {
+      const map = new Map<string, any>()
+      for (const mineral of minerals) {
+        if (!mineral) continue
+        map.set(this._mineralMergeKey(mineral), mineral)
+      }
+      return Array.from(map.values())
+    },
+
+    _mergeRockMinerals(current: any[] = [], incoming: any[] = []): any[] {
+      if (!Array.isArray(incoming)) return current
+      if (!incoming.length) return []
+
+      const currentRows = Array.isArray(current) ? current : []
+      const incomingHasScan = incoming.some((m) => this._mineralPhase(m) !== 'actual')
+      const incomingHasActual = incoming.some((m) => this._mineralPhase(m) === 'actual')
+      const currentHasScan = currentRows.some((m) => this._mineralPhase(m) !== 'actual')
+      const currentHasActual = currentRows.some((m) => this._mineralPhase(m) === 'actual')
+
+      // Réponse complète: elle contient déjà scan + actual, donc on la prend telle quelle.
+      if (incomingHasScan && incomingHasActual) return this._dedupeMinerals(incoming)
+
+      // Réponse partielle après collecte: elle peut ne contenir que les lignes actual.
+      if (incomingHasActual && currentHasScan) {
+        return this._dedupeMinerals([
+          ...currentRows.filter((m) => this._mineralPhase(m) !== 'actual'),
+          ...currentRows.filter((m) => this._mineralPhase(m) === 'actual'),
+          ...incoming,
+        ])
+      }
+
+      // Réponse partielle après édition du scan: on garde les collectes déjà déclarées.
+      if (incomingHasScan && currentHasActual) {
+        return this._dedupeMinerals([
+          ...incoming,
+          ...currentRows.filter((m) => this._mineralPhase(m) === 'actual'),
+        ])
+      }
+
+      return this._dedupeMinerals(incoming)
+    },
+
+    _applyRockUpdate(rock: Partial<MiningRock> | null | undefined) {
+      if (!rock || !this.sessionActive || rock.id == null) return
+
+      const patch = this._definedPatch(rock as Record<string, any>) as Partial<MiningRock>
+      const idx = this.sessionActive.rocks.findIndex((r) => Number(r.id) === Number(rock.id))
+
+      if (idx === -1) {
+        this.sessionActive.rocks.unshift(patch as MiningRock)
+        return
+      }
+
+      const current = this.sessionActive.rocks[idx]
+      this.sessionActive.rocks.splice(idx, 1, {
+        ...current,
+        ...patch,
+        id: current.id,
+        minerals: Object.prototype.hasOwnProperty.call(patch, 'minerals')
+          ? this._mergeRockMinerals(current.minerals ?? [], patch.minerals ?? [])
+          : (current.minerals ?? []),
+      } as MiningRock)
+    },
+
+    _applyCargoUpdate(cargo: any | null | undefined) {
+      if (!cargo || !this.sessionActive || cargo.id == null) return
+
+      const patch = this._definedPatch(cargo as Record<string, any>)
+      const list = this.sessionActive.cargos ?? []
+      const idx = list.findIndex((c: any) => Number(c.id) === Number(cargo.id))
+
+      if (idx === -1) list.push(patch as MiningCargo)
+      else list.splice(idx, 1, { ...list[idx], ...patch, id: list[idx].id })
+
+      this.sessionActive.cargos = list
     },
 
     _pushSessionLog(icon: string, message: string, category = 'info') {
@@ -842,7 +927,7 @@ export const useMiningStore = defineStore('mining', {
         this.sessionJoinForm.show = false
         await this.openSession(sessionId)
       } catch (err: any) {
-        this.sessionJoinForm.error = err?.response?.data?.message ?? err?.message ?? 'Erreur lors du rejoindre.'
+        this.sessionJoinForm.error = parseApiError(err, 'Erreur lors du rejoindre.')
       } finally {
         this.sessionJoinForm.saving = false
         this.loading.joinSession    = false
@@ -857,7 +942,7 @@ export const useMiningStore = defineStore('mining', {
         await svcLeaveSession(id)
         this.closeSession()
       } catch (err: any) {
-        this.errors.session = err?.response?.data?.message ?? err?.message ?? 'Erreur lors du départ.'
+        this.errors.session = parseApiError(err, 'Erreur lors du départ.')
       } finally {
         this.loading.leaveSession = false
       }
@@ -873,13 +958,13 @@ export const useMiningStore = defineStore('mining', {
           ? { id: this.sessionActive.defaultBodyId, name: this.sessionActive.defaultBodyName ?? '' }
           : null,
         sizeScuEstimate: '', mass: '', instability: '', resistance: '', notes: '',
-        minerals: [{ commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _open: false }],
-        zoneQuery: '', zoneQueryId: null, zoneQueryOpen: false,
+        minerals: [{ commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _search: '', _open: false, _hi: -1 }],
+        zoneQuery: '', zoneQueryId: null, zoneQueryOpen: false, zoneQuerySearch: '', zoneQueryHi: -1,
         zoneSearchState: 'idle', zoneLocationName: null,
         zoneCreate: {
           show: false, primaryQualityMax: 500, saving: false, error: null,
-          secondary: { commodityId: null, _query: '', _open: false, qualityMax: 500 },
-          tertiary:  { commodityId: null, _query: '', _open: false, qualityMax: 500 },
+          secondary: { commodityId: null, _query: '', _search: '', _open: false, _hi: -1, qualityMax: 500 },
+          tertiary:  { commodityId: null, _query: '', _search: '', _open: false, _hi: -1, qualityMax: 500 },
         },
       }
     },
@@ -896,15 +981,35 @@ export const useMiningStore = defineStore('mining', {
         if (!zone) { f.zoneSearchState = 'not_found'; return }
         f.zoneSearchState  = 'found'
         f.zoneLocationName = zone.locationName ?? zone.bodyName ?? null
-        f.minerals = (zone.minerals ?? []).map((m: any) => ({
-          commodityId: m.commodityId ?? null,
-          percentage:  String(m.percentage ?? ''),
-          quality:     m.qualityMax ?? m.quality ?? 500,
-          _name:       m.commodityName ?? '',
-          _query:      m.commodityName ?? '',
-          _open:       false,
-        }))
-        if (!f.minerals.length) f.minerals = [{ commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _open: false }]
+        f.minerals = (zone.minerals ?? []).map((m: any) => {
+          const rawCommodityId = m.commodityId ?? m.commodity?.id ?? m.mineralId ?? m.mineral?.id ?? null
+          const commodityId = rawCommodityId !== null && rawCommodityId !== undefined && rawCommodityId !== ''
+            ? Number(rawCommodityId)
+            : null
+          const catalogName = commodityId != null
+            ? (this.minerals.find((min: any) => Number(min.id) === Number(commodityId))?.name ?? '')
+            : ''
+          const commodityName = [
+            m.commodityName,
+            m.mineralName,
+            m.commodity?.name,
+            m.mineral?.name,
+            m.name,
+            catalogName,
+          ].map((value) => String(value ?? '').trim()).find(Boolean) ?? ''
+
+          return {
+            commodityId,
+            percentage: String(m.percentage ?? m.percent ?? ''),
+            quality:    m.qualityMax ?? m.quality ?? 500,
+            _name:      commodityName,
+            _query:     commodityName,
+            _search:    '',
+            _open:      false,
+            _hi:        -1,
+          }
+        })
+        if (!f.minerals.length) f.minerals = [{ commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _search: '', _open: false, _hi: -1 }]
       } catch {
         f.zoneSearchState = 'not_found'
       }
@@ -930,7 +1035,7 @@ export const useMiningStore = defineStore('mining', {
         await this.rockFormLookupZone()
         f.zoneCreate.show = false
       } catch (err: any) {
-        f.zoneCreate.error = err?.message ?? 'Erreur enregistrement zone.'
+        f.zoneCreate.error = parseApiError(err, 'Erreur enregistrement zone.')
       } finally {
         f.zoneCreate.saving = false
       }
@@ -944,9 +1049,13 @@ export const useMiningStore = defineStore('mining', {
       try {
         const minerals = this.rockForm.minerals
           .filter((m) => m.commodityId !== null)
-          .map((m) => ({ commodityId: m.commodityId as number, percentage: Number(m.percentage) || 0, quality: m.quality ?? 500 }))
-        const n = (v: string) => v !== '' ? Number(v) : undefined
-        const rock = await svcAddRock(this.sessionActive.id, {
+          .map((m) => ({ commodityId: m.commodityId as number, percentage: Number(String(m.percentage).replace(',', '.')) || 0, quality: m.quality ?? 500 }))
+        const n = (v: string) => {
+          if (v === '' || v === null || v === undefined) return undefined
+          const parsed = Number(String(v).replace(',', '.'))
+          return Number.isFinite(parsed) ? parsed : undefined
+        }
+        const payload = {
           bodyId:          this.rockForm.selectedBody?.id ?? undefined,
           bodyName:        this.rockForm.bodySearch.trim() || undefined,
           posX:            n(this.rockForm.posX),
@@ -958,12 +1067,19 @@ export const useMiningStore = defineStore('mining', {
           resistance:      n(this.rockForm.resistance),
           notes:           this.rockForm.notes.trim() || undefined,
           minerals,
-        })
+        }
+
+        const editRockId = this.rockForm.editRockId
+        const rock = editRockId
+          ? await svcUpdateRock(editRockId, payload)
+          : await svcAddRock(this.sessionActive.id, payload)
+
         if (rock) this._applyRockUpdate(rock)
         this.rockForm.show = false
-        this._pushSessionLog('🪨', `Rocher signalé.`, 'info')
+        this.rockForm.editRockId = null
+        this._pushSessionLog(editRockId ? '✏️' : '🪨', editRockId ? `Rocher #${editRockId} modifié.` : `Rocher signalé.`, editRockId ? 'info' : 'info')
       } catch (err: any) {
-        this.rockForm.error = err?.response?.data?.message ?? err?.message ?? 'Erreur ajout rocher.'
+        this.rockForm.error = parseApiError(err, this.rockForm.editRockId ? 'Erreur modification rocher.' : 'Erreur ajout rocher.')
       } finally {
         this.rockForm.saving = false
         this.loading.addRock = false
@@ -973,11 +1089,16 @@ export const useMiningStore = defineStore('mining', {
     async claimRock(rockId: number) {
       this.loading.claimRock = true
       try {
-        await svcClaimRock(rockId)
-        const rock = this.sessionActive?.rocks.find((r) => r.id === rockId)
-        if (rock) this._applyRockUpdate({ ...rock, status: 'en_route', claimedByUserId: this._currentUserId })
+        const rock = await svcClaimRock(rockId)
+        const patch: any = rock && typeof rock === 'object'
+          ? { ...rock, id: rock.id ?? rockId }
+          : { id: rockId }
+
+        if (patch.status == null) patch.status = 'en_route'
+        if (patch.claimedByUserId == null) patch.claimedByUserId = this._currentUserId
+        this._applyRockUpdate(patch)
       } catch (err: any) {
-        this.errors.session = err?.response?.data?.message ?? err?.message ?? 'Erreur claim rocher.'
+        this.errors.session = parseApiError(err, 'Erreur claim rocher.')
       } finally {
         this.loading.claimRock = false
       }
@@ -986,14 +1107,82 @@ export const useMiningStore = defineStore('mining', {
     async unclaimRock(rockId: number) {
       this.loading.claimRock = true
       try {
-        await svcUnclaimRock(rockId)
-        const rock = this.sessionActive?.rocks.find((r) => r.id === rockId)
-        if (rock) this._applyRockUpdate({ ...rock, status: 'available', claimedByUserId: null })
+        const rock = await svcUnclaimRock(rockId)
+        const patch: any = rock && typeof rock === 'object'
+          ? { ...rock, id: rock.id ?? rockId }
+          : { id: rockId }
+
+        if (patch.status == null) patch.status = 'available'
+        patch.claimedByUserId = null
+        patch.claimedBy = null
+        patch.assignedToUserId = null
+        patch.assignedTo = null
+        this._applyRockUpdate(patch)
       } catch (err: any) {
-        this.errors.session = err?.response?.data?.message ?? err?.message ?? 'Erreur unclaim rocher.'
+        this.errors.session = parseApiError(err, 'Erreur unclaim rocher.')
       } finally {
         this.loading.claimRock = false
       }
+    },
+
+    rockCollectionState(rock: any) {
+      const sizeScu = Number(rock?.sizeScuEstimate ?? 0)
+      const scanByCommodity: Record<number, number> = {}
+      const actualByCommodity: Record<number, number> = {}
+
+      for (const mineral of (rock?.minerals ?? [])) {
+        const commodityId = Number(mineral?.commodityId ?? 0)
+        if (!commodityId) continue
+
+        if (mineral.phase === 'actual') {
+          actualByCommodity[commodityId] = (actualByCommodity[commodityId] ?? 0) + Number(mineral.quantityScuActual ?? 0)
+          continue
+        }
+
+        scanByCommodity[commodityId] = (scanByCommodity[commodityId] ?? 0) + Number(mineral.percentage ?? 0)
+      }
+
+      return { sizeScu, scanByCommodity, actualByCommodity }
+    },
+
+    rockHasCollectedMinerals(rock: any) {
+      const { actualByCommodity } = this.rockCollectionState(rock)
+      return Object.values(actualByCommodity).some((quantity) => Number(quantity) > 0)
+    },
+
+    rockHasRemainingCollection(rock: any) {
+      const { sizeScu, scanByCommodity, actualByCommodity } = this.rockCollectionState(rock)
+      const commodityIds = Object.keys(scanByCommodity)
+      if (!commodityIds.length) return false
+
+      return commodityIds.some((commodityId) => {
+        const id = Number(commodityId)
+        const scanPercent = Number(scanByCommodity[id] ?? 0)
+        const expectedScu = sizeScu > 0 ? sizeScu * (scanPercent / 100) : 0
+        const collectedScu = Number(actualByCommodity[id] ?? 0)
+        return collectedScu + 0.0001 < expectedScu
+      })
+    },
+
+    async openFinalizeRockCollection(rockId: number) {
+      const rock = this.sessionActive?.rocks.find((r) => r.id === rockId)
+      if (!rock) return
+
+      if (this.rockHasCollectedMinerals(rock) && !this.rockHasRemainingCollection(rock)) {
+        this.collectForm = {
+          show: false,
+          saving: false,
+          error: null,
+          rockId,
+          mode: 'complete',
+          rockMineralIds: [],
+          lines: [],
+        }
+        await this.collectRock()
+        return
+      }
+
+      this.openCollectForm(rockId, 'complete')
     },
 
     openCollectForm(rockId: number, mode: 'partial' | 'complete' = 'complete') {
@@ -1018,12 +1207,18 @@ export const useMiningStore = defineStore('mining', {
           const cid = m.commodityId || null
           const alreadyCollectedScu = cid ? (actualMap[cid] ?? 0) : 0
           const scanEstimateScu = cid && m.percentage ? (Number(m.percentage) / 100 * Number(scu)) : 0
+          const name = String(m.commodityName || this.minerals.find((min: any) => Number(min.id) === Number(cid))?.name || '')
           return {
             commodityId: cid,
-            commodityName: m.commodityName || '',
+            commodityName: name,
             quantityScuActual: mode === 'partial' ? '' : String(alreadyCollectedScu > 0 ? alreadyCollectedScu : ''),
             scanEstimateScu,
             alreadyCollectedScu,
+            _name: name,
+            _query: name,
+            _search: '',
+            _open: false,
+            _hi: -1,
           }
         }),
       }
@@ -1037,9 +1232,9 @@ export const useMiningStore = defineStore('mining', {
       this.loading.collectRock  = true
       try {
         const minerals = this.collectForm.lines
-          .filter((l) => l.quantityScuActual !== '' && Number(l.quantityScuActual) > 0)
-          .map((l) => ({ commodityId: l.commodityId, quantityScuActual: Number(l.quantityScuActual) }))
-        if (!minerals.length) {
+          .filter((l) => l.commodityId !== null && l.quantityScuActual !== '' && Number(String(l.quantityScuActual).replace(',', '.')) > 0)
+          .map((l) => ({ commodityId: l.commodityId, quantityScuActual: Number(String(l.quantityScuActual).replace(',', '.')) }))
+        if (!minerals.length && this.collectForm.mode !== 'complete') {
           this.collectForm.error = 'Veuillez saisir au moins une quantité positive.'
           return
         }
@@ -1048,7 +1243,7 @@ export const useMiningStore = defineStore('mining', {
         this.collectForm.show = false
         this._pushSessionLog('✅', `Rocher #${rockId} collecté.`, 'success')
       } catch (err: any) {
-        this.collectForm.error = err?.response?.data?.message ?? err?.message ?? 'Erreur collecte rocher.'
+        this.collectForm.error = parseApiError(err, 'Erreur collecte rocher.')
       } finally {
         this.collectForm.saving  = false
         this.loading.collectRock = false
@@ -1063,7 +1258,7 @@ export const useMiningStore = defineStore('mining', {
         await svcCloseSessionApi(id)
         if (this.sessionActive) this.sessionActive.status = 'closed'
       } catch (err: any) {
-        this.errors.session = err?.response?.data?.message ?? err?.message ?? 'Erreur fermeture session.'
+        this.errors.session = parseApiError(err, 'Erreur fermeture session.')
       } finally {
         this.loading.closeSession = false
       }
@@ -1075,11 +1270,7 @@ export const useMiningStore = defineStore('mining', {
       if (this.sessionShipsLoaded) return
       this.loading.loadShips = true
       try {
-        if (this.loadout.catalogLoaded && this.loadout.ships.length) {
-          this.sessionShips = this.loadout.ships
-        } else {
-          this.sessionShips = await svcFetchMiningShips()
-        }
+        this.sessionShips = await svcFetchSessionShips()
         this.sessionShipsLoaded = true
       } catch {
         this.sessionShips = []
@@ -1116,7 +1307,7 @@ export const useMiningStore = defineStore('mining', {
         this.sessionActive.rocks = this.sessionActive.rocks.filter((r) => r.id !== rockId)
         this._pushSessionLog('🗑️', `Rocher #${rockId} supprimé.`, 'warning')
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur suppression rocher.'
+        this.errors.session = parseApiError(err, 'Erreur suppression rocher.')
       } finally {
         this.loading.deleteRock = false
       }
@@ -1128,7 +1319,7 @@ export const useMiningStore = defineStore('mining', {
         const rock = await svcAssignRock(rockId)
         if (rock) this._applyRockUpdate(rock)
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur assignation.'
+        this.errors.session = parseApiError(err, 'Erreur assignation.')
       } finally {
         this.loading.assignRock = false
       }
@@ -1144,7 +1335,7 @@ export const useMiningStore = defineStore('mining', {
           if (idx !== -1) this.sessionActive.participants.splice(idx, 1, p)
         }
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur mise à jour participant.'
+        this.errors.session = parseApiError(err, 'Erreur mise à jour participant.')
       }
     },
 
@@ -1156,7 +1347,7 @@ export const useMiningStore = defineStore('mining', {
           if (idx !== -1) this.sessionActive.participants.splice(idx, 1, p)
         }
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur assignation sous-capitaine.'
+        this.errors.session = parseApiError(err, 'Erreur assignation sous-capitaine.')
       }
     },
 
@@ -1167,19 +1358,32 @@ export const useMiningStore = defineStore('mining', {
           this.sessionActive.participants = this.sessionActive.participants.filter((p) => p.id !== participantId)
         }
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur départ session.'
+        this.errors.session = parseApiError(err, 'Erreur départ session.')
       }
     },
 
     leaveParticipantWithCheck(sessionId: number, participantId: number) {
       const me = (this.sessionActive?.participants ?? []).find((p) => p.id === participantId)
       if (me && (me.isCaptain || me.rank === 'captain')) {
-        const others = (this.sessionActive?.participants ?? []).filter((p) => p.id !== participantId)
-        if (others.length > 0) {
+        const crewMembers = (this.sessionActive?.participants ?? []).filter(
+          (p) => p.id !== participantId && p.crewKey && p.crewKey === me.crewKey,
+        )
+        if (crewMembers.length > 0) {
+          const subCaptain = crewMembers.find((p) => p.rank === 'sub_captain' || p.isSubCaptain)
+          if (subCaptain) {
+            // transfert automatique vers le sous-capitaine
+            this.leaveConfirm = {
+              show: false, sessionId, participantId,
+              selectedCaptainId: subCaptain.id,
+              candidates: crewMembers,
+            }
+            this.confirmLeaveParticipant()
+            return
+          }
           this.leaveConfirm = {
             show: true, sessionId, participantId,
-            selectedCaptainId: others[0].id,
-            candidates: others,
+            selectedCaptainId: crewMembers[0].id,
+            candidates: crewMembers,
           }
           return
         }
@@ -1197,7 +1401,7 @@ export const useMiningStore = defineStore('mining', {
         }
         this.leaveConfirm = { show: false, sessionId: null, participantId: null, selectedCaptainId: null, candidates: [] }
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur départ session.'
+        this.errors.session = parseApiError(err, 'Erreur départ session.')
       }
     },
 
@@ -1209,7 +1413,7 @@ export const useMiningStore = defineStore('mining', {
         if (this.sessionActive) this.sessionActive.operationCreated = true
         this._pushSessionLog('🚀', 'Opération créée depuis la session.', 'success')
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur création opération.'
+        this.errors.session = parseApiError(err, 'Erreur création opération.')
       } finally {
         this.createOpLoadingId = null
         this.loading.createOp  = false
@@ -1244,7 +1448,7 @@ export const useMiningStore = defineStore('mining', {
         this.changeZone = { show: false, bodySearch: '', bodyResults: [], selectedBody: null }
         this._pushSessionLog('🗺️', `Zone par défaut changée.`)
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur changement de zone.'
+        this.errors.session = parseApiError(err, 'Erreur changement de zone.')
       } finally {
         this.loading.updateSessionBody = false
       }
@@ -1262,7 +1466,7 @@ export const useMiningStore = defineStore('mining', {
         this.changeRefinery = { show: false, refineryQuery: '', selectedRefineryId: null }
         this._pushSessionLog('🏭', `Raffinerie par défaut changée.`)
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur changement raffinerie.'
+        this.errors.session = parseApiError(err, 'Erreur changement raffinerie.')
       } finally {
         this.loading.updateSessionRefinery = false
       }
@@ -1274,13 +1478,9 @@ export const useMiningStore = defineStore('mining', {
       this.loading.pickupCargo = true
       try {
         const cargo = await svcPickupCargo(sessionId, cargoId)
-        if (cargo && this.sessionActive) {
-          const ci = this.sessionActive.cargos.findIndex((c: any) => c.id === cargo.id)
-          if (ci !== -1) this.sessionActive.cargos.splice(ci, 1, cargo)
-          else this.sessionActive.cargos.push(cargo)
-        }
+        this._applyCargoUpdate(cargo)
       } catch (err: any) {
-        this.errors.session = err?.message ?? 'Erreur prise en charge cargo.'
+        this.errors.session = parseApiError(err, 'Erreur prise en charge cargo.')
       } finally {
         this.loading.pickupCargo = false
       }
@@ -1313,9 +1513,16 @@ export const useMiningStore = defineStore('mining', {
       this.loading.updateRockStatus = true
       try {
         const rock = await svcUpdateRockStatus(rockId, status)
-        if (rock) this._applyRockUpdate(rock)
+        const patch: any = rock && typeof rock === 'object'
+          ? { ...rock, id: rock.id ?? rockId }
+          : { id: rockId }
+
+        // Certaines réponses de statut ne renvoient que { id } ou { id, status }.
+        // On force le statut demandé, puis _applyRockUpdate fusionne sans effacer le scan.
+        if (patch.status == null) patch.status = status
+        this._applyRockUpdate(patch)
       } catch (err: any) {
-        this.errors.session = err?.response?.data?.message ?? err?.message ?? 'Erreur mise à jour statut.'
+        this.errors.session = parseApiError(err, 'Erreur mise à jour statut.')
       } finally {
         this.loading.updateRockStatus = false
       }
@@ -1373,7 +1580,7 @@ export const useMiningStore = defineStore('mining', {
           return created
         }
       } catch (err: any) {
-        const msg = err?.response?.data?.message ?? err?.message ?? 'Erreur sauvegarde loadout.'
+        const msg = parseApiError(err, 'Erreur sauvegarde loadout.')
         this.loadout.error = msg
         throw new Error(msg)
       } finally {

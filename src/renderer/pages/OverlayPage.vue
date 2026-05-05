@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { LayoutState, OverlayModuleConfig, OverlayRadioDensity } from '@shared/general'
+import type { LayoutState, OverlayModuleConfig, OverlayRadioDensity, OverlayModuleCategory } from '@shared/general'
 import TransportModule from '../components/overlay/TransportModule.vue'
 import MapModule from '../components/overlay/MapModule.vue'
 import RadioModule from '../components/overlay/RadioModule.vue'
 import ModeSelector from '../components/overlay/ModeSelector.vue'
 import NotificationModule from '../components/overlay/NotificationModule.vue'
+import SessionModule from '../components/overlay/SessionModule.vue'
 import { useOverlayLayout } from '../composables/useOverlayLayout'
 import { usePinnedMap } from '../composables/usePinnedMap'
+import { usePinnedSession } from '../composables/usePinnedSession'
+import { usePinnedTransport } from '../composables/usePinnedTransport'
 import { useOverlayInSituEditor } from '../composables/useOverlayInSituEditor'
 import { useNotificationBus } from '../composables/useNotificationBus'
 import { useModeStore } from '../stores/mode'
@@ -21,12 +24,15 @@ const mapOverlayOpacity = ref(0.85)
 const mapModuleRef      = ref<{ refresh: () => void } | null>(null)
 const mapOnlyMode       = ref(false)
 const settingsPanelOpen = ref(false)
+const interactionMode   = ref(false)
 
 watch(mapVisible, (visible) => {
   if (visible) nextTick(() => mapModuleRef.value?.refresh())
 })
 
 const { pinnedMapId } = usePinnedMap()
+const { pinnedSessionId, pin: pinSession, unpin: unpinSession } = usePinnedSession()
+const { pinnedTransport, pin: pinTransport, unpin: unpinTransport } = usePinnedTransport()
 const { positions, modules, getStyle, loadLayout, applyLayout } = useOverlayLayout()
 const {
   editMode,
@@ -51,6 +57,11 @@ const overlayBounds = computed(() => {
 
 const selectedModule = computed<OverlayModuleConfig | null>(() => {
   return modules.find((mod) => mod.id === selectedId.value) ?? null
+})
+
+const isBuiltInMode = computed(() => {
+  const active = modeStore.modes.find((m) => m.id === modeStore.activeModeId)
+  return active?.builtIn ?? true
 })
 
 const selectedPanelStyle = computed(() => {
@@ -86,14 +97,49 @@ const scContainerStyle = computed(() => {
   }
 })
 
+/** Catégorie par type de module — définie côté dev, non modifiable par l'utilisateur. */
+const MODULE_CATEGORY: Record<OverlayModuleType, OverlayModuleCategory> = {
+  radio:        'communication',
+  transport:    'navigation',
+  notification: 'hud',
+  mining:       'mining',
+}
+
+const CATEGORY_LABELS: Record<OverlayModuleCategory, string> = {
+  communication: '📡 Communication',
+  navigation:    '🗺 Navigation',
+  hud:           '🖥 HUD',
+  mining:        '⛏ Mining',
+  autre:         'Autre',
+}
+
+const CATEGORY_ORDER: OverlayModuleCategory[] = ['communication', 'navigation', 'hud', 'mining', 'autre']
+
+const modulesByCategory = computed(() => {
+  const map = new Map<OverlayModuleCategory, OverlayModuleConfig[]>()
+  for (const mod of modules) {
+    const cat = MODULE_CATEGORY[mod.type] ?? 'autre'
+    if (!map.has(cat)) map.set(cat, [])
+    map.get(cat)!.push(mod)
+  }
+  const sorted = new Map<OverlayModuleCategory, OverlayModuleConfig[]>()
+  for (const cat of CATEGORY_ORDER) { if (map.has(cat)) sorted.set(cat, map.get(cat)!) }
+  return sorted
+})
+
 function isVisible(mod: (typeof modules)[number]): boolean {
-  // Notifications : toujours rendu (le composant gère sa file lui-même)
-  if (mod.type === 'notification') return !mapOnlyMode.value
   if (mapOnlyMode.value) return false
-  // En mode édition : toujours afficher pour pouvoir interagir, même si visible=false
-  if (editMode.value) return mod.type === 'transport' || mod.type === 'radio' || mod.type === 'notification'
+  if (mod.type === 'mining') return editMode.value || (mod.visible && pinnedSessionId.value !== null)
+  if (mod.type === 'transport') return editMode.value || pinnedTransport.value
   if (!mod.visible) return false
-  return mod.type === 'transport' || mod.type === 'radio'
+  return true
+}
+
+/** Types de modules qui supportent l'interaction souris (défini côté dev). */
+const INTERACTABLE_MODULE_TYPES = new Set(['radio'])
+
+function isModuleInteractive(mod: OverlayModuleConfig): boolean {
+  return interactionMode.value && INTERACTABLE_MODULE_TYPES.has(mod.type)
 }
 
 function selectForEditing(id: string) {
@@ -101,18 +147,18 @@ function selectForEditing(id: string) {
 }
 
 function toggleSettingsPanel(id: string) {
+  if (isBuiltInMode.value) return
   if (selectedId.value !== id) {
     selectForEditing(id)
     settingsPanelOpen.value = true
     return
   }
-
   settingsPanelOpen.value = !settingsPanelOpen.value
 }
 
 async function exitEditMode() {
   settingsPanelOpen.value = false
-  await discardChanges()
+  try { await discardChanges() } catch { /* ignore reload error */ }
   setEditMode(false)
   void window.oneCC.setOverlayEditMode(false)
 }
@@ -168,7 +214,7 @@ onMounted(async () => {
     // Skip if already exited (e.g. exitEditMode() already acted locally)
     if (!editMode.value) return
     settingsPanelOpen.value = false
-    await discardChanges()
+    try { await discardChanges() } catch { /* ignore */ }
     setEditMode(false)
   })
 
@@ -179,6 +225,7 @@ onMounted(async () => {
   })
 
   window.oneCC.onMapOnlyMode((v) => { mapOnlyMode.value = v })
+  window.oneCC.onInteractionMode((active: boolean) => { interactionMode.value = active })
 
   window.oneCC.onSettingsUpdate((s: any) => {
     if (s?.mapOverlayOpacity != null) mapOverlayOpacity.value = s.mapOverlayOpacity
@@ -216,21 +263,32 @@ onUnmounted(() => {
               Quitter
             </button>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="mod in modules"
-              :key="`${mod.id}-toggle`"
-              class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium transition"
-              :class="mod.type === 'notification'
-                ? 'border-sky-400/40 bg-sky-500/15 text-sky-100 opacity-50 cursor-default'
-                : mod.visible
-                  ? 'border-sky-400/40 bg-sky-500/15 text-sky-100'
-                  : 'border-white/10 bg-white/5 text-slate-400'"
-              @click="mod.type !== 'notification' && void toggleVisibility(mod.id)"
-            >
-              <span class="h-2 w-2 rounded-full" :class="mod.visible ? 'bg-emerald-400' : 'bg-slate-500'" />
-              {{ mod.title }}
-            </button>
+          <div class="flex flex-wrap gap-x-5 gap-y-2">
+            <template v-for="[cat, catMods] in modulesByCategory" :key="cat">
+              <div class="min-w-[120px]">
+                <div class="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-sky-400/50">
+                  {{ CATEGORY_LABELS[cat] ?? cat }}
+                </div>
+                <div class="flex flex-col gap-1">
+                  <button
+                    v-for="mod in catMods"
+                    :key="`${mod.id}-toggle`"
+                    class="inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition text-left"
+                    :class="isBuiltInMode || mod.type === 'notification'
+                      ? 'border-sky-400/30 bg-sky-500/10 text-sky-100/70 cursor-default'
+                      : mod.visible
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20'
+                        : 'border-white/10 bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10'"
+                    :title="isBuiltInMode || mod.type === 'notification' ? mod.title : (mod.visible ? 'Cliquer pour masquer' : 'Cliquer pour afficher')"
+                    @click="!isBuiltInMode && mod.type !== 'notification' && void toggleVisibility(mod.id)"
+                  >
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="mod.visible ? 'bg-emerald-400' : 'bg-slate-600'" />
+                    {{ mod.title }}
+                    <span v-if="INTERACTABLE_MODULE_TYPES.has(mod.type)" class="ml-auto text-[9px] text-amber-300/60" title="Interaction activable">⊙</span>
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
 
           <!-- Séparateur + Sélecteur de mode -->
@@ -249,10 +307,12 @@ onUnmounted(() => {
             class="absolute module-draggable"
             :data-module-id="mod.id"
             :class="{
-              'pointer-events-none': !editMode,
+              'pointer-events-none': !editMode && !isModuleInteractive(mod),
+              'pointer-events-auto': !editMode && isModuleInteractive(mod),
               'pointer-events-auto cursor-move': editMode,
               'overlay-module--selected': editMode && selectedId === mod.id,
               'overlay-module--hidden': editMode && !mod.visible,
+              'overlay-module--interactive': !editMode && isModuleInteractive(mod),
             }"
             :style="getStyle(mod.id, scBounds?.width, scBounds?.height)"
             @mousedown="editMode && startDrag($event, mod.id, overlayBounds)"
@@ -276,6 +336,7 @@ onUnmounted(() => {
                     activeSpeakers: [{ identity: 'Cdt. Dupont', channel: 'OPS-1', audioLevel: 0.8 }],
                   } : null"
                 />
+                <SessionModule v-else-if="mod.type === 'mining'" :config="mod" :preview="editMode" />
               </div>
             </template>
             <div v-else class="rounded-xl border border-white/10 bg-black/60 px-3 py-1 text-[10px] text-th-muted backdrop-blur-sm">
@@ -287,7 +348,7 @@ onUnmounted(() => {
 
               <div class="overlay-module-tools">
                 <button
-                  v-if="mod.type !== 'notification'"
+                  v-if="mod.type !== 'notification' && !isBuiltInMode"
                   class="overlay-module-tool"
                   :title="mod.visible ? 'Masquer' : 'Afficher'"
                   @mousedown.stop
@@ -296,6 +357,7 @@ onUnmounted(() => {
                   {{ mod.visible ? 'VIS' : 'OFF' }}
                 </button>
                 <button
+                  v-if="!isBuiltInMode"
                   class="overlay-module-tool"
                   title="Parametres"
                   @mousedown.stop
@@ -319,7 +381,7 @@ onUnmounted(() => {
 
       <Transition name="fade">
         <div
-          v-if="editMode && settingsPanelOpen && selectedModule && selectedPanelStyle"
+          v-if="editMode && settingsPanelOpen && selectedModule && selectedPanelStyle && !isBuiltInMode"
           class="pointer-events-auto absolute z-[11000] rounded-2xl border border-white/12 bg-slate-950/88 p-3 text-[12px] text-slate-100 shadow-[0_18px_60px_rgba(2,6,23,0.45)] backdrop-blur-md"
           :style="selectedPanelStyle"
         >
@@ -336,10 +398,6 @@ onUnmounted(() => {
               <span>Visible</span>
               <input type="checkbox" :checked="selectedModule.visible" @change="void toggleSelectedVisibility()" />
             </label>
-            <label class="overlay-setting-row">
-              <span>Mode réduit</span>
-              <input type="checkbox" :checked="selectedModule.minimized" @change="void toggleSelectedMinimized()" />
-            </label>
             <label class="overlay-setting-block">
               <span>Opacité</span>
               <input type="range" min="0.2" max="1" step="0.05" :value="selectedModule.opacity" @input="void updateField('opacity', Number(($event.target as HTMLInputElement).value))" />
@@ -348,6 +406,29 @@ onUnmounted(() => {
               <span>Taille du texte</span>
               <input type="range" min="0.75" max="1.5" step="0.05" :value="selectedModule.fontSize" @input="void updateField('fontSize', Number(($event.target as HTMLInputElement).value))" />
             </label>
+
+            <!-- Pin transport -->
+            <label v-if="selectedModule.type === 'transport'" class="overlay-setting-row">
+              <span>Épingler</span>
+              <input type="checkbox" :checked="pinnedTransport" @change="pinnedTransport ? unpinTransport() : pinTransport(1)" />
+            </label>
+
+            <!-- Pin session mining -->
+            <template v-if="selectedModule.type === 'mining'">
+              <div class="overlay-setting-row">
+                <span>Session épinglée</span>
+                <span class="text-[10px]" :class="pinnedSessionId ? 'text-cyan-400' : 'text-slate-500'">
+                  {{ pinnedSessionId ? `#${pinnedSessionId}` : 'Aucune' }}
+                </span>
+              </div>
+              <button
+                v-if="pinnedSessionId"
+                class="w-full rounded-lg border border-red-500/30 bg-red-500/10 py-1.5 text-[10px] text-red-400 hover:bg-red-500/20 transition"
+                @click="unpinSession()"
+              >
+                Désépingler la session
+              </button>
+            </template>
 
             <template v-if="selectedModule.type === 'radio'">
               <label class="overlay-setting-block">
@@ -405,6 +486,13 @@ onUnmounted(() => {
 
 .overlay-module--selected {
   filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.4));
+}
+
+/* Module interactif (touche maintenue) */
+.overlay-module--interactive {
+  outline: 1px solid rgba(251, 191, 36, 0.4);
+  outline-offset: 2px;
+  border-radius: 18px;
 }
 
 /* Module masqué visible en mode édition uniquement */

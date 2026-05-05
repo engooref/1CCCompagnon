@@ -2,6 +2,7 @@ import { BrowserWindow, app, screen } from 'electron'
 import path from 'node:path'
 
 let win: BrowserWindow | null = null
+let interactive = false
 
 export function createOverlayWindow(): BrowserWindow {
   const RENDERER_DIST = path.join(app.getAppPath(), 'out/renderer')
@@ -45,8 +46,9 @@ export function createOverlayWindow(): BrowserWindow {
   win.setMenu(null)
 
   // Empêcher la titlebar Windows de s'afficher en redirigeant le focus
+  // Sauf en mode interactif (édition) où le focus est nécessaire pour les inputs
   win.on('focus', () => {
-    win?.blur()
+    if (!interactive) win?.blur()
   })
 
   if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
@@ -55,8 +57,11 @@ export function createOverlayWindow(): BrowserWindow {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'), { hash: '/overlay' })
   }
 
-  // DevTools for the overlay are intentionally disabled to avoid
-  // exposing the overlay renderer or interfering with the overlay UX.
+  if (!app.isPackaged) {
+    win.webContents.once('did-finish-load', () => {
+      win?.webContents.openDevTools({ mode: 'detach' })
+    })
+  }
 
   win.on('closed', () => { win = null })
   return win
@@ -75,6 +80,8 @@ export function showOverlay(): void {
 
 export function setOverlayInteractive(enabled: boolean): void {
   if (!win || win.isDestroyed()) return
+  interactive = enabled
+  win.setFocusable(enabled)
   win.setIgnoreMouseEvents(!enabled, { forward: !enabled })
 }
 

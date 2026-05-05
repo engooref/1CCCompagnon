@@ -86,8 +86,12 @@ const defaults: AppSettings = {
         search: '/mining/api/bodies/search',
       },
       rocks: '/mining/api/rocks',
-      sessions: '/mining/api/sessions',
-      ships: '/mining/api/ships',
+      session: {
+        index: '/mining/api/sessions',
+        shipsSearch: '/mining/api/ships/search',
+        ships: '/mining/api/ships/mining'
+      },
+
       loadout: {
         ships:   '/mining/api/loadout/ships',
         lasers:  '/mining/api/loadout/lasers',
@@ -96,6 +100,8 @@ const defaults: AppSettings = {
       loadouts: '/mining/api/loadouts',
     },
   },
+
+  
   
   rememberConnection: true,
   overlayEnabled: true,

@@ -103,8 +103,11 @@ function normalizeModule(mod: Partial<OverlayModuleConfig> & Pick<OverlayModuleC
   }
 }
 
+const KNOWN_TYPES = new Set(DEFAULT_OVERLAY_MODULES.map((m) => m.type))
+
 function replaceModules(next: OverlayModuleConfig[]) {
-  modules.splice(0, modules.length, ...next.map(normalizeModule))
+  const filtered = next.filter((m) => KNOWN_TYPES.has(m.type))
+  modules.splice(0, modules.length, ...filtered.map(normalizeModule))
 }
 
 replaceModules(DEFAULT_OVERLAY_MODULES)

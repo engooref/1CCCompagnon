@@ -26,9 +26,11 @@ export interface OverlayElementPos {
   yPct: number
 }
 
-export type OverlayModuleType = 'transport' | 'radio' | 'notification'
+export type OverlayModuleType = 'transport' | 'radio' | 'notification' | 'mining'
+export type OverlayMiningPanelType = 'info' | 'rocks' | 'cargo' | 'participants' | 'actions'
 export type OverlayAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
 export type OverlayRadioDensity = 'compact' | 'medium' | 'detailed'
+export type OverlayModuleCategory = 'communication' | 'navigation' | 'hud' | 'mining' | 'autre'
 
 export interface OverlayModuleConfig {
   id: string
@@ -49,12 +51,22 @@ export interface OverlayModuleConfig {
   radioShowSpeakers?: boolean
   radioShowParticipants?: boolean
   radioShowAdvancedStatus?: boolean
+  // Mining-only display options (ignored by other module types)
+  miningPanelType?: OverlayMiningPanelType
+  category?: OverlayModuleCategory
+  allowInteraction?: boolean
 }
 
 export const DEFAULT_OVERLAY_MODULES: OverlayModuleConfig[] = [
-  { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-right' },
-  { id: 'radio', type: 'radio', title: 'Radio', visible: true, minimized: false, width: 280, height: 100, opacity: 0.65, locked: false, zIndex: 100, fontSize: 1, bgColor: '', anchor: 'bottom-left', radioDensity: 'medium', radioShowSpeakers: true, radioShowParticipants: true, radioShowAdvancedStatus: true },
-  { id: 'notification', type: 'notification', title: 'Notifications', visible: true, minimized: false, width: 320, height: 80, opacity: 0.9, locked: false, zIndex: 200, fontSize: 1, bgColor: '', anchor: 'top-left' },
+  { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-right', category: 'navigation', allowInteraction: false },
+  { id: 'radio', type: 'radio', title: 'Radio', visible: true, minimized: false, width: 280, height: 100, opacity: 0.65, locked: false, zIndex: 100, fontSize: 1, bgColor: '', anchor: 'bottom-left', radioDensity: 'medium', radioShowSpeakers: true, radioShowParticipants: true, radioShowAdvancedStatus: true, category: 'communication', allowInteraction: true },
+  { id: 'notification', type: 'notification', title: 'Notifications', visible: true, minimized: false, width: 320, height: 80, opacity: 0.9, locked: false, zIndex: 200, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'hud', allowInteraction: false },
+  // Mining panels
+  { id: 'mining-session-info', type: 'mining', miningPanelType: 'info', title: 'Session Mining', visible: false, minimized: false, width: 280, height: 100, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
+  { id: 'mining-session-rocks', type: 'mining', miningPanelType: 'rocks', title: 'Roches', visible: false, minimized: false, width: 320, height: 180, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
+  { id: 'mining-session-cargo', type: 'mining', miningPanelType: 'cargo', title: 'Cargo', visible: false, minimized: false, width: 280, height: 140, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
+  { id: 'mining-session-participants', type: 'mining', miningPanelType: 'participants', title: 'Équipe', visible: false, minimized: false, width: 260, height: 150, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
+  { id: 'mining-session-actions', type: 'mining', miningPanelType: 'actions', title: 'Actions', visible: false, minimized: false, width: 240, height: 100, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
 ]
 
 // ─── Notifications overlay ────────────────────────────────────────────────────
@@ -102,6 +114,15 @@ export interface AppSettings {
   mapToggleKeyCode?: number | null
   cycleModeKey?: string | null
   cycleModeKeyCode?: number | null
+  cycleBuiltInKey?: string | null
+  cycleBuiltInKeyCode?: number | null
+  cycleCustomKey?: string | null
+  cycleCustomKeyCode?: number | null
+  interactionKey?: string | null
+  interactionKeyCode?: number | null
+  interactionKeyMode?: 'hold' | 'toggle'
+  overlayEditKey?: string | null
+  overlayEditKeyCode?: number | null
   mapOverlayOpacity?: number
   overlayLayout?: OverlayLayout
   overlayModules?: OverlayModuleConfig[]

@@ -16,6 +16,7 @@ export function createOverlayUrls(settings: AppSettings) {
   const o = settings.urls
 
   return {
+    base: base,
     auth: url(base, o, 'auth'),
     update: url('https://updates.1ercorpscolonial.fr', o, settings.preProd ? 'preProd' : 'update'),
     transports: {
@@ -82,8 +83,9 @@ export function createOverlayUrls(settings: AppSettings) {
       rocks: url(base, o, 'mining', 'rocks'),
       refineryNotifyAck: url(base, o, 'mining', 'refinery', 'notifyAck'),
       refineryYieldsBonus: url(base, o, 'mining', 'refinery', 'yieldsBonus'),
-      sessions:      url(base, o, 'mining', 'sessions'),
-      ships:         url(base, o, 'mining', 'ships'),
+      sessions:      url(base, o, 'mining', 'session', 'index'),
+      sessionsShipsSearch: url(base, o, 'mining', 'session', 'shipsSearch'),
+      sessionsShips: url(base, o, 'mining', 'session', 'ships'),
       loadoutShips:  url(base, o, 'mining', 'loadout', 'ships'),
       loadoutLasers: url(base, o, 'mining', 'loadout', 'lasers'),
       loadoutModules:url(base, o, 'mining', 'loadout', 'modules'),

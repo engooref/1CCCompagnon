@@ -24,11 +24,23 @@ declare global {
       offMercureMessage: () => void
       onMercureError: (cb: (reason: string) => void) => void
       offMercureError: () => void
+      sessionSseConnect: (url: string) => Promise<void>
+      sessionSseDisconnect: () => Promise<void>
+      onSessionSseMessage: (cb: (data: string) => void) => void
+      offSessionSseMessage: () => void
+      onSessionSseError: (cb: (reason: string) => void) => void
+      offSessionSseError: () => void
+      onSessionSseMessage: (cb: (data: string) => void) => void
+      offSessionSseMessage: () => void
+      onSessionSseError: (cb: (reason: string) => void) => void
+      offSessionSseError: () => void
       pickFolder: () => Promise<string | null>
       setWindowSize: (size: string) => Promise<boolean>
       setToggleKey:    (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
       setMapToggleKey: (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
-      setCycleModeKey: (key: string | { accel: string; keyCode: number | null } | null) => Promise<boolean>
+      setCycleModeKey:    (key: string | { accel: string; keyCode: number | null } | null) => Promise<boolean>
+      setCycleBuiltInKey: (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
+      setCycleCustomKey:  (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
       // Overlay logs
       getLogs:         () => Promise<LogEntry[]>
       subscribeLogs:   () => Promise<LogEntry[]>

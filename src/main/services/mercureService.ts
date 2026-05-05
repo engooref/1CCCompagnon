@@ -13,7 +13,7 @@ interface SseSession {
   stopped: boolean
 }
 
-const sessions = new Map<number, SseSession>()
+const sessions = new Map<string, SseSession>()
 
 const MIN_RETRY_MS  = 1_000
 const MAX_RETRY_MS  = 30_000
@@ -54,96 +54,94 @@ function extractMessages(buffer: string): { messages: string[]; rest: string } {
   return { messages, rest: buffer.slice(cursor) }
 }
 
-function connect(senderId: number, session: SseSession) {
+function connect(key: string, session: SseSession) {
   if (session.stopped) return
 
   const parsed = new URL(session.url)
   const lib = parsed.protocol === 'https:' ? https : http
 
-  logger.info(`[Mercure:${senderId}] connexion SSE vers`, session.url.split('?')[0])
+  logger.info(`[Mercure:${key}] connexion SSE vers`, session.url.split('?')[0])
 
   const req = lib.get(
     session.url,
     {
       headers: {
-        'Accept':     'text/event-stream',
+        'Accept':        'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        'Connection':    'keep-alive',
       },
     },
     (res) => {
-      logger.info(`[Mercure:${senderId}] réponse HTTP status=${res.statusCode}`)
+      logger.info(`[Mercure:${key}] réponse HTTP status=${res.statusCode}`)
 
       if (res.statusCode !== 200) {
-        logger.error(`[Mercure:${senderId}] statut inattendu ${res.statusCode}, reconnexion dans ${session.retryDelay}ms`)
+        logger.error(`[Mercure:${key}] statut inattendu ${res.statusCode}, reconnexion dans ${session.retryDelay}ms`)
         session.onError(`Erreur Mercure HTTP ${res.statusCode}`)
         res.resume()
-        scheduleReconnect(senderId, session)
+        scheduleReconnect(key, session)
         return
       }
 
-      // Connexion établie → reset backoff
       session.retryDelay = MIN_RETRY_MS
 
       let buffer = ''
       res.setEncoding('utf8')
 
       res.on('data', (chunk: string) => {
-        logger.debug(`[Mercure:${senderId}] chunk (${chunk.length} chars):`, JSON.stringify(chunk.slice(0, 200)))
+        logger.debug(`[Mercure:${key}] chunk (${chunk.length} chars):`, JSON.stringify(chunk.slice(0, 200)))
         buffer += chunk
         const parsed = extractMessages(buffer)
         buffer = parsed.rest
         for (const msg of parsed.messages) {
-          logger.debug(`[Mercure:${senderId}] message:`, msg.slice(0, 200))
+          logger.debug(`[Mercure:${key}] message:`, msg.slice(0, 200))
           session.onMessage(msg)
         }
       })
 
       res.on('end', () => {
         if (session.stopped) return
-        logger.warn(`[Mercure:${senderId}] SSE fermée par le serveur, reconnexion dans ${session.retryDelay}ms`)
-        scheduleReconnect(senderId, session)
+        logger.warn(`[Mercure:${key}] SSE fermée par le serveur, reconnexion dans ${session.retryDelay}ms`)
+        scheduleReconnect(key, session)
       })
 
       res.on('error', (e: Error) => {
         if (session.stopped) return
-        logger.error(`[Mercure:${senderId}] erreur SSE:`, e.message, '→ reconnexion dans', session.retryDelay, 'ms')
+        logger.error(`[Mercure:${key}] erreur SSE:`, e.message, '→ reconnexion dans', session.retryDelay, 'ms')
         session.onError(e.message)
-        scheduleReconnect(senderId, session)
+        scheduleReconnect(key, session)
       })
     },
   )
 
   req.on('error', (e: Error) => {
     if (session.stopped) return
-    logger.error(`[Mercure:${senderId}] erreur requête:`, e.message, '→ reconnexion dans', session.retryDelay, 'ms')
+    logger.error(`[Mercure:${key}] erreur requête:`, e.message, '→ reconnexion dans', session.retryDelay, 'ms')
     session.onError(e.message)
-    scheduleReconnect(senderId, session)
+    scheduleReconnect(key, session)
   })
 
   session.req = req
 }
 
-function scheduleReconnect(senderId: number, session: SseSession) {
+function scheduleReconnect(key: string, session: SseSession) {
   if (session.stopped) return
-  if (session.retryTimer) return // déjà planifié
+  if (session.retryTimer) return
 
   session.retryTimer = setTimeout(() => {
     session.retryTimer = null
-    if (!session.stopped) connect(senderId, session)
+    if (!session.stopped) connect(key, session)
   }, session.retryDelay)
 
-  // Backoff exponentiel plafonné
   session.retryDelay = Math.min(session.retryDelay * 2, MAX_RETRY_MS)
 }
 
 export function startMercureSse(
-  senderId: number,
+  key: string,
   url: string,
   onMessage: (data: string) => void,
   onError: (reason: string) => void,
 ) {
-  stopMercureSse(senderId)
+  stopMercureSse(key)
 
   const session: SseSession = {
     req: null,
@@ -155,20 +153,20 @@ export function startMercureSse(
     stopped: false,
   }
 
-  sessions.set(senderId, session)
-  connect(senderId, session)
+  sessions.set(key, session)
+  connect(key, session)
 }
 
-export function stopMercureSse(senderId: number) {
-  const session = sessions.get(senderId)
+export function stopMercureSse(key: string) {
+  const session = sessions.get(key)
   if (!session) return
   session.stopped = true
   if (session.retryTimer) { clearTimeout(session.retryTimer); session.retryTimer = null }
   session.req?.destroy()
-  sessions.delete(senderId)
-  logger.info(`[Mercure:${senderId}] arrêté`)
+  sessions.delete(key)
+  logger.info(`[Mercure:${key}] arrêté`)
 }
 
 export function stopAllMercureSse() {
-  for (const id of sessions.keys()) stopMercureSse(id)
+  for (const key of sessions.keys()) stopMercureSse(key)
 }

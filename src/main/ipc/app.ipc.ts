@@ -75,6 +75,68 @@ export function registerAppIpc(
     return true
   })
 
+
+  ipcMain.handle('app:set-cycle-builtin-key', async (_e, payload: any) => {
+    const setKey = (global as any).__setCycleBuiltInKey
+    if (payload === null) {
+      setSettings({ cycleBuiltInKey: null, cycleBuiltInKeyCode: null })
+      setKey?.(null)
+    } else if (payload && typeof payload === 'object') {
+      const accel = payload.accel ?? payload.key ?? ''
+      const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
+      setSettings({ cycleBuiltInKey: accel || null, cycleBuiltInKeyCode: keyCode })
+      setKey?.({ accel, keyCode })
+    }
+    return true
+  })
+
+  ipcMain.handle('app:set-cycle-custom-key', async (_e, payload: any) => {
+    const setKey = (global as any).__setCycleCustomKey
+    if (payload === null) {
+      setSettings({ cycleCustomKey: null, cycleCustomKeyCode: null })
+      setKey?.(null)
+    } else if (payload && typeof payload === 'object') {
+      const accel = payload.accel ?? payload.key ?? ''
+      const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
+      setSettings({ cycleCustomKey: accel || null, cycleCustomKeyCode: keyCode })
+      setKey?.({ accel, keyCode })
+    }
+    return true
+  })
+
+  ipcMain.handle('app:set-interaction-key', async (_e, payload: any) => {
+    const setKey = (global as any).__setInteractionKey
+    if (payload === null) {
+      setSettings({ interactionKey: null, interactionKeyCode: null })
+      setKey?.(null)
+    } else if (payload && typeof payload === 'object') {
+      const accel = payload.accel ?? payload.key ?? ''
+      const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
+      setSettings({ interactionKey: accel || null, interactionKeyCode: keyCode })
+      setKey?.({ accel, keyCode })
+    }
+    return true
+  })
+
+  ipcMain.handle('app:set-interaction-key-mode', async (_e, mode: 'hold' | 'toggle') => {
+    setSettings({ interactionKeyMode: mode })
+    ;(global as any).__setInteractionKeyMode?.(mode)
+    return true
+  })
+
+  ipcMain.handle('app:set-overlay-edit-key', async (_e, payload: any) => {
+    if (payload === null) {
+      setSettings({ overlayEditKey: null, overlayEditKeyCode: null })
+      ;(global as any).__setOverlayEditKey?.(null)
+    } else if (payload && typeof payload === 'object') {
+      const accel = payload.accel ?? ''
+      const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
+      setSettings({ overlayEditKey: accel || null, overlayEditKeyCode: keyCode })
+      ;(global as any).__setOverlayEditKey?.({ accel, keyCode })
+    }
+    return true
+  })
+
   ipcMain.handle('app:set-map-toggle-key', async (_e, payload: any) => {
     const setKey = (global as any).__setMapToggleKey
     if (typeof payload === 'string') {
@@ -142,13 +204,13 @@ export function registerAppIpc(
   ipcMain.handle('mercure:connect', (event, url: string) => {
     const sender = event.sender
     startMercureSse(
-      sender.id,
+      String(sender.id),
       url,
       (data: string)   => { if (!sender.isDestroyed()) sender.send('mercure:message', data) },
       (reason: string) => { if (!sender.isDestroyed()) sender.send('mercure:error', reason) },
     )
   })
-  ipcMain.handle('mercure:disconnect', (event) => stopMercureSse(event.sender.id))
+  ipcMain.handle('mercure:disconnect', (event) => stopMercureSse(String(event.sender.id)))
 
   ipcMain.handle('app:pick-folder', async (event) => {
     const win = require('electron').BrowserWindow.fromWebContents(event.sender)

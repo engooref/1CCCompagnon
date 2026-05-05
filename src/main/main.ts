@@ -144,7 +144,7 @@ function setOverlayEditMode(enabled: boolean): boolean {
     sendToOverlay('overlay:edit-mode', true)
     logger.info('[overlay] edit mode enabled')
     return true
-  }
+  } 
 
   overlayEditMode = false
   setOverlayInteractive(false)
@@ -157,6 +157,9 @@ function toggleOverlayEditMode() {
   const now = Date.now()
   if (now - lastEditToggleAt < 250) return
   lastEditToggleAt = now
+  const ow = getOverlayWindow()
+  // Ignore si overlay non visible
+  if (!ow || !ow.isVisible()) return
   setOverlayEditMode(!overlayEditMode)
 }
 
@@ -396,9 +399,15 @@ app.whenReady().then(async () => {
     },
 
     onUnfocus() {
-      logger.info('[overlay] SC perd le focus — hide overlay')
       isGameFocused = false
-      setOverlayEditMode(false)
+      // En mode édition, SC perd le focus car l'overlay est interactif
+      // On ferme l'éditeur mais on ne cache PAS l'overlay
+      if (overlayEditMode) {
+        logger.info('[overlay] SC perd le focus — edit mode actif, fermeture éditeur sans hide')
+        setOverlayEditMode(false)
+        return
+      }
+      logger.info('[overlay] SC perd le focus — hide overlay')
       mapOnlyMode = false
       mapCurrentlyVisible = false
       sendGameBounds(null)
@@ -499,7 +508,7 @@ app.whenReady().then(async () => {
 
   let currentKey = getSettings().toggleKey || 'F10'
   const currentKeyCode = getSettings().toggleKeyCode
-  const overlayEditShortcut = 'CommandOrControl+Shift+E'
+  let overlayEditShortcut = getSettings().overlayEditKey || 'CommandOrControl+Shift+E'
 
   let lastToggleAt = 0
   const toggleOverlay = () => {
@@ -599,25 +608,31 @@ app.whenReady().then(async () => {
   registerToggleKey(currentKey)
   if (typeof currentKeyCode === 'number') registerIoHook(currentKeyCode, currentKey)
 
-  try { globalShortcut.unregister(overlayEditShortcut) } catch {}
-  globalShortcut.register(overlayEditShortcut, toggleOverlayEditMode)
-
-  if (editIoHookKeyDown) uIOhook.off('keydown', editIoHookKeyDown)
-  if (editIoHookKeyUp) uIOhook.off('keyup', editIoHookKeyUp)
-
-  editIoHookKeyDown = (event: any) => {
-    if (event?.keycode === 29 || event?.keycode === 3613) editCtrlPressed = true
-    if (event?.keycode === 42 || event?.keycode === 54) editShiftPressed = true
-    if (event?.keycode === 18 && editCtrlPressed && editShiftPressed) toggleOverlayEditMode()
+  function registerEditKey(accel: string, domCode: number | null | undefined) {
+    try { globalShortcut.unregister(overlayEditShortcut) } catch {}
+    overlayEditShortcut = accel
+    try { globalShortcut.register(accel, toggleOverlayEditMode) } catch {}
+    if (editIoHookKeyDown) { uIOhook.off('keydown', editIoHookKeyDown); editIoHookKeyDown = null }
+    if (editIoHookKeyUp)   { uIOhook.off('keyup',   editIoHookKeyUp);   editIoHookKeyUp   = null }
+    if (domCode) {
+      editIoHookKeyDown = (event: any) => { if (accelMatchesEvent(accel, event)) toggleOverlayEditMode() }
+      uIOhook.on('keydown', editIoHookKeyDown)
+    } else {
+      editIoHookKeyDown = (event: any) => {
+        if (event?.keycode === 29 || event?.keycode === 3613) editCtrlPressed = true
+        if (event?.keycode === 42 || event?.keycode === 54) editShiftPressed = true
+        if (event?.keycode === 18 && editCtrlPressed && editShiftPressed) toggleOverlayEditMode()
+      }
+      editIoHookKeyUp = (event: any) => {
+        if (event?.keycode === 29 || event?.keycode === 3613) editCtrlPressed = false
+        if (event?.keycode === 42 || event?.keycode === 54) editShiftPressed = false
+      }
+      uIOhook.on('keydown', editIoHookKeyDown)
+      uIOhook.on('keyup',   editIoHookKeyUp)
+    }
   }
-
-  editIoHookKeyUp = (event: any) => {
-    if (event?.keycode === 29 || event?.keycode === 3613) editCtrlPressed = false
-    if (event?.keycode === 42 || event?.keycode === 54) editShiftPressed = false
-  }
-
-  uIOhook.on('keydown', editIoHookKeyDown)
-  uIOhook.on('keyup', editIoHookKeyUp)
+  const _es = getSettings()
+  registerEditKey(_es.overlayEditKey || 'CommandOrControl+Shift+E', _es.overlayEditKeyCode)
 
   ;(global as any).__setToggleKey = (newKey: string | ToggleKeyObject) => {
     if (typeof newKey === 'string') {
@@ -627,6 +642,10 @@ app.whenReady().then(async () => {
       if (newKey.accel) { currentKey = newKey.accel; registerToggleKey(newKey.accel) }
       if (typeof newKey.keyCode === 'number') { unregisterIoHook(); registerIoHook(newKey.keyCode, newKey.accel) }
     }
+  }
+
+  ;(global as any).__setOverlayEditKey = (payload: { accel: string; keyCode: number | null } | null) => {
+    registerEditKey(payload?.accel || 'CommandOrControl+Shift+E', payload?.keyCode ?? null)
   }
 
   ;(global as any).__setOverlayEditMode = (enabled: boolean) => {
@@ -708,12 +727,164 @@ app.whenReady().then(async () => {
   const initialCycleKeyCode = getSettings().cycleModeKeyCode
   registerCycleModeKey(initialCycleKey, initialCycleKeyCode)
 
-  ;(global as any).__setCycleModeKey = (payload: string | { accel: string; keyCode: number | null }) => {
-    if (typeof payload === 'string') {
-      registerCycleModeKey(payload, null)
-    } else if (payload && typeof payload === 'object') {
-      registerCycleModeKey(payload.accel || null, payload.keyCode)
+  ;(global as any).__setCycleModeKey = (payload: string | { accel: string; keyCode: number | null } | null) => {
+    if (!payload) { registerCycleModeKey(null, null); return }
+    if (typeof payload === 'string') registerCycleModeKey(payload, null)
+    else registerCycleModeKey(payload.accel || null, payload.keyCode)
+  }
+
+  // ─── Touche cycle modes généraux ────────────────────────────────────────────
+
+  let cycleBuiltInHandler: ((e: any) => void) | null = null
+
+  function cycleToNextBuiltIn() {
+    const registry = getRegistry()
+    const builtIn = registry.modes.filter((m) => m.builtIn)
+    if (builtIn.length < 2) return
+    const idx = builtIn.findIndex((m) => m.id === registry.activeModeId)
+    const nextIdx = (idx + 1) % builtIn.length
+    const next = builtIn[nextIdx]
+    if (!next) return
+    setActiveMode(next.id)
+    sendToOverlay('overlay:layout-update', getLayout())
+    sendToOverlay('overlay:active-mode', next.id)
+  }
+
+  function registerCycleBuiltInKey(accel?: string | null, keyCode?: number | null) {
+    if (cycleBuiltInHandler) { uIOhook.off('keydown', cycleBuiltInHandler); cycleBuiltInHandler = null }
+    if (accel) {
+      const uiCode = accelToUiohook(accel)
+      if (uiCode !== null) {
+        cycleBuiltInHandler = (e: any) => { if (accelMatchesEvent(accel, e)) cycleToNextBuiltIn() }
+        uIOhook.on('keydown', cycleBuiltInHandler)
+      }
+    } else if (typeof keyCode === 'number') {
+      const uiCode = DOM_TO_UIOHOOK[keyCode]
+      if (uiCode !== undefined) {
+        cycleBuiltInHandler = (e: any) => { if (e?.keycode === uiCode && !e.ctrlKey && !e.altKey && !e.shiftKey) cycleToNextBuiltIn() }
+        uIOhook.on('keydown', cycleBuiltInHandler)
+      }
     }
+  }
+
+  registerCycleBuiltInKey(getSettings().cycleBuiltInKey, getSettings().cycleBuiltInKeyCode)
+
+  ;(global as any).__setCycleBuiltInKey = (payload: { accel: string; keyCode: number | null } | null) => {
+    if (!payload) { registerCycleBuiltInKey(null, null); return }
+    registerCycleBuiltInKey(payload.accel || null, payload.keyCode)
+  }
+
+  // ─── Touche cycle modes personnalisés ──────────────────────────────────────
+
+  let cycleCustomHandler: ((e: any) => void) | null = null
+
+  function cycleToNextCustom() {
+    const registry = getRegistry()
+    const custom = registry.modes.filter((m) => !m.builtIn)
+    if (custom.length < 2) return
+    const idx = custom.findIndex((m) => m.id === registry.activeModeId)
+    const nextIdx = (idx + 1) % custom.length
+    const next = custom[nextIdx]
+    if (!next) return
+    setActiveMode(next.id)
+    sendToOverlay('overlay:layout-update', getLayout())
+    sendToOverlay('overlay:active-mode', next.id)
+  }
+
+  function registerCycleCustomKey(accel?: string | null, keyCode?: number | null) {
+    if (cycleCustomHandler) { uIOhook.off('keydown', cycleCustomHandler); cycleCustomHandler = null }
+    if (accel) {
+      const uiCode = accelToUiohook(accel)
+      if (uiCode !== null) {
+        cycleCustomHandler = (e: any) => { if (accelMatchesEvent(accel, e)) cycleToNextCustom() }
+        uIOhook.on('keydown', cycleCustomHandler)
+      }
+    } else if (typeof keyCode === 'number') {
+      const uiCode = DOM_TO_UIOHOOK[keyCode]
+      if (uiCode !== undefined) {
+        cycleCustomHandler = (e: any) => { if (e?.keycode === uiCode && !e.ctrlKey && !e.altKey && !e.shiftKey) cycleToNextCustom() }
+        uIOhook.on('keydown', cycleCustomHandler)
+      }
+    }
+  }
+
+  registerCycleCustomKey(getSettings().cycleCustomKey, getSettings().cycleCustomKeyCode)
+
+  ;(global as any).__setCycleCustomKey = (payload: { accel: string; keyCode: number | null } | null) => {
+    if (!payload) { registerCycleCustomKey(null, null); return }
+    registerCycleCustomKey(payload.accel || null, payload.keyCode)
+  }
+
+  // ─── Touche interaction modules ──────────────────────────────────────────
+
+  let interactionActive = false
+  let interactionKeydownHandler: ((e: any) => void) | null = null
+  let interactionKeyupHandler: ((e: any) => void) | null = null
+
+  function pushInteractionNotif(active: boolean) {
+    sendToOverlay('overlay:notification', {
+      id: 'interaction-' + Date.now(),
+      title: 'Interaction souris',
+      message: active ? 'Mode interaction activé' : 'Mode interaction désactivé',
+      type: 'info',
+      duration: 2000,
+    })
+  }
+
+  function registerInteractionKey(accel: string | null, domCode: number | null | undefined, mode: 'hold' | 'toggle' = 'toggle') {
+    if (interactionKeydownHandler) { uIOhook.off('keydown', interactionKeydownHandler); interactionKeydownHandler = null }
+    if (interactionKeyupHandler)   { uIOhook.off('keyup',   interactionKeyupHandler);   interactionKeyupHandler   = null }
+    if (!domCode || !accel) { logger.info('[overlay] interaction: aucune touche configuree'); return }
+    const uiCode = domKeyCodeToUiohook(domCode)
+    logger.info('[overlay] interaction key registered: ' + accel + ' uiCode=' + uiCode + ' mode=' + mode)
+    if (mode === 'toggle') {
+      interactionKeydownHandler = (e: any) => {
+        if (e?.keycode !== uiCode) return
+        if (!accelMatchesEvent(accel, e)) return
+        if (overlayEditMode) { logger.info('[overlay] interaction ignoree: edit mode actif'); return }
+        interactionActive = !interactionActive
+        setOverlayInteractive(interactionActive)
+        sendToOverlay('overlay:interaction-mode', interactionActive)
+        logger.info('[overlay] interaction mode ' + (interactionActive ? 'active' : 'desactive') + ' (toggle)')
+        pushInteractionNotif(interactionActive)
+      }
+      uIOhook.on('keydown', interactionKeydownHandler)
+    } else {
+      interactionKeydownHandler = (e: any) => {
+        if (e?.keycode !== uiCode || interactionActive) return
+        if (!accelMatchesEvent(accel, e)) return
+        if (overlayEditMode) { logger.info('[overlay] interaction ignoree: edit mode actif'); return }
+        interactionActive = true
+        setOverlayInteractive(true)
+        sendToOverlay('overlay:interaction-mode', true)
+        logger.info('[overlay] interaction mode active (hold)')
+        pushInteractionNotif(true)
+      }
+      interactionKeyupHandler = (e: any) => {
+        if (e?.keycode !== uiCode || !interactionActive) return
+        interactionActive = false
+        if (!overlayEditMode) {
+          setOverlayInteractive(false)
+          sendToOverlay('overlay:interaction-mode', false)
+          logger.info('[overlay] interaction mode desactive (hold)')
+          pushInteractionNotif(false)
+        }
+      }
+      uIOhook.on('keydown', interactionKeydownHandler)
+      uIOhook.on('keyup', interactionKeyupHandler)
+    }
+  }
+
+  const _is = getSettings()
+  registerInteractionKey(_is.interactionKey ?? null, _is.interactionKeyCode, _is.interactionKeyMode ?? 'toggle')
+
+  ;(global as any).__setInteractionKey = (payload: { accel: string; keyCode: number | null } | null) => {
+    const mode = getSettings().interactionKeyMode ?? 'toggle'
+    registerInteractionKey(payload?.accel ?? null, payload?.keyCode ?? null, mode)
+  }
+  ;(global as any).__setInteractionKeyMode = (mode: 'hold' | 'toggle') => {
+    const s = getSettings()
+    registerInteractionKey(s.interactionKey ?? null, s.interactionKeyCode, mode)
   }
 
   app.on('activate', () => {

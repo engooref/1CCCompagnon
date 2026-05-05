@@ -6,12 +6,13 @@ const positions = reactive<OverlayLayout>({})
 const modules = reactive<OverlayModuleConfig[]>([])
 
 function normalizeModule(mod: Partial<OverlayModuleConfig> & Pick<OverlayModuleConfig, 'id' | 'type' | 'title'>): OverlayModuleConfig {
-  const fallback = DEFAULT_OVERLAY_MODULES.find((m) => m.id === mod.id || m.type === mod.type)
+  const fallback = DEFAULT_OVERLAY_MODULES.find((m) => m.id === mod.id)
+    ?? DEFAULT_OVERLAY_MODULES.find((m) => m.type === mod.type)
   return {
     id: mod.id,
     type: mod.type,
     title: mod.title,
-    visible: mod.visible ?? true,
+    visible: mod.visible ?? fallback?.visible ?? true,
     minimized: mod.minimized ?? false,
     width: Math.max(140, Math.round(mod.width ?? fallback?.width ?? 240)),
     height: Math.max(56, Math.round(mod.height ?? fallback?.height ?? 100)),
@@ -21,6 +22,9 @@ function normalizeModule(mod: Partial<OverlayModuleConfig> & Pick<OverlayModuleC
     fontSize:    Math.min(1.5, Math.max(0.75, mod.fontSize ?? fallback?.fontSize ?? 1)),
     bgColor:     mod.bgColor ?? fallback?.bgColor ?? '',
     anchor: mod.anchor ?? fallback?.anchor ?? 'top-left',
+    category: fallback?.category ?? mod.category ?? 'autre',
+    miningPanelType: mod.miningPanelType ?? fallback?.miningPanelType,
+    allowInteraction: mod.allowInteraction ?? fallback?.allowInteraction ?? false,
     radioDensity: mod.radioDensity ?? fallback?.radioDensity ?? 'medium',
     radioShowSpeakers: mod.radioShowSpeakers ?? fallback?.radioShowSpeakers ?? true,
     radioShowParticipants: mod.radioShowParticipants ?? fallback?.radioShowParticipants ?? true,
@@ -28,8 +32,11 @@ function normalizeModule(mod: Partial<OverlayModuleConfig> & Pick<OverlayModuleC
   }
 }
 
+const KNOWN_TYPES = new Set(DEFAULT_OVERLAY_MODULES.map((m) => m.type))
+
 function replaceModules(next: OverlayModuleConfig[]) {
-  modules.splice(0, modules.length, ...next.map(normalizeModule))
+  const filtered = next.filter((m) => KNOWN_TYPES.has(m.type))
+  modules.splice(0, modules.length, ...filtered.map(normalizeModule))
 }
 
 replaceModules(DEFAULT_OVERLAY_MODULES)
@@ -49,6 +56,11 @@ export function useOverlayLayout() {
       const notifDefault = DEFAULT_OVERLAY_MODULES.find((m) => m.type === 'notification')!
       mods = [...mods, notifDefault]
     }
+    // Garantit que les modules mining sont toujours présents même dans les layouts anciens
+    const missingMining = DEFAULT_OVERLAY_MODULES.filter(
+      (d) => d.type === 'mining' && !mods.find((m) => m.id === d.id)
+    )
+    if (missingMining.length) mods = [...mods, ...missingMining]
     replaceModules(mods)
   }
 

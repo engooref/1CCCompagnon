@@ -7,7 +7,7 @@ import { usePinnedMap } from '../../composables/usePinnedMap'
 import { useMercure } from '../../composables/useMercure'
 import { useMapLeaflet, type MapFeature } from '../../composables/useMapLeaflet'
 
-const { pinnedMapId } = usePinnedMap()
+const { pinnedMapId, unpin } = usePinnedMap()
 const { connected: liveConnected, sseError, connect: connectMercure, disconnect: disconnectMercure } = useMercure()
 
 const leaflet = useMapLeaflet()
@@ -87,14 +87,14 @@ async function loadMap(id: number | null) {
 
   const info = await fetchMapInfo(id)
   if (gen !== loadGen) { logger.warn('[MapModule] loadMap: génération obsolète après fetchMapInfo gen=' + gen + ' loadGen=' + loadGen); return }
-  if (!info) { logger.error('[MapModule] loadMap: fetchMapInfo retourné null → mapError'); mapError.value = true; return }
+  if (!info) { logger.error('[MapModule] loadMap: fetchMapInfo retourné null → mapError + unpin'); mapError.value = true; unpin(); return }
   currentMapInfo = info
 
   logger.info('[MapModule] loadMap: fetch image →', info.imageUrl)
   try {
     const resp = await fetch(info.imageUrl, { headers: { Authorization: `Bearer ${token}` } })
     if (gen !== loadGen) { logger.warn('[MapModule] loadMap: génération obsolète après fetch image'); return }
-    if (!resp.ok) { logger.error('[MapModule] loadMap: fetch image HTTP', resp.status, resp.statusText); mapError.value = true; return }
+    if (!resp.ok) { logger.error('[MapModule] loadMap: fetch image HTTP', resp.status, resp.statusText); mapError.value = true; if (resp.status === 404) unpin(); return }
     imageBlobUrl = URL.createObjectURL(await resp.blob())
     logger.info('[MapModule] loadMap: image blob créée →', imageBlobUrl)
   } catch (e) { logger.error('[MapModule] loadMap: erreur fetch image', e); mapError.value = true; return }

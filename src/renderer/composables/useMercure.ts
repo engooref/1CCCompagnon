@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, onUnmounted, getCurrentInstance } from 'vue'
 import { http } from '../services/http'
 import { logger } from '../services/logger'
 
@@ -103,7 +103,7 @@ export function useMercure() {
     currentUrl.value = null
   }
 
-  onUnmounted(disconnect)
+  if (getCurrentInstance()) onUnmounted(disconnect)
 
   return { connected, sseError, currentUrl, connect, disconnect }
 }
