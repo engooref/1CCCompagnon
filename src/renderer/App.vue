@@ -19,7 +19,8 @@ watchEffect(() => {
 
 // Lancer l'init pendant la splash screen
 onMounted(() => {
-  if (!isOverlay.value) app.init()
+  if (isOverlay.value) app.initOverlay()
+  else app.init()
 })
 </script>
 

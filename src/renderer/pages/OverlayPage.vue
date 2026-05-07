@@ -7,6 +7,7 @@ import RadioModule from '../components/overlay/RadioModule.vue'
 import ModeSelector from '../components/overlay/ModeSelector.vue'
 import NotificationModule from '../components/overlay/NotificationModule.vue'
 import SessionModule from '../components/overlay/SessionModule.vue'
+import SessionLogModule from '../components/overlay/SessionLogModule.vue'
 import { useOverlayLayout } from '../composables/useOverlayLayout'
 import { usePinnedMap } from '../composables/usePinnedMap'
 import { usePinnedSession } from '../composables/usePinnedSession'
@@ -14,8 +15,13 @@ import { usePinnedTransport } from '../composables/usePinnedTransport'
 import { useOverlayInSituEditor } from '../composables/useOverlayInSituEditor'
 import { useNotificationBus } from '../composables/useNotificationBus'
 import { useModeStore } from '../stores/mode'
+import { useAppStore } from '../stores/app'
+import { useMiningStore } from '../stores/mining'
 
 const modeStore = useModeStore()
+const appStore  = useAppStore()
+const miningStore = useMiningStore()
+const editShortcut = computed(() => appStore.settings?.overlayEditKey ?? 'Ctrl+Shift+E')
 const { push: pushNotification } = useNotificationBus()
 
 const scBounds  = ref<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -129,9 +135,16 @@ const modulesByCategory = computed(() => {
 
 function isVisible(mod: (typeof modules)[number]): boolean {
   if (mapOnlyMode.value) return false
-  if (mod.type === 'mining') return editMode.value || (mod.visible && pinnedSessionId.value !== null)
-  if (mod.type === 'transport') return editMode.value || pinnedTransport.value
+  // En mode Minage (builtIn), les modules mining s'affichent si session épinglée,
+  // sans tenir compte du flag `visible` (qui peut être false dans un layout sauvegardé ancien)
+  const inMiningMode = modeStore.activeModeId === 'mining'
+  if (mod.type === 'mining' || mod.type === 'session-log') {
+    if (inMiningMode) return editMode.value || pinnedSessionId.value !== null
+    return mod.visible && (editMode.value || pinnedSessionId.value !== null)
+  }
   if (!mod.visible) return false
+  if (mod.visibleOnlyInInteraction && !interactionMode.value && !editMode.value) return false
+  if (mod.type === 'transport') return editMode.value || !!pinnedTransport.value
   return true
 }
 
@@ -139,7 +152,7 @@ function isVisible(mod: (typeof modules)[number]): boolean {
 const INTERACTABLE_MODULE_TYPES = new Set(['radio'])
 
 function isModuleInteractive(mod: OverlayModuleConfig): boolean {
-  return interactionMode.value && INTERACTABLE_MODULE_TYPES.has(mod.type)
+  return interactionMode.value && (mod.allowInteraction || INTERACTABLE_MODULE_TYPES.has(mod.type))
 }
 
 function selectForEditing(id: string) {
@@ -230,6 +243,14 @@ onMounted(async () => {
   window.oneCC.onSettingsUpdate((s: any) => {
     if (s?.mapOverlayOpacity != null) mapOverlayOpacity.value = s.mapOverlayOpacity
   })
+
+  // Point d'entrée unique : tous les events Mercure session propagés depuis le main process
+  window.oneCC.onSessionEvent((raw: string) => {
+    try {
+      const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+      miningStore._handleSessionEvent(data)
+    } catch { /* ignore parse errors */ }
+  })
 })
 
 onUnmounted(() => {
@@ -254,14 +275,12 @@ onUnmounted(() => {
           <div class="flex items-center justify-between gap-6 mb-3">
             <div>
               <div class="font-bold text-[13px] text-white">Édition intégrée</div>
-              <div class="text-[11px] text-sky-300/70 mt-0.5">Glissez les modules · Ctrl+Shift+E pour quitter</div>
+              <div class="text-[11px] text-sky-300/70 mt-0.5">
+                Glissez les modules · appuyez sur
+                <kbd class="mx-0.5 rounded border border-sky-400/30 bg-sky-500/10 px-1 py-0.5 font-mono text-[10px] text-sky-200">{{ editShortcut }}</kbd>
+                pour fermer
+              </div>
             </div>
-            <button
-              class="shrink-0 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-[12px] font-semibold text-sky-100 hover:bg-sky-500/20 transition"
-              @click="exitEditMode"
-            >
-              Quitter
-            </button>
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-2">
             <template v-for="[cat, catMods] in modulesByCategory" :key="cat">
@@ -284,7 +303,7 @@ onUnmounted(() => {
                   >
                     <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="mod.visible ? 'bg-emerald-400' : 'bg-slate-600'" />
                     {{ mod.title }}
-                    <span v-if="INTERACTABLE_MODULE_TYPES.has(mod.type)" class="ml-auto text-[9px] text-amber-300/60" title="Interaction activable">⊙</span>
+                    <span v-if="INTERACTABLE_MODULE_TYPES.has(mod.type) || mod.allowInteraction" class="ml-auto text-[9px] text-amber-300/60" title="Interaction activable">⊙</span>
                   </button>
                 </div>
               </div>
@@ -311,7 +330,6 @@ onUnmounted(() => {
               'pointer-events-auto': !editMode && isModuleInteractive(mod),
               'pointer-events-auto cursor-move': editMode,
               'overlay-module--selected': editMode && selectedId === mod.id,
-              'overlay-module--hidden': editMode && !mod.visible,
               'overlay-module--interactive': !editMode && isModuleInteractive(mod),
             }"
             :style="getStyle(mod.id, scBounds?.width, scBounds?.height)"
@@ -336,7 +354,8 @@ onUnmounted(() => {
                     activeSpeakers: [{ identity: 'Cdt. Dupont', channel: 'OPS-1', audioLevel: 0.8 }],
                   } : null"
                 />
-                <SessionModule v-else-if="mod.type === 'mining'" :config="mod" :preview="editMode" />
+                <SessionModule v-else-if="mod.type === 'mining'" :config="mod" :preview="editMode" :interactive="isModuleInteractive(mod)" />
+                <SessionLogModule v-else-if="mod.type === 'session-log'" :preview="editMode" />
               </div>
             </template>
             <div v-else class="rounded-xl border border-white/10 bg-black/60 px-3 py-1 text-[10px] text-th-muted backdrop-blur-sm">
@@ -495,13 +514,6 @@ onUnmounted(() => {
   border-radius: 18px;
 }
 
-/* Module masqué visible en mode édition uniquement */
-.overlay-module--hidden {
-  opacity: 0.35;
-  outline: 2px dashed rgba(148, 163, 184, 0.5);
-  outline-offset: 2px;
-  border-radius: 18px;
-}
 
 .overlay-module-frame {
   position: absolute;

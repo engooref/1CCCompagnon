@@ -148,6 +148,7 @@ function setOverlayEditMode(enabled: boolean): boolean {
 
   overlayEditMode = false
   setOverlayInteractive(false)
+  if (!ow.isDestroyed() && ow.isFocused()) ow.blur()
   sendToOverlay('overlay:edit-mode', false)
   logger.info('[overlay] edit mode disabled')
   return true
@@ -401,8 +402,13 @@ app.whenReady().then(async () => {
     onUnfocus() {
       isGameFocused = false
       // En mode édition, SC perd le focus car l'overlay est interactif
-      // On ferme l'éditeur mais on ne cache PAS l'overlay
+      // Si c'est l'overlay lui-même qui a pris le focus (clic dans l'éditeur), on ignore
       if (overlayEditMode) {
+        const ow = getOverlayWindow()
+        if (ow && !ow.isDestroyed() && ow.isFocused()) {
+          logger.info('[overlay] SC perd le focus — overlay a le focus (clic éditeur), ignoré')
+          return
+        }
         logger.info('[overlay] SC perd le focus — edit mode actif, fermeture éditeur sans hide')
         setOverlayEditMode(false)
         return
@@ -512,6 +518,12 @@ app.whenReady().then(async () => {
 
   let lastToggleAt = 0
   const toggleOverlay = () => {
+    if (interactionActive) {
+      interactionActive = false
+      setOverlayInteractive(false)
+      sendToOverlay('overlay:interaction-mode', false)
+      logger.info('[overlay] toggle → désactivation mode interaction')
+    }
     const now = Date.now()
     if (now - lastToggleAt < 100) {
       logger.debug('[overlay] toggle ignoré (debounce)')

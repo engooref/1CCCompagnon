@@ -206,11 +206,29 @@ export function registerAppIpc(
     startMercureSse(
       String(sender.id),
       url,
-      (data: string)   => { if (!sender.isDestroyed()) sender.send('mercure:message', data) },
+      (data: string) => {
+        if (!sender.isDestroyed()) sender.send('mercure:message', data)
+        sendToOverlay('mercure:session-event', data)
+      },
       (reason: string) => { if (!sender.isDestroyed()) sender.send('mercure:error', reason) },
     )
   })
   ipcMain.handle('mercure:disconnect', (event) => stopMercureSse(String(event.sender.id)))
+
+  // ── Session SSE — canal dédié indépendant du canal Mercure refinery ──────
+  ipcMain.handle('session-sse:connect', (event, url: string) => {
+    const sender = event.sender
+    startMercureSse(
+      `${sender.id}:session`,
+      url,
+      (data: string) => {
+        if (!sender.isDestroyed()) sender.send('session-sse:message', data)
+        sendToOverlay('mercure:session-event', data)
+      },
+      (reason: string) => { if (!sender.isDestroyed()) sender.send('session-sse:error', reason) },
+    )
+  })
+  ipcMain.handle('session-sse:disconnect', (event) => stopMercureSse(`${event.sender.id}:session`))
 
   ipcMain.handle('app:pick-folder', async (event) => {
     const win = require('electron').BrowserWindow.fromWebContents(event.sender)

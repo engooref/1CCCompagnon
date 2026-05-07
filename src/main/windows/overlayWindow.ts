@@ -81,8 +81,14 @@ export function showOverlay(): void {
 export function setOverlayInteractive(enabled: boolean): void {
   if (!win || win.isDestroyed()) return
   interactive = enabled
-  win.setFocusable(enabled)
   win.setIgnoreMouseEvents(!enabled, { forward: !enabled })
+  if (enabled) {
+    win.setFocusable(true)
+    win.focus()
+  } else {
+    win.setFocusable(false)
+    if (win.isFocused()) win.blur()
+  }
 }
 
 export function hideOverlay(): void {

@@ -182,7 +182,7 @@ export async function previewRefineryTime(method: string, lines: any[]) {
   return data?.data ?? data
 }
 
-export async function joinSession(sessionId: number, payload: { role: string; shipId?: number | null; crewSize?: number | null; crewKey?: string | null }) {
+export async function joinSession(sessionId: number, payload: { role: string; shipId?: number | null; crewTotal?: number | null; crewKey?: string | null }) {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const sessionsUrl = urls?.mining?.sessions ?? `${_base()}/mining/api/sessions`
@@ -435,6 +435,14 @@ export async function updateParticipant(sessionId: number, participantId: number
   return data?.data ?? data
 }
 
+export async function updateCrewStatus(sessionId: number, crewId: number, status: string | null): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${_base()}/mining/api/sessions`
+  const { data } = await http.patch(`${sessionsUrl}/${sessionId}/crews/${crewId}`, { status }, { headers })
+  return data?.data ?? data
+}
+
 export async function assignSubCaptain(sessionId: number, participantId: number): Promise<any> {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const base = _base()
@@ -456,7 +464,7 @@ export async function createSessionOperation(sessionId: number): Promise<any> {
   const headers = { ..._headers(), 'Content-Type': 'application/json' }
   const urls = _urls()
   const sessionsUrl = urls?.mining?.sessions ?? `${_base()}/mining/api/sessions`
-  const { data } = await http.post(`${sessionsUrl}/${sessionId}/operation`, null, { headers })
+  const { data } = await http.post(`${sessionsUrl}/${sessionId}/create-operation`, null, { headers })
   return data?.data ?? data
 }
 
@@ -467,7 +475,7 @@ export async function updateSessionDefaultBody(sessionId: number, bodyId: number
   const base = _base()
   const urls = _urls()
   const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
-  const { data } = await http.patch(`${sessionsUrl}/${sessionId}`, { defaultBodyId: bodyId }, { headers })
+  const { data } = await http.patch(`${sessionsUrl}/${sessionId}/default-body`, { bodyId }, { headers })
   return data?.data ?? data
 }
 
@@ -476,7 +484,7 @@ export async function updateSessionDefaultRefinery(sessionId: number, refineryId
   const base = _base()
   const urls = _urls()
   const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
-  const { data } = await http.patch(`${sessionsUrl}/${sessionId}`, { defaultRefineryId: refineryId }, { headers })
+  const { data } = await http.patch(`${sessionsUrl}/${sessionId}/default-refinery`, { refineryId }, { headers })
   return data?.data ?? data
 }
 

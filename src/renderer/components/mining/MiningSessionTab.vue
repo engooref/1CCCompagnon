@@ -270,37 +270,36 @@ const crewRoleSections = computed(() => {
   const active = mining.sessionActive
   if (!active) return []
   const myId = mining._currentUserId
+  const crewsList: any[] = (active as any).crews ?? []
+  const participants: any[] = active.participants ?? []
 
-  const buildGroups = (role: string) => {
-    const parts = (active.participants ?? []).filter((p: any) => p.role === role)
-    const groups = new Map<string, any>()
-    for (const p of parts) {
-      const key = p.crewKey ?? (p.shipId ? `ship:${p.shipId}` : `solo:${p.id}`)
-      if (!groups.has(key)) {
-        groups.set(key, {
-          key, shipId: p.shipId ?? null, shipName: p.shipName ?? null,
-          members: [], amICaptain: false, amISubCaptain: false, isMyGroup: false,
-          crew: { used: 0, total: p.crewTotal ?? p.crewSize ?? 1, effectiveStatus: null, suggestedStatus: null, isManual: false },
-        })
-      }
-      const g = groups.get(key)!
-      g.members.push(p)
-      g.crew.used = g.members.length
-      g.crew.total = Math.max(g.crew.total, p.crewTotal ?? p.crewSize ?? g.crew.used)
-      if (p.userId === myId) g.isMyGroup = true
-      if ((p.isCaptain || p.rank === 'captain') && p.userId === myId) g.amICaptain = true
-      if ((p.isSubCaptain || p.rank === 'sub_captain') && p.userId === myId) g.amISubCaptain = true
-    }
-    return Array.from(groups.values()).map((g) => {
-      const manualStatus = mining.crewStatusOverrides[g.key] ?? null
-      const suggested = suggestCrewStatus(g.members)
-      g.crew.manualStatus    = manualStatus
-      g.crew.suggestedStatus = suggested
-      g.crew.effectiveStatus = manualStatus || suggested || 'standby'
-      g.crew.isManual        = Boolean(manualStatus)
-      return g
-    })
-  }
+  const buildGroups = (role: string) =>
+    crewsList
+      .filter((c: any) => c.role === role)
+      .map((c: any) => {
+        const key = c.crewKey ?? `crew:${c.id}`
+        const members = participants.filter((p: any) => p.crewId === c.id || p.crewKey === c.crewKey)
+        if (members.length === 0) return null
+        const suggested = suggestCrewStatus(members)
+        return {
+          key,
+          crewId: c.id,
+          shipId: c.shipId ?? null,
+          shipName: c.shipName ?? null,
+          members,
+          isMyGroup: members.some((m: any) => m.userId === myId),
+          amICaptain: members.some((m: any) => m.userId === myId && (m.isCaptain || m.rank === 'captain')),
+          amISubCaptain: members.some((m: any) => m.userId === myId && (m.isSubCaptain || m.rank === 'sub_captain')),
+          crew: {
+            used: c.crewUsed ?? members.length,
+            total: c.crewTotal ?? 1,
+            status: c.status ?? null,
+            suggested,
+            effectiveStatus: c.status ?? suggested ?? 'standby',
+          },
+        }
+      })
+      .filter(Boolean)
 
   return [
     { role: 'miner',      label: 'Équipages miniers', icon: '⛏️', groups: buildGroups('miner') },
@@ -1850,9 +1849,9 @@ onUnmounted(() => {
                     <div class="flex flex-col items-end gap-1.5">
                       <template v-if="(group.amICaptain || group.amISubCaptain) && mining.sessionActive.status !== 'closed'">
                         <select class="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-th-primary focus:outline-none"
-                          :value="group.crew.manualStatus ?? ''"
+                          :value="group.crew.status ?? ''"
                           @change="mining.setCrewStatusOverride(group.key, ($event.target as HTMLSelectElement).value || null)">
-                          <option value="">Auto : {{ crewStatusLabel(group.crew.suggestedStatus ?? 'standby') }}</option>
+                          <option value="">Auto : {{ crewStatusLabel(group.crew.suggested) }}</option>
                           <option v-for="s in crewStatusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
                         </select>
                       </template>

@@ -2,7 +2,31 @@ import { ref, onUnmounted, getCurrentInstance } from 'vue'
 import { http } from '../services/http'
 import { logger } from '../services/logger'
 
-export function useMercure() {
+type MercureChannel = 'refinery' | 'session'
+
+// Helpers to pick the right IPC methods depending on the channel.
+function ipc(channel: MercureChannel) {
+  if (channel === 'session') {
+    return {
+      connect:    (url: string) => window.oneCC.sessionSseConnect(url),
+      disconnect: ()            => window.oneCC.sessionSseDisconnect(),
+      onMessage:  (cb: (data: string) => void) => window.oneCC.onSessionSseMessage(cb),
+      offMessage: ()            => window.oneCC.offSessionSseMessage(),
+      onError:    (cb: (reason: string) => void) => window.oneCC.onSessionSseError(cb),
+      offError:   ()            => window.oneCC.offSessionSseError(),
+    }
+  }
+  return {
+    connect:    (url: string) => window.oneCC.mercureConnect(url),
+    disconnect: ()            => window.oneCC.mercureDisconnect(),
+    onMessage:  (cb: (data: string) => void) => window.oneCC.onMercureMessage(cb),
+    offMessage: ()            => window.oneCC.offMercureMessage(),
+    onError:    (cb: (reason: string) => void) => window.oneCC.onMercureError(cb),
+    offError:   ()            => window.oneCC.offMercureError(),
+  }
+}
+
+export function useMercure(channel: MercureChannel = 'refinery') {
   const connected = ref(false)
   const sseError  = ref<string | null>(null)
   const currentUrl = ref<string | null>(null)
@@ -20,15 +44,15 @@ export function useMercure() {
     authHeader: string,
     onMessage: (data: unknown) => void,
   ) {
-    // Do not forcibly disconnect immediately — we will reuse if identical URL.
     sseError.value = null
+    const ch = ipc(channel)
 
     try {
-      logger.info('[useMercure] fetch mercure-info →', mercureInfoUrl)
+      logger.info(`[useMercure:${channel}] fetch mercure-info →`, mercureInfoUrl)
       const { data } = await http.get(mercureInfoUrl, {
         headers: { Authorization: authHeader },
       })
-      logger.info('[useMercure] mercure-info reçu', data)
+      logger.info(`[useMercure:${channel}] mercure-info reçu`, data)
 
       const { hubUrl, topic, token } = data
       if (!hubUrl || !topic || !token) {
@@ -40,65 +64,63 @@ export function useMercure() {
       url.searchParams.append('topic', topic as string)
       url.searchParams.append('authorization', token as string)
       const urlStr = url.toString()
-      logger.info('[useMercure] connexion SSE →', urlStr.split('?')[0], '| topic=', topic)
-
-      // If already connected to the same url, just add listener and return
+      logger.info(`[useMercure:${channel}] connexion SSE →`, urlStr.split('?')[0], '| topic=', topic)
       if (connected.value && currentUrl.value === urlStr) {
-        window.oneCC.onMercureMessage((raw) => {
+        ch.onMessage((raw) => {
           onMessage(parseMercureMessage(raw))
         })
         return
       }
+    
+      ch.offMessage()
+      ch.offError()
+      await ch.disconnect()
 
-      // Otherwise clean previous listeners and connect anew
-      window.oneCC.offMercureMessage()
-      window.oneCC.offMercureError()
-      await window.oneCC.mercureDisconnect()
-
-      window.oneCC.onMercureMessage((raw) => {
+      ch.onMessage((raw) => {
         try {
-          logger.debug('[useMercure] raw message received', raw)
+          logger.debug(`[useMercure:${channel}] raw message received`, raw)
           const parsed = parseMercureMessage(raw)
-          logger.info('[useMercure] parsed message', parsed)
+          logger.info(`[useMercure:${channel}] parsed message`, parsed)
           onMessage(parsed)
         } catch (err) {
-          logger.error('[useMercure] failed to parse/forward message', err)
+          logger.error(`[useMercure:${channel}] failed to parse/forward message`, err)
         }
       })
 
-      window.oneCC.onMercureError((reason: string) => {
+      ch.onError((reason: string) => {
         const msg = reason || 'Connexion temps réel perdue'
-        logger.error('[useMercure] SSE error →', msg)
+        logger.error(`[useMercure:${channel}] SSE error →`, msg)
         connected.value = false
         currentUrl.value = null
         sseError.value = msg
       })
 
-      await window.oneCC.mercureConnect(urlStr)
-      logger.info('[useMercure] mercureConnect résolu, connected = true')
+      await ch.connect(urlStr)
+      logger.info(`[useMercure:${channel}] connect résolu, connected = true`)
       connected.value = true
       currentUrl.value = urlStr
     } catch (e: any) {
-      logger.error('[useMercure] erreur connexion:', e)
+      logger.error(`[useMercure:${channel}] erreur connexion:`, e)
       try {
         const resp = e?.response
         if (resp) {
-          logger.error('[useMercure] http status=', resp.status, 'data=', resp.data)
+          logger.error(`[useMercure:${channel}] http status=`, resp.status, 'data=', resp.data)
           sseError.value = `Erreur serveur Mercure: ${resp.status}`
         } else {
           sseError.value = 'Impossible de se connecter au flux temps réel'
         }
       } catch (err) {
-        logger.error('[useMercure] erreur logging response:', err)
+        logger.error(`[useMercure:${channel}] erreur logging response:`, err)
         sseError.value = 'Impossible de se connecter au flux temps réel'
       }
     }
   }
 
   async function disconnect() {
-    window.oneCC.offMercureMessage()
-    window.oneCC.offMercureError()
-    await window.oneCC.mercureDisconnect()
+    const ch = ipc(channel)
+    ch.offMessage()
+    ch.offError()
+    await ch.disconnect()
     connected.value = false
     currentUrl.value = null
   }

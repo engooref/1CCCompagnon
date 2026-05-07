@@ -20,6 +20,16 @@ contextBridge.exposeInMainWorld('oneCC', {
   onMercureError: (cb: (reason: string) => void) =>
     ipcRenderer.on('mercure:error', (_e, reason: string) => cb(reason)),
   offMercureError: () => ipcRenderer.removeAllListeners('mercure:error'),
+
+  // ── Canal SSE dédié session mining (indépendant du canal refinery) ────────
+  sessionSseConnect: (url: string) => ipcRenderer.invoke('session-sse:connect', url),
+  sessionSseDisconnect: () => ipcRenderer.invoke('session-sse:disconnect'),
+  onSessionSseMessage: (cb: (data: string) => void) =>
+    ipcRenderer.on('session-sse:message', (_e, data) => cb(data)),
+  offSessionSseMessage: () => ipcRenderer.removeAllListeners('session-sse:message'),
+  onSessionSseError: (cb: (reason: string) => void) =>
+    ipcRenderer.on('session-sse:error', (_e, reason: string) => cb(reason)),
+  offSessionSseError: () => ipcRenderer.removeAllListeners('session-sse:error'),
   pickFolder: () => ipcRenderer.invoke('app:pick-folder'),
   setWindowSize: (size: string) => ipcRenderer.invoke('app:set-window-size', size),
   setToggleKey:    (payload: any) => ipcRenderer.invoke('app:set-toggle-key', payload),
@@ -64,6 +74,7 @@ contextBridge.exposeInMainWorld('oneCC', {
     ipcRenderer.removeAllListeners('overlay:map-only-mode')
     ipcRenderer.removeAllListeners('overlay:active-mode')
     ipcRenderer.removeAllListeners('overlay:interaction-mode')
+    ipcRenderer.removeAllListeners('mercure:session-event')
   },
 
   // ── Système de modes ──────────────────────────────────────────────────────
@@ -136,4 +147,9 @@ contextBridge.exposeInMainWorld('oneCC', {
   radioRelayState: (state: unknown) => ipcRenderer.send('radio:relay-state', state),
   onRadioState:    (cb: (state: unknown) => void) => ipcRenderer.on('radio:state', (_e, s) => cb(s)),
   offRadioState:   () => ipcRenderer.removeAllListeners('radio:state'),
+
+  // Propagation session Mercure → overlay (broadcast depuis main process)
+  onSessionEvent: (cb: (data: string) => void) =>
+    ipcRenderer.on('mercure:session-event', (_e, data) => cb(data)),
+  offSessionEvent: () => ipcRenderer.removeAllListeners('mercure:session-event'),
 })

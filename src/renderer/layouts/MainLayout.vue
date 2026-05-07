@@ -10,7 +10,7 @@ import { useMercure } from '../composables/useMercure'
 
 const app = useAppStore()
 const mining = useMiningStore()
-const { connect: connectMercure, disconnect: disconnectMercure } = useMercure()
+const { connect: connectMercure, disconnect: disconnectMercure } = useMercure('refinery')
 const route = useRoute()
 const router = useRouter()
 const canShowAppTabs = computed(() => app.status.authReady)

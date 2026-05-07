@@ -60,9 +60,11 @@ export function getRegistry(): ModeRegistry {
   }
 
   // Assurer la cohérence : ajouter les modes built-in manquants (nouvelles versions)
+  // et synchroniser les modules manquants des modes built-in existants
   let dirty = false
   for (const defaultMode of DEFAULT_MODES) {
-    if (!saved.modes.find((m) => m.id === defaultMode.id)) {
+    const existing = saved.modes.find((m) => m.id === defaultMode.id)
+    if (!existing) {
       saved.modes.unshift({
         ...defaultMode,
         layout: {
@@ -71,6 +73,14 @@ export function getRegistry(): ModeRegistry {
         },
       })
       dirty = true
+    } else {
+      // Ajouter les modules manquants (nouveaux modules ajoutés dans DEFAULT_MODES)
+      for (const defaultMod of defaultMode.layout.modules) {
+        if (!existing.layout.modules.find((m) => m.id === defaultMod.id)) {
+          existing.layout.modules.push({ ...defaultMod })
+          dirty = true
+        }
+      }
     }
   }
   if (dirty) modeStoreInstance.set('registry', saved)

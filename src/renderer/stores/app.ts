@@ -69,6 +69,20 @@ export const useAppStore = defineStore('app', {
         this.loading = false
       }
     },
+    async initOverlay() {
+      try {
+        const [settings, auth] = await Promise.all([
+          window.oneCC.getSettings(),
+          window.oneCC.overlayAuth(),
+        ])
+        this.settings = settings
+        if (settings.appearance) applyAppearance(settings.appearance)
+        else applyDefaultAppearance()
+        this.bearerToken = auth?.token ?? null
+      } catch {
+        this.bearerToken = null
+      }
+    },
     async refreshConnection() {
       this.status = await window.oneCC.checkConnection()
       this.apiKeyPresent = Boolean(await window.oneCC.getApiKey())

@@ -5,6 +5,14 @@ interface CargoItem {
   mineralId: string
   mineralName: string
   totalScu: number
+  avgQuality?: number | null
+}
+
+function qualityColor(q: number | null | undefined): string {
+  if (q == null) return 'text-white/30'
+  if (q >= 700)  return 'text-emerald-300'
+  if (q >= 400)  return 'text-amber-300'
+  return 'text-rose-300'
 }
 
 const props = withDefaults(defineProps<{
@@ -28,7 +36,7 @@ function progressPercent(scu: number): number {
   <div v-if="props.cargo.length" class="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
     <div class="rounded-md border border-white/[0.08] bg-th-card/40 px-2 py-1.5">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[9px] font-bold uppercase tracking-[0.18em] text-th-muted">Total raffinerie</span>
+        <span class="text-[9px] font-bold uppercase tracking-[0.18em] text-white/60">Total raffinerie</span>
         <span class="text-[11px] font-black tabular-nums text-accent/80">{{ totalScu }} SCU</span>
       </div>
       <div class="mt-1.5 h-[3px] overflow-hidden rounded-full bg-th-card">
@@ -51,7 +59,10 @@ function progressPercent(scu: number): number {
       >
         <div class="flex items-center justify-between gap-2">
           <p class="truncate text-[11px] font-bold text-th-primary">{{ item.mineralName }}</p>
-          <span class="shrink-0 text-[10px] font-semibold tabular-nums text-th-muted">{{ item.totalScu }} SCU</span>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <span v-if="item.avgQuality != null" class="text-[9px] font-bold tabular-nums" :class="qualityColor(item.avgQuality)">Q{{ item.avgQuality }}</span>
+            <span class="text-[10px] font-semibold tabular-nums text-white/60">{{ item.totalScu }} SCU</span>
+          </div>
         </div>
         <div class="mt-1.5 h-[3px] overflow-hidden rounded-full bg-th-card">
           <div
@@ -63,7 +74,7 @@ function progressPercent(scu: number): number {
     </div>
   </div>
 
-  <div v-else class="rounded-md border border-white/[0.08] bg-th-card/40 px-2 py-1.5 text-[10px] uppercase tracking-widest text-th-disabled">
+  <div v-else class="rounded-md border border-white/[0.08] bg-th-card/40 px-2 py-1.5 text-[10px] uppercase tracking-widest text-white/45">
     Aucune cargaison
   </div>
 </template>

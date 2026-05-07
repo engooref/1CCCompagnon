@@ -26,8 +26,8 @@ export interface OverlayElementPos {
   yPct: number
 }
 
-export type OverlayModuleType = 'transport' | 'radio' | 'notification' | 'mining'
-export type OverlayMiningPanelType = 'info' | 'rocks' | 'cargo' | 'participants' | 'actions'
+export type OverlayModuleType = 'transport' | 'radio' | 'notification' | 'mining' | 'session-log'
+export type OverlayMiningPanelType = 'rocks' | 'cargo' | 'participants' | 'actions' | 'infos'
 export type OverlayAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
 export type OverlayRadioDensity = 'compact' | 'medium' | 'detailed'
 export type OverlayModuleCategory = 'communication' | 'navigation' | 'hud' | 'mining' | 'autre'
@@ -55,18 +55,19 @@ export interface OverlayModuleConfig {
   miningPanelType?: OverlayMiningPanelType
   category?: OverlayModuleCategory
   allowInteraction?: boolean
+  visibleOnlyInInteraction?: boolean
 }
 
 export const DEFAULT_OVERLAY_MODULES: OverlayModuleConfig[] = [
   { id: 'transport', type: 'transport', title: 'Transport', visible: true, minimized: false, width: 260, height: 150, opacity: 0.65, locked: false, zIndex: 10, fontSize: 1, bgColor: '', anchor: 'top-right', category: 'navigation', allowInteraction: false },
-  { id: 'radio', type: 'radio', title: 'Radio', visible: true, minimized: false, width: 280, height: 100, opacity: 0.65, locked: false, zIndex: 100, fontSize: 1, bgColor: '', anchor: 'bottom-left', radioDensity: 'medium', radioShowSpeakers: true, radioShowParticipants: true, radioShowAdvancedStatus: true, category: 'communication', allowInteraction: true },
+  { id: 'radio', type: 'radio', title: 'Radio', visible: true, minimized: false, width: 280, height: 100, opacity: 0.65, locked: false, zIndex: 100, fontSize: 1, bgColor: '', anchor: 'bottom-left', radioDensity: 'medium', radioShowSpeakers: true, radioShowParticipants: true, radioShowAdvancedStatus: true, category: 'communication', allowInteraction: false },
   { id: 'notification', type: 'notification', title: 'Notifications', visible: true, minimized: false, width: 320, height: 80, opacity: 0.9, locked: false, zIndex: 200, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'hud', allowInteraction: false },
   // Mining panels
-  { id: 'mining-session-info', type: 'mining', miningPanelType: 'info', title: 'Session Mining', visible: false, minimized: false, width: 280, height: 100, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
-  { id: 'mining-session-rocks', type: 'mining', miningPanelType: 'rocks', title: 'Roches', visible: false, minimized: false, width: 320, height: 180, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
-  { id: 'mining-session-cargo', type: 'mining', miningPanelType: 'cargo', title: 'Cargo', visible: false, minimized: false, width: 280, height: 140, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
-  { id: 'mining-session-participants', type: 'mining', miningPanelType: 'participants', title: 'Équipe', visible: false, minimized: false, width: 260, height: 150, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
-  { id: 'mining-session-actions', type: 'mining', miningPanelType: 'actions', title: 'Actions', visible: false, minimized: false, width: 240, height: 100, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
+  { id: 'mining-session-rocks', type: 'mining', miningPanelType: 'rocks', title: 'Roches', visible: false, minimized: false, width: 320, height: 180, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: true },
+  { id: 'mining-session-cargo', type: 'mining', miningPanelType: 'cargo', title: 'Cargo', visible: false, minimized: false, width: 280, height: 140, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-right', category: 'mining', allowInteraction: false },
+  { id: 'mining-session-participants', type: 'mining', miningPanelType: 'participants', title: 'Équipe', visible: false, minimized: false, width: 280, height: 200, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'bottom-left', category: 'mining', allowInteraction: true },
+  { id: 'mining-session-infos', type: 'mining', miningPanelType: 'infos', title: 'Infos session', visible: false, minimized: false, width: 260, height: 240, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'bottom-right', category: 'mining', allowInteraction: true },
+  { id: 'mining-session-log', type: 'session-log', title: 'Journal session', visible: false, minimized: false, width: 300, height: 200, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
 ]
 
 // ─── Notifications overlay ────────────────────────────────────────────────────
@@ -190,9 +191,12 @@ export const DEFAULT_MODES: OverlayMode[] = [
     builtIn: true,
     layout: {
       modules: [
-        { ...DEFAULT_OVERLAY_MODULES[0] },
-        { ...DEFAULT_OVERLAY_MODULES[1], radioDensity: 'compact' },
         { ...DEFAULT_OVERLAY_MODULES[2] },
+        { ...DEFAULT_OVERLAY_MODULES[3], visible: true },
+        { ...DEFAULT_OVERLAY_MODULES[4], visible: true },
+        { ...DEFAULT_OVERLAY_MODULES[5], visible: true },
+        { ...DEFAULT_OVERLAY_MODULES[6], visible: true },
+        { ...DEFAULT_OVERLAY_MODULES[7], visible: true },
       ],
       positions: {},
     },
@@ -349,14 +353,26 @@ export interface MiningSessionParticipant {
   duty?: string | null
   shipId?: number | null
   shipName?: string | null
+  crewId?: number | null
   crewKey?: string | null
   crewTotal?: number | null
   crewUsed?: number | null
-  status?: string | null
-  crewSize?: number | null
-  crewIsManual?: boolean
-  suggestedStatus?: string | null
-  effectiveStatus?: string | null
+  crewStatus?: string | null  // statut du crew (copie depuis le crew)
+  status?: string | null       // statut propre au participant
+  joinedAt?: string | null
+}
+
+export interface MiningSessionCrew {
+  id: number
+  sessionId?: number | null
+  role: string
+  crewKey: string | null
+  crewTotal: number | null
+  crewUsed: number | null
+  status: string | null
+  shipId?: number | null
+  shipName?: string | null
+  createdAt?: string | null
 }
 
 export interface MiningRockMineral {
@@ -419,6 +435,7 @@ export interface MiningCargo {
 
 export interface MiningSessionDetail extends MiningSession {
   participants: MiningSessionParticipant[]
+  crews: MiningSessionCrew[]
   rocks: MiningRock[]
   cargos: MiningCargo[]
   logs: MiningSessionLog[]
@@ -567,4 +584,14 @@ export interface OverlayAuthResponse {
   token: string
   tokenType?: string
   user?: OverlayProfile | null
+}
+
+export interface OverlayProfile {
+  id: number | string
+  discordId: string
+  username: string
+  avatar: string
+  rh: RhMember | null
+  tester: boolean
+  isBureau: boolean
 }

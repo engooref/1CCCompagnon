@@ -3,6 +3,7 @@ import { logger } from '../services/logger'
 import { createOverlayUrls } from '../config/api'
 import { useAppStore } from './app'
 import { useMercure } from '@renderer/composables/useMercure'
+import { useNotificationBus } from '@renderer/composables/useNotificationBus'
 import {
   fetchBootstrap,
   fetchWorkOrders,
@@ -36,6 +37,7 @@ import {
   deleteRock as svcDeleteRock,
   assignRock as svcAssignRock,
   updateParticipant as svcUpdateParticipant,
+  updateCrewStatus as svcUpdateCrewStatus,
   assignSubCaptain as svcAssignSubCaptain,
   leaveParticipant as svcLeaveParticipant,
   updateSessionDefaultBody as svcUpdateSessionDefaultBody,
@@ -133,7 +135,7 @@ function getReadyOverlayContent(count?: number): { title: string; message: strin
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
-const { connect: connectMercure, disconnect: disconnectMercure } = useMercure()
+const { connect: connectMercure, disconnect: disconnectMercure } = useMercure('session')
 
 export const useMiningStore = defineStore('mining', {
   state: () => ({
@@ -151,7 +153,6 @@ export const useMiningStore = defineStore('mining', {
     sessionView:   'list' as 'list' | 'active',
     sessionShips:  [] as any[],
     sessionShipsLoaded: false,
-    crewStatusOverrides: {} as Record<string, string>,
     sessionCreateForm: {
       show:    false,
       name:    '',
@@ -657,6 +658,7 @@ export const useMiningStore = defineStore('mining', {
         this.sessionActive = {
           ...session,
           participants: session.participants ?? [],
+          crews: session.crews ?? [],
           rocks: session.rocks ?? [],
           cargos: session.cargos ?? [],
           logs: [],
@@ -729,16 +731,22 @@ export const useMiningStore = defineStore('mining', {
     },
 
     _handleSessionEvent(data: any) {
-      if (!data?.action) return
+      const action = String(data?.action ?? data?.type ?? data?.event ?? '')
+      logger.info('[mining] session mercure event received', { action, raw: JSON.stringify(data)?.slice(0, 200) })
+      if (!action) return
       const session = this.sessionActive
       if (!session) return
 
       const eventSessionId = data.sessionId ?? data.rock?.sessionId ?? data.cargo?.sessionId
       if (eventSessionId && Number(eventSessionId) !== Number(session.id)) return
 
-      switch (data.action) {
+      switch (action) {
         case 'session_closed':
-          if (session.id === data.sessionId) session.status = 'closed'
+        case 'session_finished':
+          session.status = action === 'session_finished' ? 'finished' : 'closed'
+          break
+        case 'session_updated':
+          if (data.session) Object.assign(session, data.session)
           break
         case 'participant_joined':
           if (!session.participants.find((p) => p.id === data.participant?.id)) {
@@ -751,24 +759,72 @@ export const useMiningStore = defineStore('mining', {
           if (idx !== -1) session.participants[idx] = data.participant
           break
         }
+        case 'crew_updated': {
+          const crew = data.crew
+          if (!crew) break
+          if (Array.isArray((session as any).crews)) {
+            const idx = (session as any).crews.findIndex((c: any) => c.id === crew.id)
+            if (idx !== -1) (session as any).crews[idx] = { ...(session as any).crews[idx], ...crew }
+            else (session as any).crews.push(crew)
+          }
+          break
+        }
         case 'participant_left':
-          session.participants = session.participants.filter((p) => p.id !== data.participantId)
+        case 'participant_removed': {
+          const leftId = data.participantId ?? data.participant?.id
+          if (leftId) session.participants = session.participants.filter((p) => p.id !== leftId)
           this._pushSessionLog('🚪', 'Un participant a quitté la session.', 'warning')
           break
-        case 'rock_added':
+        }
+        case 'rock_added': {
           this._applyRockUpdate(data.rock)
           this._pushSessionLog('🪨', `Rocher signalé${data.rock?.bodyName ? ' — ' + data.rock.bodyName : ''}.`, 'info')
+          const { push: pushNotif } = useNotificationBus()
+          pushNotif({
+            id: `rock_added_${data.rock?.id ?? Date.now()}`,
+            type: 'info',
+            title: '🪨 Nouveau rocher',
+            message: `Signalé${data.rock?.bodyName ? ' — ' + data.rock.bodyName : ''}${data.rock?.reportedBy ? ' par ' + data.rock.reportedBy : ''}`,
+            duration: 6000,
+          })
           break
-        case 'rock_updated':
+        }
+        case 'rock_updated': {
+          const prevRock = session.rocks?.find((r: any) => r.id === data.rock?.id)
+          const prevStatus = prevRock?.status
           this._applyRockUpdate(data.rock)
+          const isMyRock = data.rock?.claimedByUserId != null && Number(data.rock.claimedByUserId) === Number(this._currentUserId)
+          if (isMyRock && prevStatus !== 'extraction' && data.rock?.status === 'extraction') {
+            const { push: pushNotif } = useNotificationBus()
+            pushNotif({
+              id: `rock_extraction_${data.rock?.id ?? Date.now()}`,
+              type: 'warning',
+              title: '⚒️ Extraction en cours',
+              message: `Ton rocher${data.rock?.bodyName ? ' — ' + data.rock.bodyName : ''} est en extraction.`,
+              duration: 8000,
+            })
+          }
           break
+        }
         case 'rock_collected':
           this._applyRockUpdate(data.rock)
           this._pushSessionLog('✅', `Rocher #${data.rock?.id ?? '?'} collecté.`, 'success')
           break
-        case 'rock_assigned':
+        case 'rock_assigned': {
           this._applyRockUpdate(data.rock)
+          const assignedToMe = data.rock?.claimedByUserId != null && Number(data.rock.claimedByUserId) === Number(this._currentUserId)
+          if (assignedToMe) {
+            const { push: pushNotif } = useNotificationBus()
+            pushNotif({
+              id: `rock_assigned_${data.rock?.id ?? Date.now()}`,
+              type: 'success',
+              title: '✅ Rocher réclamé',
+              message: `Rocher${data.rock?.bodyName ? ' — ' + data.rock.bodyName : ''} assigné à toi.`,
+              duration: 6000,
+            })
+          }
           break
+        }
         case 'rock_deleted':
           if (session.rocks) session.rocks = session.rocks.filter((r) => r.id !== data.rockId)
           this._pushSessionLog('🗑️', `Rocher #${data.rockId ?? '?'} supprimé.`, 'warning')
@@ -918,11 +974,12 @@ export const useMiningStore = defineStore('mining', {
       this.sessionJoinForm.error  = null
       this.loading.joinSession    = true
       try {
+
         await svcJoinSession(sessionId, {
           role:     this.sessionJoinForm.role,
           shipId:   this.sessionJoinForm.shipId ?? undefined,
           crewKey:  this.sessionJoinForm.crewKey ?? undefined,
-          crewSize: this.sessionJoinForm.crewTotal,
+          crewTotal: this.sessionJoinForm.crewTotal,
         })
         this.sessionJoinForm.show = false
         await this.openSession(sessionId)
@@ -1280,20 +1337,14 @@ export const useMiningStore = defineStore('mining', {
     },
 
     getAvailableCrews(role: string): any[] {
-      const participants = (this.sessionActive?.participants ?? []).filter((p) => p.shipId && p.role === role)
-      const crewMap = new Map<string, any>()
-      for (const p of participants) {
-        const key = p.crewKey || `solo_${p.id}`
-        if (!crewMap.has(key)) {
-          crewMap.set(key, { crewKey: p.crewKey, shipId: p.shipId, shipName: p.shipName, crewTotal: p.crewTotal ?? p.crewSize ?? 1, members: [] })
-        }
-        crewMap.get(key).members.push(p)
-      }
-      return Array.from(crewMap.values())
-        .filter((c) => c.members.length < (c.crewTotal ?? 1))
+      const crews = ((this.sessionActive as any)?.crews ?? []) as any[]
+      const participants = (this.sessionActive?.participants ?? [])
+      return crews
+        .filter((c) => c.role === role && (c.crewUsed ?? 0) < (c.crewTotal ?? 1))
         .map((c) => {
-          const captain = c.members.find((m: any) => m.isCaptain || m.rank === 'captain') ?? c.members[0]
-          return { ...c, crewUsed: c.members.length, captainName: captain?.username ?? null }
+          const members = participants.filter((p) => p.crewId === c.id || p.crewKey === c.crewKey)
+          const captain = members.find((m) => m.isCaptain || m.rank === 'captain') ?? members[0]
+          return { ...c, captainName: captain?.username ?? null }
         })
     },
 
@@ -1326,6 +1377,18 @@ export const useMiningStore = defineStore('mining', {
     },
 
     // ─── Participant management ─────────────────────────────────────────────
+
+    async updateParticipantStatus(sessionId: number, participantId: number, status: string) {
+      try {
+        const p = await svcUpdateParticipant(sessionId, participantId, { status })
+        if (p && this.sessionActive) {
+          const idx = this.sessionActive.participants.findIndex((x) => x.id === participantId)
+          if (idx !== -1) this.sessionActive.participants.splice(idx, 1, p)
+        }
+      } catch (err: any) {
+        this.errors.session = parseApiError(err, 'Erreur mise à jour statut.')
+      }
+    },
 
     async updateParticipantDuty(sessionId: number, participantId: number, duty: string) {
       try {
@@ -1429,10 +1492,15 @@ export const useMiningStore = defineStore('mining', {
       }
     },
 
-    setCrewStatusOverride(key: string, status: string | null) {
-      if (!key) return
-      if (status) this.crewStatusOverrides[key] = status
-      else delete this.crewStatusOverrides[key]
+    async setCrewStatusOverride(key: string, status: string | null) {
+      if (!key || !this.sessionActive) return
+      const sessionId = this.sessionActive.id
+      const crews = (this.sessionActive as any).crews as any[] | undefined
+      const apiCrew = crews?.find((c: any) => c.crewKey === key || `crew:${c.id}` === key)
+      if (apiCrew?.id) {
+        await svcUpdateCrewStatus(sessionId, apiCrew.id, status)
+        apiCrew.status = status
+      }
     },
 
     // ─── Session default body / refinery ───────────────────────────────────
@@ -1562,11 +1630,12 @@ export const useMiningStore = defineStore('mining', {
       }
     },
 
+
     async saveLoadout(payload: Partial<MiningLoadout> & { name: string; shipId: number | null; slots: MiningLoadout['slots'] }) {
       this.loadout.savingLoadout = true
       this.loadout.error = null
       try {
-        if (payload.id) {
+        if ((payload as any).id) {
           const { id, ...rest } = payload as MiningLoadout
           const updated = await svcUpdateLoadout(id, rest)
           const idx = this.loadout.savedList.findIndex((l) => l.id === id)
@@ -1585,34 +1654,6 @@ export const useMiningStore = defineStore('mining', {
         throw new Error(msg)
       } finally {
         this.loadout.savingLoadout = false
-      }
-    },
-
-    async deleteLoadout(id: number) {
-      this.loadout.deletingId = id
-      this.loadout.error = null
-      try {
-        await svcDeleteLoadout(id)
-        this.loadout.savedList = this.loadout.savedList.filter((l) => l.id !== id)
-      } catch (err) {
-        logger.error('[mining] deleteLoadout failed', err)
-        this.loadout.error = 'Erreur suppression loadout.'
-      } finally {
-        this.loadout.deletingId = null
-      }
-    },
-
-    async loadPublicLoadouts(force = false) {
-      if (!force && this.loadout.publicList.length) return
-      this.loadout.loadingPublic = true
-      this.loadout.error = null
-      try {
-        this.loadout.publicList = await svcFetchPublicLoadouts()
-      } catch (err) {
-        logger.error('[mining] loadPublicLoadouts failed', err)
-        this.loadout.error = 'Impossible de charger les loadouts publics.'
-      } finally {
-        this.loadout.loadingPublic = false
       }
     },
 
