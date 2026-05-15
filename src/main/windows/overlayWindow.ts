@@ -84,6 +84,7 @@ export function setOverlayInteractive(enabled: boolean): void {
   win.setIgnoreMouseEvents(!enabled, { forward: !enabled })
   if (enabled) {
     win.setFocusable(true)
+    win.moveTop()
     win.focus()
   } else {
     win.setFocusable(false)

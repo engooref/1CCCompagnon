@@ -1630,6 +1630,19 @@ export const useMiningStore = defineStore('mining', {
       }
     },
 
+    async loadPublicLoadouts() {
+      this.loadout.loadingPublic = true
+      this.loadout.error = null
+      try {
+        this.loadout.publicList = await svcFetchPublicLoadouts()
+      } catch (err) {
+        logger.error('[mining] loadPublicLoadouts failed', err)
+        this.loadout.error = 'Impossible de charger les loadouts publics.'
+      } finally {
+        this.loadout.loadingPublic = false
+      }
+    },
+
 
     async saveLoadout(payload: Partial<MiningLoadout> & { name: string; shipId: number | null; slots: MiningLoadout['slots'] }) {
       this.loadout.savingLoadout = true
@@ -1655,6 +1668,54 @@ export const useMiningStore = defineStore('mining', {
       } finally {
         this.loadout.savingLoadout = false
       }
+    },
+
+    /**
+     * Pré-remplit le formulaire rocher depuis les résultats OCR.
+     * N'envoie RIEN au serveur — action utilisateur requise ensuite.
+     */
+    applyOcrPayload(payload: {
+      mainMaterial?: string
+      rockMass?: number
+      instability?: number
+      resistance?: number
+      totalScu?: number
+      materials?: Array<{ name: string; percent?: number }>
+      coordinates?: string
+    }): void {
+      if (payload.totalScu !== undefined) {
+        this.rockForm.sizeScuEstimate = String(payload.totalScu)
+      }
+      if (payload.rockMass !== undefined) {
+        this.rockForm.mass = String(payload.rockMass)
+      }
+      if (payload.instability !== undefined) {
+        this.rockForm.instability = String(payload.instability)
+      }
+      if (payload.resistance !== undefined) {
+        this.rockForm.resistance = String(payload.resistance)
+      }
+      if (payload.materials && payload.materials.length > 0) {
+        payload.materials.forEach((mat, idx) => {
+          if (this.rockForm.minerals[idx]) {
+            this.rockForm.minerals[idx]._name    = mat.name
+            this.rockForm.minerals[idx]._query   = mat.name
+            if (mat.percent !== undefined) {
+              this.rockForm.minerals[idx].percentage = String(mat.percent)
+            }
+          }
+        })
+      } else if (payload.mainMaterial && this.rockForm.minerals[0]) {
+        this.rockForm.minerals[0]._name  = payload.mainMaterial
+        this.rockForm.minerals[0]._query = payload.mainMaterial
+      }
+      if (payload.coordinates) {
+        const parts = payload.coordinates.trim().split(/[\s,]+/)
+        if (parts[0]) this.rockForm.posX = parts[0]
+        if (parts[1]) this.rockForm.posY = parts[1]
+        if (parts[2]) this.rockForm.posZ = parts[2]
+      }
+      this.rockForm.show = true
     },
 
   },

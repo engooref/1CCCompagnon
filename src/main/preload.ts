@@ -39,7 +39,8 @@ contextBridge.exposeInMainWorld('oneCC', {
   setCycleCustomKey:     (payload: any) => ipcRenderer.invoke('app:set-cycle-custom-key', payload),
   setInteractionKey:     (payload: any) => ipcRenderer.invoke('app:set-interaction-key', payload),
   setInteractionKeyMode: (mode: 'hold' | 'toggle') => ipcRenderer.invoke('app:set-interaction-key-mode', mode),
-  setOverlayEditKey:     (payload: any) => ipcRenderer.invoke('app:set-overlay-edit-key', payload),
+  setOverlayEditKey:          (payload: any) => ipcRenderer.invoke('app:set-overlay-edit-key', payload),
+  setOcrCycleProfileKey:      (payload: any) => ipcRenderer.invoke('app:set-ocr-cycle-profile-key', payload),
 
   // ── Logs overlay ─────────────────────────────────────────────────────────
   getLogs:         () => ipcRenderer.invoke('app:get-logs'),
@@ -152,4 +153,33 @@ contextBridge.exposeInMainWorld('oneCC', {
   onSessionEvent: (cb: (data: string) => void) =>
     ipcRenderer.on('mercure:session-event', (_e, data) => cb(data)),
   offSessionEvent: () => ipcRenderer.removeAllListeners('mercure:session-event'),
+
+  // ── OCR ──────────────────────────────────────────────────────────────────
+  ocrLoadProfiles:              () => ipcRenderer.invoke('ocr:load-profiles'),
+  ocrSaveProfiles:              (data: unknown) => ipcRenderer.invoke('ocr:save-profiles', data),
+  ocrListSources:               () => ipcRenderer.invoke('ocr:list-sources'),
+  ocrGetPreferredSource:        () => ipcRenderer.invoke('ocr:get-preferred-source'),
+  ocrSetOverlayClickThrough:    (enabled: boolean) => ipcRenderer.invoke('ocr:set-overlay-click-through', enabled),
+  ocrSetOverlayContentProtection: (enabled: boolean) => ipcRenderer.invoke('ocr:set-overlay-content-protection', enabled),
+
+  // OCR calibration sur overlay
+  ocrEnterOverlayCalibration: (profileId: string) => ipcRenderer.invoke('ocr:enter-overlay-calibration', profileId),
+  ocrExitOverlayCalibration:  () => ipcRenderer.invoke('ocr:exit-overlay-calibration'),
+  ocrUpdateZoneRect: (id: string, rect: unknown) => ipcRenderer.invoke('ocr:update-zone-rect', { id, rect }),
+  onOcrCalibrationStart: (cb: (profileId: string) => void) =>
+    ipcRenderer.on('ocr:calibration-start', (_e, profileId) => cb(profileId)),
+  onOcrCalibrationStop: (cb: () => void) =>
+    ipcRenderer.on('ocr:calibration-stop', () => cb()),
+  onOcrZoneRectUpdate: (cb: (data: { id: string; rect: unknown }) => void) =>
+    ipcRenderer.on('ocr:zone-rect-update', (_e, data) => cb(data)),
+  offOcrCalibration: () => {
+    ipcRenderer.removeAllListeners('ocr:calibration-start')
+    ipcRenderer.removeAllListeners('ocr:calibration-stop')
+    ipcRenderer.removeAllListeners('ocr:zone-rect-update')
+  },
+  // Notification : overlay a sauvegardé → main window doit recharger
+  onOcrProfilesChanged: (cb: () => void) =>
+    ipcRenderer.on('ocr:profiles-changed', () => cb()),
+  offOcrProfilesChanged: () =>
+    ipcRenderer.removeAllListeners('ocr:profiles-changed'),
 })

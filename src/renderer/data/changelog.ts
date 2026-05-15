@@ -8,11 +8,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    version: '2.0.1-draft',
-    date: '2026-05-06',
+    version: '2.0.0',
+    date: '2026-05-15',
     changes: [
-      { type: 'feature', text: 'Premiere implementation du module de minage' },
-      
+      { type: 'feature', text: 'Implementation du module de minage' },
+      { type: 'feature', text: 'Première implémentation de l\'OCR' },
+      { type: 'feature', text: 'Ajout des modes dans l\'overlay' },
+      { type: 'feature', text: 'Ajout du mode intéraction dans l\'overlay' },
+      { type: 'improvement', text: 'Amélioration de l\'éditeur de l\'overlay en l\'intégrant directement à l\'overlay' },
     ]
   },
   {

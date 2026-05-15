@@ -72,6 +72,14 @@ function _urls() {
   return app.settings ? createOverlayUrls(app.settings) : null
 }
 
+export async function fetchMineralsOnly(): Promise<{ id: number; name: string; code: string | null; priceSell: number | null; signal: number | null }[]> {
+  const headers = _headers()
+  const urls = _urls()
+  const mUrl = urls?.mining?.minerals!;
+  const { data } = await http.get(mUrl, { headers })
+  return Array.isArray(data) ? data : (data?.data ?? [])
+}
+
 export async function fetchBootstrap() {
   const headers = _headers()
   const urls = _urls()

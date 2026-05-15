@@ -12,6 +12,7 @@ import { getSettings } from './services/settingsStore'
 import { onLayoutChange, getLayout } from './services/layoutStore'
 import { getRegistry, setActiveMode, onRegistryChange } from './services/modeStore'
 import { registerRadioIpc } from './ipc/radio.ipc'
+import { registerOcrIpc } from './ipc/ocr.ipc'
 import { registerPttBindings, setPttTargetWindow } from './services/radioService'
 import { uIOhook } from 'uiohook-napi'
 
@@ -241,6 +242,10 @@ function createMainWindow() {
   })
 }
 
+// ─── Chromium flags ───────────────────────────────────────────────────────────
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+app.commandLine.appendSwitch('disk-cache-size', '1')
+
 // ─── App ready ────────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
@@ -294,6 +299,7 @@ app.whenReady().then(async () => {
     }
   })
   registerRadioIpc()
+  registerOcrIpc()
 
   createMainWindow()
   createOverlayWindow()
@@ -401,15 +407,21 @@ app.whenReady().then(async () => {
 
     onUnfocus() {
       isGameFocused = false
-      // En mode édition, SC perd le focus car l'overlay est interactif
-      // Si c'est l'overlay lui-même qui a pris le focus (clic dans l'éditeur), on ignore
+      const ow = getOverlayWindow()
+      // Mode interaction : l'overlay prend le focus → SC perd le sien.
+      // On ignore complètement le hide ; la désactivation se fait via la touche.
+      if (interactionActive) {
+        logger.info('[overlay] SC perd le focus — mode interaction actif, ignoré')
+        return
+      }
+      // Mode édition : même logique, mais si l'overlay n'a pas le focus
+      // (alt-tab vers autre chose), on ferme l'édition sans cacher l'overlay.
       if (overlayEditMode) {
-        const ow = getOverlayWindow()
         if (ow && !ow.isDestroyed() && ow.isFocused()) {
-          logger.info('[overlay] SC perd le focus — overlay a le focus (clic éditeur), ignoré')
+          logger.info('[overlay] SC perd le focus — mode édition, overlay focusé, ignoré')
           return
         }
-        logger.info('[overlay] SC perd le focus — edit mode actif, fermeture éditeur sans hide')
+        logger.info('[overlay] SC perd le focus — mode édition, fermeture sans hide')
         setOverlayEditMode(false)
         return
       }
@@ -825,6 +837,58 @@ app.whenReady().then(async () => {
   ;(global as any).__setCycleCustomKey = (payload: { accel: string; keyCode: number | null } | null) => {
     if (!payload) { registerCycleCustomKey(null, null); return }
     registerCycleCustomKey(payload.accel || null, payload.keyCode)
+  }
+
+  // ─── Touche cycle profil OCR ─────────────────────────────────────────────
+
+  let ocrCycleHandler: ((e: any) => void) | null = null
+
+  function registerOcrCycleProfileKey(accel?: string | null, keyCode?: number | null) {
+    if (ocrCycleHandler) { uIOhook.off('keydown', ocrCycleHandler); ocrCycleHandler = null }
+    if (accel) {
+      const uiCode = accelToUiohook(accel)
+      if (uiCode !== null) {
+        ocrCycleHandler = (e: any) => {
+          if (!accelMatchesEvent(accel, e)) return
+          const label: string | null = (global as any).__cycleOcrProfile?.()
+          if (label) {
+            sendToOverlay('overlay:notification', {
+              id: 'ocr-profile-' + Date.now(),
+              title: 'Profil OCR',
+              message: label,
+              type: 'info',
+              duration: 2500,
+            })
+          }
+        }
+        uIOhook.on('keydown', ocrCycleHandler)
+      }
+    } else if (typeof keyCode === 'number') {
+      const uiCode = DOM_TO_UIOHOOK[keyCode]
+      if (uiCode !== undefined) {
+        ocrCycleHandler = (e: any) => {
+          if (e?.keycode !== uiCode || e.ctrlKey || e.altKey || e.shiftKey) return
+          const label: string | null = (global as any).__cycleOcrProfile?.()
+          if (label) {
+            sendToOverlay('overlay:notification', {
+              id: 'ocr-profile-' + Date.now(),
+              title: 'Profil OCR',
+              message: label,
+              type: 'info',
+              duration: 2500,
+            })
+          }
+        }
+        uIOhook.on('keydown', ocrCycleHandler)
+      }
+    }
+  }
+
+  registerOcrCycleProfileKey(getSettings().ocrCycleProfileKey, getSettings().ocrCycleProfileKeyCode)
+
+  ;(global as any).__setOcrCycleProfileKey = (payload: { accel: string; keyCode: number | null } | null) => {
+    if (!payload) { registerOcrCycleProfileKey(null, null); return }
+    registerOcrCycleProfileKey(payload.accel || null, payload.keyCode)
   }
 
   // ─── Touche interaction modules ──────────────────────────────────────────

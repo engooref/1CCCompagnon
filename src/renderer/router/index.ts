@@ -23,5 +23,6 @@ export const router = createRouter({
     { path: '/logs', name: 'logs', component: () => import('../pages/OverlayLogsPage.vue') },
     { path: '/settings', name: 'settings', component: () => import('../pages/SettingsPage.vue') },
     { path: '/overlay', name: 'overlay', component: () => import('../pages/OverlayPage.vue') },
+    { path: '/ocr', name: 'ocr', component: () => import('../pages/OcrPage.vue') },
   ]
 })

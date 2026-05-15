@@ -45,6 +45,7 @@ interface NativeTrackerAddon {
   startTracking(opts: { processName: string }): void
   stopTracking(): void
   getState(): SCWindowState
+  focusGameWindow(): boolean
 }
 
 // ─── Singleton ────────────────────────────────────────────────────────────────
@@ -109,8 +110,17 @@ export function nativeGetState(): SCWindowState | null {
   return _addon?.getState() ?? null
 }
 
+
 /**
- * Indique si l'addon natif est disponible et opérationnel.
+ * Donne le focus à la fenêtre Star Citizen via Win32 SetForegroundWindow.
+ * Retourne true si la fenêtre a été focusée, false sinon (addon absent ou jeu non trouvé).
+ */
+export function nativeFocusGameWindow(): boolean {
+  return _addon?.focusGameWindow() ?? false
+}
+
+/**
+ * Retourne true si l'addon natif est chargé et disponible.
  */
 export function isNativeTrackerAvailable(): boolean {
   return _addon !== null

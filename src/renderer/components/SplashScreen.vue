@@ -77,11 +77,8 @@ onMounted(() => {
       <!-- Contenu centré -->
       <div class="content" :class="phase === 'load' ? 'content--visible' : ''">
 
-        <!-- Losange décoratif -->
-        <div class="diamond-wrap">
-          <div class="diamond" />
-          <div class="diamond diamond--ring" />
-        </div>
+        <!-- Logo -->
+        <img src="/1CC_Blanc.png" class="splash-logo" alt="1CC" />
 
         <!-- Titre -->
         <div class="title-block">
@@ -172,27 +169,16 @@ onMounted(() => {
   transform: none;
 }
 
-/* ── Losange ──────────────────────────────────────────────────────── */
-.diamond-wrap {
-  position: relative;
-  width: 56px;
-  height: 56px;
+/* ── Logo ─────────────────────────────────────────────────────────── */
+.splash-logo {
+  width: 120px;
+  height: auto;
+  filter: drop-shadow(0 0 12px rgba(var(--accent-rgb, 34,211,238),.4));
+  animation: logo-pulse 2s ease-in-out infinite;
 }
-.diamond {
-  position: absolute;
-  inset: 0;
-  border: 2px solid rgba(var(--accent-rgb, 34,211,238),.7);
-  transform: rotate(45deg);
-  animation: diamond-pulse 2s ease-in-out infinite;
-}
-.diamond--ring {
-  inset: -10px;
-  border-color: rgba(var(--accent-rgb, 34,211,238),.2);
-  animation: diamond-pulse 2s ease-in-out infinite .3s;
-}
-@keyframes diamond-pulse {
+@keyframes logo-pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: .4; }
+  50%       { opacity: .75; }
 }
 
 /* ── Titre ────────────────────────────────────────────────────────── */

@@ -137,6 +137,19 @@ export function registerAppIpc(
     return true
   })
 
+  ipcMain.handle('app:set-ocr-cycle-profile-key', async (_e, payload: any) => {
+    if (payload === null) {
+      setSettings({ ocrCycleProfileKey: null, ocrCycleProfileKeyCode: null })
+      ;(global as any).__setOcrCycleProfileKey?.(null)
+    } else if (payload && typeof payload === 'object') {
+      const accel = payload.accel ?? ''
+      const keyCode = typeof payload.keyCode === 'number' ? payload.keyCode : null
+      setSettings({ ocrCycleProfileKey: accel || null, ocrCycleProfileKeyCode: keyCode })
+      ;(global as any).__setOcrCycleProfileKey?.({ accel, keyCode })
+    }
+    return true
+  })
+
   ipcMain.handle('app:set-map-toggle-key', async (_e, payload: any) => {
     const setKey = (global as any).__setMapToggleKey
     if (typeof payload === 'string') {

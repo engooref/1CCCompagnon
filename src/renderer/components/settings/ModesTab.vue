@@ -122,6 +122,31 @@ async function clearCustomKey() {
   } finally { cycleCustomSaving.value = false }
 }
 
+// ─── Touche cycle profil OCR ──────────────────────────────────────────────────
+
+const ocrCycleProfileKey    = computed(() => app.settings?.ocrCycleProfileKey ?? null)
+const recordingOcrCycle     = ref(false)
+const ocrCycleSaving        = ref(false)
+
+function startRecordingOcrCycle() {
+  captureKey(recordingOcrCycle, async (payload) => {
+    if (!payload) return
+    ocrCycleSaving.value = true
+    try {
+      await window.oneCC.setOcrCycleProfileKey(payload)
+      app.settings = await window.oneCC.getSettings()
+    } finally { ocrCycleSaving.value = false }
+  })
+}
+
+async function clearOcrCycleKey() {
+  ocrCycleSaving.value = true
+  try {
+    await window.oneCC.setOcrCycleProfileKey(null)
+    app.settings = await window.oneCC.getSettings()
+  } finally { ocrCycleSaving.value = false }
+}
+
 // ─── Création d'un mode custom ────────────────────────────────────────────────
 
 const showCreateForm = ref(false)
@@ -312,6 +337,25 @@ const customModes  = computed(() => modeStore.modes.filter((m) => !m.builtIn))
             {{ cycleCustomKey ? 'Modifier' : 'Assigner' }}
           </button>
           <button v-if="cycleCustomKey" :disabled="cycleCustomSaving" class="text-xs text-rose-400/70 hover:text-rose-300 transition disabled:opacity-50" @click="clearCustomKey">Supprimer</button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Touche cycle profil OCR -->
+    <div class="rounded-lg border border-th-subtle bg-black/20 p-4">
+      <p class="text-xs font-bold uppercase tracking-wider text-th-muted mb-1">Cycle profil OCR</p>
+      <p class="text-xs text-th-muted mb-3">Fait défiler les profils OCR dans l'ordre. Une notification s'affiche sur l'overlay avec le nom du profil actif.</p>
+      <div class="flex items-center gap-3 flex-wrap">
+        <template v-if="recordingOcrCycle">
+          <span class="text-xs text-amber-300 animate-pulse">Appuyez sur la touche… (Echap pour annuler)</span>
+        </template>
+        <template v-else>
+          <kbd v-if="ocrCycleProfileKey" class="inline-flex items-center rounded border border-th-subtle bg-th-card px-2.5 py-1 text-sm font-mono font-semibold text-accent shadow-sm">{{ ocrCycleProfileKey }}</kbd>
+          <span v-else class="text-xs text-th-muted italic">Aucune touche</span>
+          <button :disabled="ocrCycleSaving" class="flex items-center gap-1.5 rounded-md border border-accent/25 bg-accent/[0.08] px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 transition disabled:opacity-50" @click="startRecordingOcrCycle">
+            {{ ocrCycleProfileKey ? 'Modifier' : 'Assigner' }}
+          </button>
+          <button v-if="ocrCycleProfileKey" :disabled="ocrCycleSaving" class="text-xs text-rose-400/70 hover:text-rose-300 transition disabled:opacity-50" @click="clearOcrCycleKey">Supprimer</button>
         </template>
       </div>
     </div>

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { MiningRock, MiningRockMineral } from '@shared/general'
 import { useMiningStore } from '../../../stores/mining'
+import { useRockOcr } from '@renderer/composables/useRockOcr'
 import OverlaySelect from './OverlaySelect.vue'
+import OverlayModal from '../OverlayModal.vue'
+import RockFormPanel from '../../mining/session/RockFormPanel.vue'
 
 const props = defineProps<{
   rocks: MiningRock[]
@@ -13,7 +16,38 @@ const props = defineProps<{
 type RockTabFilter = 'all' | 'available' | 'help'
 const activeTab = ref<RockTabFilter>('all')
 
+// ── Rock form overlay ─────────────────────────────────────────────────────────
 const mining = useMiningStore()
+const { openRockFormWithOcr, hasOcrData, scDetected } = useRockOcr()
+
+function openRockForm() {
+  if (props.preview) return
+  mining.openRockForm()
+}
+
+function openRockFormOcr() {
+  if (props.preview) return
+  openRockFormWithOcr()
+}
+
+function closeRockForm() {
+  mining.rockForm.show = false
+  mining.rockForm.editRockId = null
+}
+
+// ── Hotkey F3 : ouvrir/fermer formulaire (avec OCR si dispo) ──────────────────
+function onKeydown(e: KeyboardEvent) {
+  if (!props.interactive) return
+  if (e.key === 'F3') {
+    e.preventDefault()
+    if (mining.rockForm.show) { closeRockForm(); return }
+    if (hasOcrData()) openRockFormOcr()
+    else openRockForm()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 const collectRockId  = ref<number | null>(null)
 const claimPendingId = ref<number | null>(null)
@@ -156,8 +190,8 @@ function cancelCollect() {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-1.5">
-    <!-- Onglets filtre -->
-    <div class="flex shrink-0 gap-1">
+    <!-- Onglets filtre + bouton signalement -->
+    <div class="flex shrink-0 items-center gap-1">
       <button
         v-for="tab in (['all', 'available', 'help'] as RockTabFilter[])"
         :key="tab"
@@ -170,7 +204,27 @@ function cancelCollect() {
         {{ tab === 'all' ? 'Tous' : tab === 'available' ? 'Libres' : 'Aide' }}
         <span class="ml-0.5 opacity-70">{{ tabCount(tab) }}</span>
       </button>
+      <!-- Bouton signaler rocher (interactive uniquement) -->
+      <template v-if="interactive && !preview">
+        <button
+          v-if="hasOcrData()"
+          class="ml-auto rounded border border-accent/30 bg-accent/10 px-2 py-0.5 text-[9px] font-bold text-accent hover:bg-accent/20 transition-colors"
+          title="Signaler avec OCR (F3)"
+          @click="openRockFormOcr()"
+        >⬆ OCR</button>
+        <button
+          v-else
+          class="ml-auto rounded border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[9px] font-bold text-white/60 hover:bg-white/10 transition-colors"
+          title="Signaler un rocher (F3)"
+          @click="openRockForm()"
+        >+ Signaler</button>
+      </template>
     </div>
+
+    <!-- Modal formulaire rocher -->
+    <OverlayModal v-if="!preview" :show="mining.rockForm.show" title="Signaler un rocher" @close="closeRockForm()">
+      <RockFormPanel @cancel="closeRockForm()" @saved="closeRockForm()" />
+    </OverlayModal>
 
     <div v-if="filteredRocks.length" class="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1 session-scrollbar">
       <div

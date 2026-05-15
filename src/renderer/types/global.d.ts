@@ -40,7 +40,8 @@ declare global {
       setMapToggleKey: (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
       setCycleModeKey:    (key: string | { accel: string; keyCode: number | null } | null) => Promise<boolean>
       setCycleBuiltInKey: (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
-      setCycleCustomKey:  (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
+      setCycleCustomKey:       (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
+      setOcrCycleProfileKey:   (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
       // Overlay logs
       getLogs:         () => Promise<LogEntry[]>
       subscribeLogs:   () => Promise<LogEntry[]>
@@ -121,6 +122,34 @@ declare global {
       pushOverlayNotification:  (notif: OverlayNotification) => Promise<boolean>
       onOverlayNotification?:   (cb: (notif: OverlayNotification) => void) => void
       offOverlayNotification?:  () => void
+
+
+      // OCR
+      ocrLoadProfiles: () => Promise<{
+        profiles: import('../ocr/OcrTypes').OcrProfile[]
+        selectedProfileId: string | null
+        scanIntervalMs: number
+        selectedSourceName: string | null
+      }>
+      ocrSaveProfiles: (data: {
+        profiles: import('../ocr/OcrTypes').OcrProfile[]
+        selectedProfileId: string | null
+        scanIntervalMs: number
+        selectedSourceName: string | null
+      }) => Promise<boolean>
+      ocrListSources: () => Promise<import('../ocr/OcrTypes').OcrCaptureSource[]>
+      ocrGetPreferredSource: () => Promise<import('../ocr/OcrTypes').OcrCaptureSource | null>
+      ocrSetOverlayClickThrough: (enabled: boolean) => Promise<boolean>
+      ocrSetOverlayContentProtection: (enabled: boolean) => Promise<boolean>
+      ocrEnterOverlayCalibration: (profileId: string) => Promise<boolean>
+      ocrExitOverlayCalibration: () => Promise<boolean>
+      ocrUpdateZoneRect: (id: string, rect: unknown) => Promise<boolean>
+      onOcrCalibrationStart: (cb: (profileId: string) => void) => void
+      onOcrCalibrationStop: (cb: () => void) => void
+      onOcrZoneRectUpdate: (cb: (data: { id: string; rect: unknown }) => void) => void
+      offOcrCalibration: () => void
+      onOcrProfilesChanged: (cb: () => void) => void
+      offOcrProfilesChanged: () => void
     }
   }
 }

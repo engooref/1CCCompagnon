@@ -7,6 +7,7 @@ import { useMiningStore } from '../stores/mining'
 import { http } from '../services/http'
 import { createOverlayUrls } from '../config/api'
 import { useMercure } from '../composables/useMercure'
+import { autoStartOcr } from '../composables/useOcrAutoStart'
 
 const app = useAppStore()
 const mining = useMiningStore()
@@ -34,7 +35,7 @@ watch(
   { immediate: true },
 )
 
-const NAV_ORDER = ['/', '/radio', '/transport', '/mining', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
+const NAV_ORDER = ['/', '/radio', '/transport', '/mining', '/ocr', '/maps', '/agenda', '/inventory', '/fabricator', '/profils', '/logs', '/settings']
 
 function isActive(path: string): boolean {
   if (path === '/') return route.path === '/'
@@ -78,7 +79,7 @@ function toggleGroup(key: string) {
 
 // Un groupe est "actif" si une de ses routes est active
 const groupRoutes: Record<string, string[]> = {
-  operations: ['/radio', '/transport', '/mining', '/inventory', '/fabricator'],
+  operations: ['/radio', '/transport', '/mining', '/ocr', '/inventory', '/fabricator'],
   outils:     ['/maps', '/agenda'],
   admin:      ['/profils', '/logs'],
 }
@@ -181,6 +182,7 @@ onMounted(() => {
   checkUpcomingEvents()
   agendaTimer = setInterval(checkUpcomingEvents, 60_000)
   void connectRefineryMercure()
+  void autoStartOcr()
 })
 
 onUnmounted(() => {
@@ -251,6 +253,10 @@ onUnmounted(() => {
             <RouterLink to="/mining" class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/mining') }">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6-6 6 6-6 12-6-12z M3 9h18"/></svg>
               Minage
+            </RouterLink>
+            <RouterLink to="/ocr" class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/ocr') }">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              OCR
             </RouterLink>
             <RouterLink to="/inventory"  class="nav-dropdown-item" :class="{ 'nav-dropdown-item-active': isActive('/inventory') }">
               <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8L5 5h14l2 3H3M5 8v13h14V8M5 14h14M12 8v13"/></svg>
@@ -384,6 +390,10 @@ onUnmounted(() => {
                 <RouterLink to="/mining" class="nav-v" :class="{ 'nav-v-active': isActive('/mining') }">
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6-6 6 6-6 12-6-12z M3 9h18"/></svg>
                   Minage
+                </RouterLink>
+                <RouterLink to="/ocr" class="nav-v" :class="{ 'nav-v-active': isActive('/ocr') }">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                  OCR
                 </RouterLink>
                 <RouterLink to="/inventory"  class="nav-v" :class="{ 'nav-v-active': isActive('/inventory') }">
                   <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8L5 5h14l2 3H3M5 8v13h14V8M5 14h14M12 8v13"/></svg>

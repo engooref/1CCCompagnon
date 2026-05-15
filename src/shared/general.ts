@@ -124,6 +124,8 @@ export interface AppSettings {
   interactionKeyMode?: 'hold' | 'toggle'
   overlayEditKey?: string | null
   overlayEditKeyCode?: number | null
+  ocrCycleProfileKey?: string | null
+  ocrCycleProfileKeyCode?: number | null
   mapOverlayOpacity?: number
   overlayLayout?: OverlayLayout
   overlayModules?: OverlayModuleConfig[]

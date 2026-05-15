@@ -248,12 +248,34 @@ static Napi::Value GetState(const Napi::CallbackInfo& info) {
     return result;
 }
 
+/**
+ * focusGameWindow() → boolean
+ *
+ * Donne le focus à la fenêtre du jeu via SetForegroundWindow.
+ * Retourne true si la fenêtre a été trouvée et SetForegroundWindow appelé.
+ * Utilisé à la fermeture de l'éditeur overlay pour rendre la souris au jeu.
+ */
+static Napi::Value FocusGameWindow(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    HWND hwnd = FindGameWindow();
+    if (!hwnd) return Napi::Boolean::New(env, false);
+
+    // AllowSetForegroundWindow permet à ce process de voler le focus même sans input récent
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    AllowSetForegroundWindow(pid);
+
+    BOOL ok = SetForegroundWindow(hwnd);
+    return Napi::Boolean::New(env, ok != 0);
+}
+
 // ─── Initialisation du module ─────────────────────────────────────────────────
 
 static Napi::Object Init(Napi::Env env, Napi::Object exports) {
-    exports.Set("startTracking", Napi::Function::New(env, StartTracking));
-    exports.Set("stopTracking",  Napi::Function::New(env, StopTracking));
-    exports.Set("getState",      Napi::Function::New(env, GetState));
+    exports.Set("startTracking",   Napi::Function::New(env, StartTracking));
+    exports.Set("stopTracking",    Napi::Function::New(env, StopTracking));
+    exports.Set("getState",        Napi::Function::New(env, GetState));
+    exports.Set("focusGameWindow", Napi::Function::New(env, FocusGameWindow));
     return exports;
 }
 

@@ -1,7 +1,31 @@
 import { BrowserWindow, app, screen } from 'electron'
 import path from 'node:path'
+import { execSync } from 'node:child_process'
 
 let win: BrowserWindow | null = null
+
+function getScDisplayBounds(): { x: number; y: number; width: number; height: number } {
+  try {
+    const ps = `
+      Add-Type @"
+      using System;using System.Runtime.InteropServices;
+      public class W{[DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out RECT r);public struct RECT{public int L,T,R,B;}}
+"@
+      $p=Get-Process -Name 'StarCitizen' -ErrorAction SilentlyContinue | Select-Object -First 1
+      if(!$p){exit 1}
+      $r=New-Object W+RECT
+      [W]::GetWindowRect($p.MainWindowHandle,[ref]$r)|Out-Null
+      Write-Output "$($r.L) $($r.T)"
+    `
+    const out = execSync(`powershell -NoProfile -Command "${ps.replace(/\n\s*/g, ' ')}"`, { timeout: 3000 }).toString().trim()
+    const [lx, ly] = out.split(' ').map(Number)
+    if (!isNaN(lx) && !isNaN(ly)) {
+      const d = screen.getDisplayNearestPoint({ x: lx, y: ly })
+      return d.bounds
+    }
+  } catch (_) { /* SC pas lancé ou erreur → fallback */ }
+  return screen.getPrimaryDisplay().bounds
+}
 
 export function openOverlayEditor(): BrowserWindow {
   if (win && !win.isDestroyed()) {
@@ -11,15 +35,13 @@ export function openOverlayEditor(): BrowserWindow {
   }
 
   const RENDERER_DIST = path.join(app.getAppPath(), 'out/renderer')
-  const display = screen.getPrimaryDisplay().workArea
-  const width = Math.min(1560, Math.max(1180, display.width - 80))
-  const height = Math.min(980, Math.max(760, display.height - 80))
+  const { x, y, width, height } = getScDisplayBounds()
 
   win = new BrowserWindow({
     width,
     height,
-    x: display.x + Math.max(20, Math.round((display.width - width) / 2)),
-    y: display.y + Math.max(20, Math.round((display.height - height) / 2)),
+    x,
+    y,
     frame: true,
     transparent: false,
     backgroundColor: '#060b12',
