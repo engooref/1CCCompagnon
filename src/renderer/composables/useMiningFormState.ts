@@ -16,7 +16,6 @@ export function useRockFormState() {
     editRockId: null as number | null,
     posX: '' as string,
     posY: '' as string,
-    posZ: '' as string,
     bodySearch: '',
     bodyResults: [] as any[],
     selectedBody: null as any | null,

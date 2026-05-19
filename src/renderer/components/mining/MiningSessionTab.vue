@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useMiningStore } from '../../stores/mining'
-import { useAppStore } from '@renderer/stores/app'
 import { usePinnedSession } from '../../composables/usePinnedSession'
 import { useMineralDropdown } from '@renderer/composables/useMineralDropdown'
 import RockFormPanel from './session/RockFormPanel.vue'
@@ -10,17 +9,20 @@ import SessionWoShipModal from './session/SessionWoShipModal.vue'
 import SessionLeaveConfirmModal from './session/SessionLeaveConfirmModal.vue'
 
 const mining = useMiningStore()
-const { pinnedSessionId, pin: pinSession, unpin: unpinSession, isPinned } = usePinnedSession()
+const {pin: pinSession, unpin: unpinSession, isPinned } = usePinnedSession()
 
 const sessionLogOpen = ref(false)
 const changeRefineryDropOpen = ref(false)
+const bagChangeModalOpen = ref(false)
+const bagChangeSelectedCrewKey = ref<string | null>(null)
+const bagChangeError = ref<string | null>(null)
+const bagChangeMessage = ref<string | null>(null)
 
 // ── Shared mineral/body helpers (composable) ──────────────────────────────────
 const {
   mineralNameById, mineralDisplayName, mineralSearch, setMineralSearch,
-  filteredMineralsForRow, openMineralDropdown, closeMineralDropdown,
-  clearMineral, selectMineral, mineralDropdownKeydown,
-  searchBodies, selectBody,
+  openMineralDropdown, closeMineralDropdown,
+  clearMineral, selectMineral, searchBodies, selectBody,
 } = useMineralDropdown()
 
 // Needed by rock-form zone helpers still inline below
@@ -104,86 +106,17 @@ function removeCollectLine(i: number) {
   mining.collectForm.lines.splice(i, 1)
 }
 
-function emptyRockFormMineral() {
-  return { commodityId: null, percentage: '', quality: 500, _name: '', _query: '', _search: '', _open: false, _hi: -1 }
-}
-function rockFormAddMineral() { mining.rockForm.minerals.push(emptyRockFormMineral()) }
-function rockFormRemoveMineral(i: number) {
-  mining.rockForm.minerals.splice(i, 1)
-  if (!mining.rockForm.minerals.length) mining.rockForm.minerals.push(emptyRockFormMineral())
-}
-
-function rockFormZoneDisplayName(): string {
-  return String(mining.rockForm.zoneQuery || mineralNameById(mining.rockForm.zoneQueryId) || '')
-}
-
-function rockFormZoneSearch(): string {
-  return String((mining.rockForm as any).zoneQuerySearch ?? '')
-}
-
-function setRockFormZoneSearch(event: Event) {
-  ;(mining.rockForm as any).zoneQuerySearch = (event.target as HTMLInputElement).value
-  ;(mining.rockForm as any).zoneQueryHi = -1
-}
-
-function filteredRockFormZoneMinerals() {
-  return filteredMinerals(rockFormZoneSearch())
-}
-
-function openRockFormZoneDropdown(event?: Event) {
-  mining.rockForm.zoneQueryOpen = true
-  ;(mining.rockForm as any).zoneQuerySearch = ''
-  ;(mining.rockForm as any).zoneQueryHi = -1
-  focusDropdownSearch(event)
-}
-
-function clearRockFormZoneMineral() {
-  mining.rockForm.zoneQueryId = null
-  mining.rockForm.zoneQuery = ''
-  mining.rockForm.zoneQueryOpen = false
-  mining.rockForm.zoneSearchState = 'idle'
-  mining.rockForm.zoneLocationName = null
-  mining.rockForm.zoneCreate.show = false
-  mining.rockForm.zoneCreate.error = null
-  ;(mining.rockForm as any).zoneQuerySearch = ''
-  ;(mining.rockForm as any).zoneQueryHi = -1
-  mining.rockForm.minerals = [emptyRockFormMineral()]
-}
-
-function rockFormSelectZoneMineral(min: any) {
-  mining.rockForm.zoneQueryId = min.id
-  mining.rockForm.zoneQuery = min.name
-  mining.rockForm.zoneQueryOpen = false
-  ;(mining.rockForm as any).zoneQuerySearch = ''
-  ;(mining.rockForm as any).zoneQueryHi = -1
-  mining.rockFormLookupZone()
-}
-
-function rockFormZoneMineralKeydown(event: KeyboardEvent) {
-  const list = filteredRockFormZoneMinerals()
-  const form = mining.rockForm as any
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    form.zoneQueryHi = Math.min(Number(form.zoneQueryHi ?? -1) + 1, list.length - 1)
-  } else if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    form.zoneQueryHi = Math.max(Number(form.zoneQueryHi ?? 0) - 1, 0)
-  } else if (event.key === 'Enter') {
-    event.preventDefault()
-    const item = list[Number(form.zoneQueryHi ?? -1)] ?? list[0]
-    if (item) rockFormSelectZoneMineral(item)
-  } else if (event.key === 'Escape') {
-    mining.rockForm.zoneQueryOpen = false
-  }
-
-  nextTick(() => {
-    const root = (event.currentTarget as HTMLElement | null)?.closest('.relative')
-    const item = root?.querySelectorAll<HTMLElement>('.mineral-dropdown-item')?.[Number(form.zoneQueryHi ?? -1)]
-    item?.scrollIntoView({ block: 'nearest' })
-  })
-}
-
 // ── Crew grouping ────────────────────────────────────────────────────────────
+type CrewRole = 'miner' | 'prospector' | 'support'
+
+const crewRoleStyles = computed<Record<CrewRole, { borderColor: string }>>(() => {
+  return {
+    miner: { borderColor: '#FFD700' },
+    prospector: { borderColor: '#A78BFA' },
+    support: { borderColor: '#38BDF8' },
+  }
+})
+
 const crewRoleSections = computed(() => {
   const active = mining.sessionActive
   if (!active) return []
@@ -191,7 +124,7 @@ const crewRoleSections = computed(() => {
   const crewsList: any[] = (active as any).crews ?? []
   const participants: any[] = active.participants ?? []
 
-  const buildGroups = (role: string) =>
+  const buildGroups = (role: CrewRole) =>
     crewsList
       .filter((c: any) => c.role === role)
       .map((c: any) => {
@@ -215,9 +148,10 @@ const crewRoleSections = computed(() => {
             suggested,
             effectiveStatus: c.status ?? suggested ?? 'standby',
           },
+          style: crewRoleStyles.value[role], // Add role-based styles here
         }
       })
-      .filter(Boolean)
+      .filter((group): group is NonNullable<typeof group> => group !== null)
 
   return [
     { role: 'miner',      label: 'Équipages miniers', icon: '⛏️', groups: buildGroups('miner') },
@@ -229,9 +163,11 @@ const crewRoleSections = computed(() => {
 function suggestCrewStatus(members: any[]): string {
   const userIds = new Set(members.map((m) => m.userId).filter(Boolean))
   const rocks = (mining.sessionActive?.rocks ?? []).filter((r) => userIds.has(r.claimedByUserId))
+  // Priority order for auto status (highest -> lowest).
+  if (rocks.some((r) => r.status === 'incident')) return 'incident'
   if (rocks.some((r) => r.status === 'extraction')) return 'extraction'
   if (rocks.some((r) => ['fracturing', 'mining'].includes(r.status))) return 'fracturing'
-  if (rocks.some((r) => r.status === 'completed')) return 'return_trip'
+  if (rocks.some((r) => r.status === 'claimed')) return 'positioning'
   if (rocks.some((r) => r.status === 'en_route')) return 'transit'
   return 'standby'
 }
@@ -253,6 +189,107 @@ const sessionSummary = computed(() => {
 const openCargos = computed(() =>
   (mining.sessionActive?.cargos ?? []).filter((c: any) => !['delivered', 'refined'].includes(c.status ?? ''))
 )
+
+function cargoCollectorUserId(cargo: any): number | null {
+  const candidate = cargo?.collectedByMemberId ?? cargo?.collectedByUserId ?? cargo?.reportedByUserId ?? null
+  const id = Number(candidate)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+const eligibleBagChangeCrews = computed(() => {
+  const active = mining.sessionActive
+  const me = mining.myParticipant
+  if (!active || me?.role !== 'support') return []
+
+  const participants = active.participants ?? []
+  const crews = ((active as any).crews ?? []) as any[]
+  const cargos = openCargos.value
+  const supportCrewId = me?.crewId != null ? Number(me.crewId) : null
+  const supportCrewKey = me?.crewKey ? String(me.crewKey) : null
+
+  return crews
+    .filter((crew: any) => ['miner', 'prospector'].includes(String(crew?.role ?? '')))
+    .map((crew: any) => {
+      const crewId = crew?.id != null ? Number(crew.id) : null
+      const crewKey = crew?.crewKey ? String(crew.crewKey) : null
+      const isSupportCrew = (supportCrewId != null && crewId != null && supportCrewId === crewId)
+        || (supportCrewKey && crewKey && supportCrewKey === crewKey)
+      if (isSupportCrew) return null
+
+      const members = participants.filter((p: any) =>
+        (crewId != null && Number(p?.crewId) === crewId)
+        || (crewKey && String(p?.crewKey ?? '') === crewKey),
+      )
+      const memberIds = new Set(members.map((p: any) => Number(p?.userId)).filter((id: number) => Number.isFinite(id)))
+
+      const crewOpenCargos = cargos.filter((cargo: any) => {
+        const cargoCrewId = Number(cargo?.crewId ?? cargo?.sourceCrewId ?? cargo?.collectedByCrewId ?? NaN)
+        if (crewId != null && Number.isFinite(cargoCrewId) && cargoCrewId === crewId) return true
+
+        const cargoCrewKey = String(cargo?.crewKey ?? cargo?.sourceCrewKey ?? cargo?.collectedByCrewKey ?? '')
+        if (crewKey && cargoCrewKey && cargoCrewKey === crewKey) return true
+
+        const collectorId = cargoCollectorUserId(cargo)
+        return collectorId != null && memberIds.has(collectorId)
+      })
+
+      if (!crewOpenCargos.length) return null
+
+      const totalScu = crewOpenCargos.reduce((sum: number, cargo: any) => sum + Number(cargo?.quantityScu ?? 0), 0)
+      return {
+        key: crewKey ?? `crew:${crewId ?? 'unknown'}`,
+        crewId,
+        crewKey,
+        role: String(crew?.role ?? 'miner'),
+        shipName: crew?.shipName ?? null,
+        cargosCount: crewOpenCargos.length,
+        totalScu,
+      }
+    })
+    .filter((crew): crew is NonNullable<typeof crew> => crew !== null)
+    .sort((a, b) => b.totalScu - a.totalScu)
+})
+
+function openBagChangeModal() {
+  bagChangeError.value = null
+  if (!eligibleBagChangeCrews.value.length) {
+    bagChangeMessage.value = 'Aucun équipage mineur/prospecteur éligible.'
+    return
+  }
+  bagChangeSelectedCrewKey.value = eligibleBagChangeCrews.value[0]?.key ?? null
+  bagChangeModalOpen.value = true
+}
+
+function closeBagChangeModal() {
+  bagChangeModalOpen.value = false
+  bagChangeError.value = null
+}
+
+async function submitBagChange() {
+  if (!mining.sessionActive || !bagChangeSelectedCrewKey.value) return
+  bagChangeError.value = null
+
+  const sourceCrew = eligibleBagChangeCrews.value.find((crew) => crew.key === bagChangeSelectedCrewKey.value)
+  if (!sourceCrew) {
+    bagChangeError.value = 'Équipage source invalide.'
+    return
+  }
+
+  try {
+    const result = await mining.transferCrewCargosToSupport(mining.sessionActive.id, {
+      crewId: sourceCrew.crewId,
+      crewKey: sourceCrew.crewKey,
+    })
+
+    const lines = Number(result?.summary?.linesCount ?? result?.cargos?.length ?? 0)
+    const totalScu = Number(result?.summary?.totalScu ?? 0)
+    const source = sourceCrew.shipName ?? (sourceCrew.role === 'prospector' ? 'Prospecteur' : 'Mineur')
+    bagChangeMessage.value = `Transfert terminé: ${lines} cargo(s), ${totalScu.toFixed(1)} SCU depuis ${source}.`
+    closeBagChangeModal()
+  } catch (err: any) {
+    bagChangeError.value = err?.message ?? 'Erreur changement de sac.'
+  }
+}
 
 const createRefinerySearch = ref('')
 const createRefineryActive = ref(-1)
@@ -423,17 +460,17 @@ function dutyOptions(p: any): Array<{value:string;label:string}> {
 
 // ── Crew status helpers ───────────────────────────────────────────────────────
 function crewStatusLabel(s: string): string {
-  return ({ transit: 'En transit', scouting: 'Scan zone', positioning: 'En position', fracturing: 'Fracturation', extraction: 'Extraction', full_cargo: 'Soute pleine', return_trip: 'Retour', refining: 'Raffinage', standby: 'Stand-by', incident: 'Incident', done: 'Terminé' } as Record<string,string>)[s] ?? s
+  return ({ transit: 'En transit', scouting: 'Scan zone', positioning: 'En position', fracturing: 'Fracturation', extraction: 'Extraction', refining: 'Raffinage', standby: 'Stand-by', incident: 'Incident' } as Record<string,string>)[s] ?? s
 }
 function crewStatusClass(s: string): string {
-  return ({ transit: 'bg-sky-500/20 text-sky-300 border-sky-500/30', positioning: 'bg-sky-500/20 text-sky-300 border-sky-500/30', scouting: 'bg-violet-500/20 text-violet-300 border-violet-500/30', fracturing: 'bg-orange-500/20 text-orange-300 border-orange-500/30', extraction: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', full_cargo: 'bg-amber-500/20 text-amber-300 border-amber-500/30', return_trip: 'bg-amber-500/20 text-amber-300 border-amber-500/30', refining: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', incident: 'bg-red-500/20 text-red-300 border-red-500/30', standby: 'bg-white/10 text-white/55 border-white/15', done: 'bg-white/10 text-white/40 border-white/10' } as Record<string,string>)[s] ?? 'bg-white/10 text-white/40 border-white/10'
+  return ({ transit: 'bg-sky-500/20 text-sky-300 border-sky-500/30', positioning: 'bg-sky-500/20 text-sky-300 border-sky-500/30', scouting: 'bg-violet-500/20 text-violet-300 border-violet-500/30', fracturing: 'bg-orange-500/20 text-orange-300 border-orange-500/30', extraction: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', refining: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', incident: 'bg-red-500/20 text-red-300 border-red-500/30', standby: 'bg-white/10 text-white/55 border-white/15' } as Record<string,string>)[s] ?? 'bg-white/10 text-white/40 border-white/10'
 }
 const crewStatusOptions = [
   { value: 'transit', label: 'En transit' }, { value: 'scouting', label: 'Scan de zone' },
   { value: 'positioning', label: 'Mise en position' }, { value: 'fracturing', label: 'Fracturation' },
-  { value: 'extraction', label: 'Extraction' }, { value: 'full_cargo', label: 'Soute pleine' },
-  { value: 'return_trip', label: 'Retour raffinerie' }, { value: 'refining', label: 'Raffinage' },
-  { value: 'standby', label: 'Stand-by' }, { value: 'incident', label: 'Incident' }, { value: 'done', label: 'Terminé' },
+  { value: 'extraction', label: 'Extraction' },
+  { value: 'refining', label: 'Raffinage' },
+  { value: 'standby', label: 'Stand-by' }, { value: 'incident', label: 'Incident' },
 ]
 
 // ── Rock helpers ─────────────────────────────────────────────────────────────
@@ -497,8 +534,8 @@ function canEditRock(rock: any) {
 function canDeleteRock(rock: any) {
   return !rock.claimedByUserId && rock.reportedByUserId === mining._currentUserId && mining.sessionActive?.status !== 'closed'
 }
-function isSessionCreator() {
-  return mining.sessionActive?.createdById && mining._currentUserId && mining.sessionActive.createdById === mining._currentUserId
+function isSessionCreator() : boolean {
+  return !!(mining.sessionActive?.createdById && mining._currentUserId && mining.sessionActive.createdById === mining._currentUserId)
 }
 
 // ── Rock inline edit tracking ─────────────────────────────────────────────────
@@ -515,7 +552,7 @@ function openRockEdit(rock: any) {
   mining.rockFilter = 'all'
   mining.rockForm = {
     show: true, saving: false, error: null, editRockId: rock.id,
-    posX: String(rock.posX ?? ''), posY: String(rock.posY ?? ''), posZ: String(rock.posZ ?? ''),
+    posX: String(rock.posX ?? ''), posY: String(rock.posY ?? ''),
     bodySearch: rock.bodyName ?? '', bodyResults: [], selectedBody: rock.bodyId ? { id: rock.bodyId, name: rock.bodyName ?? '' } : null,
     sizeScuEstimate: String(rock.sizeScuEstimate ?? ''), mass: String(rock.mass ?? ''),
     instability: String(rock.instability ?? ''), resistance: String(rock.resistance ?? ''),
@@ -885,13 +922,48 @@ function showNewSessionForm() {
                   :class="mining.sessionActive.status === 'closed' ? 'border-rose-500/20 bg-rose-500/10 text-rose-300' : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'">
                   {{ mining.sessionActive.status === 'closed' ? 'Fermée' : 'Live' }}
                 </span>
+                <div class="flex flex-wrap gap-2 text-[11px]">
+                  <span
+                    v-if="mining.sessionActive.createdBy"
+                    class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/7 px-2.5 py-1 text-th-muted shadow-sm"
+                  >
+                    <span class="text-accent/70">Chef</span>
+                    <strong class="font-semibold text-th-primary">
+                      {{ mining.sessionActive.createdBy }}
+                    </strong>
+                  </span>
+
+                  <span
+                    v-if="mining.sessionActive.systemName"
+                    class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/7 px-2.5 py-1 text-th-muted shadow-sm"
+                  >
+                    <span class="text-accent/70">Système</span>
+                    <strong class="font-semibold text-th-primary">
+                      {{ mining.sessionActive.systemName }}
+                    </strong>
+                  </span>
+
+                  <span
+                    v-if="mining.sessionActive.defaultBodyName"
+                    class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/7 px-2.5 py-1 text-th-muted shadow-sm"
+                  >
+                    <span class="text-accent/70">Zone</span>
+                    <strong class="font-semibold text-th-primary">
+                      {{ mining.sessionActive.defaultBodyName }}
+                    </strong>
+                  </span>
+
+                  <span
+                    v-if="mining.sessionActive.defaultRefineryName"
+                    class="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/7 px-2.5 py-1 text-th-muted shadow-sm"
+                  >
+                    <span class="text-accent/70">Raffinerie</span>
+                    <strong class="font-semibold text-th-primary">
+                      {{ mining.sessionActive.defaultRefineryName }}
+                    </strong>
+                  </span>
+                </div>
               </div>
-              <p class="text-[11px] text-th-muted mt-0.5 flex flex-wrap gap-x-3">
-                <span v-if="mining.sessionActive.createdBy">Chef <strong class="text-th-primary">{{ mining.sessionActive.createdBy }}</strong></span>
-                <span v-if="mining.sessionActive.systemName">Système <strong class="text-th-primary">{{ mining.sessionActive.systemName }}</strong></span>
-                <span v-if="mining.sessionActive.defaultBodyName">Zone <strong class="text-th-primary">{{ mining.sessionActive.defaultBodyName }}</strong></span>
-                <span v-if="mining.sessionActive.defaultRefineryName">Raffinerie <strong class="text-th-primary">{{ mining.sessionActive.defaultRefineryName }}</strong></span>
-              </p>
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -911,7 +983,7 @@ function showNewSessionForm() {
               class="rounded-xl border border-accent/25 bg-accent/[0.08] px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/15 disabled:opacity-50">
               {{ mining.loading.createOp ? 'Envoi...' : 'Créer l\'opération' }}
             </button>
-            <span v-if="mining.sessionActive.operationCreated" class="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">Op envoyée</span>
+            <span v-if="mining.sessionActive.operationCreated" class="content-center rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">Op envoyée</span>
             <button v-if="mining.sessionActive.status !== 'closed' && isSessionCreator()"
               @click="mining.closeSessionAction()"
               :disabled="mining.loading.closeSession"
@@ -955,7 +1027,7 @@ function showNewSessionForm() {
             placeholder="Système, planète, lune…"
             @input="searchBodies(mining.changeZone.bodySearch, mining.changeZone)"
             @blur="blurChangeZoneSearch()" />
-          <button v-if="mining.changeZone.selectedBody" type="button" @click="mining.changeZone.selectedBody = null; mining.changeZone.bodySearch = ''"
+          <button v-if="mining.changeZone.selectedBody" type="button" @click="mining.changeZone.selectedBody = null; mining.changeZone.bodySearch = ''; mining.changeZone.bodyResults = []"
             class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 text-xs">✕</button>
           <div v-if="mining.changeZone.bodyResults.length > 0" class="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#0b1422]/95 shadow-lg">
             <template v-for="sys in mining.changeZone.bodyResults" :key="sys.id ?? sys.name">
@@ -1072,10 +1144,19 @@ function showNewSessionForm() {
 
               <!-- Support: transport raffinerie -->
               <div v-if="section.role === 'support' && isSupport() && mining.sessionActive.status !== 'closed'" class="mb-2">
-                <button @click="openWoSupportForm()"
-                  class="w-full rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/10">
-                  🚚 Transport raffinerie
-                </button>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button @click="openWoSupportForm()"
+                    class="w-full rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/10">
+                    🚚 Transport raffinerie
+                  </button>
+                  <button @click="openBagChangeModal()"
+                    :disabled="!eligibleBagChangeCrews.length || mining.loading.bagChange"
+                    class="w-full rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50">
+                    {{ mining.loading.bagChange ? 'Transfert...' : '🧺 Changement de sac' }}
+                  </button>
+                </div>
+                <p v-if="bagChangeMessage" class="mt-1 text-[11px] text-emerald-300/80">{{ bagChangeMessage }}</p>
+                <p v-else-if="!eligibleBagChangeCrews.length" class="mt-1 text-[11px] text-th-muted">Aucun équipage mineur/prospecteur avec cargo ouvert.</p>
               </div>
 
               <!-- Cargo panel for support -->
@@ -1110,6 +1191,7 @@ function showNewSessionForm() {
               <div class="space-y-2">
                 <article v-for="group in section.groups" :key="group.key"
                   class="rounded-xl border p-3"
+                  :style="group.style"
                   :class="group.isMyGroup ? 'border-accent/20 bg-accent/[0.04]' : 'border-white/8 bg-white/[0.02]'">
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -1251,10 +1333,9 @@ function showNewSessionForm() {
                         </span>
                       </div>
                       <!-- Coords -->
-                      <p v-if="rock.posX != null || rock.posY != null || rock.posZ != null" class="mt-1 font-mono text-[11px] font-semibold tracking-wide text-th-muted">
+                      <p v-if="rock.posX != null || rock.posY != null" class="mt-1 font-mono text-[11px] font-semibold tracking-wide text-th-muted">
                         <span v-if="rock.posX != null">X {{ rock.posX }}</span>
                         <span v-if="rock.posY != null" class="ml-2">Y {{ rock.posY }}</span>
-                        <span v-if="rock.posZ != null" class="ml-2">Z {{ rock.posZ }}</span>
                       </p>
                     </div>
 
@@ -1354,6 +1435,38 @@ function showNewSessionForm() {
         </section>
       </div>
 
+      <div v-if="bagChangeModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm" @click.self="closeBagChangeModal()">
+        <div class="w-full max-w-xl rounded-2xl border border-th-subtle bg-[#0d1117] p-4 shadow-2xl md:p-5">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-[10px] font-semibold uppercase tracking-widest text-sky-400/70">Support</p>
+              <h4 class="text-base font-semibold text-th-primary">Changement de sac</h4>
+              <p class="mt-1 text-xs text-th-muted">Transfère tous les cargos ouverts d'un équipage source vers toi.</p>
+            </div>
+            <button type="button" @click="closeBagChangeModal()" class="rounded-lg px-2 py-1 text-lg leading-none text-th-muted transition hover:bg-white/5 hover:text-th-primary">✕</button>
+          </div>
+
+          <div class="mt-4 space-y-2">
+            <label class="block text-xs text-th-muted">Équipage source</label>
+            <select v-model="bagChangeSelectedCrewKey" class="w-full rounded-xl border border-th-subtle bg-black/30 px-3 py-2 text-sm text-th-primary focus:border-accent/40 focus:outline-none">
+              <option v-for="crew in eligibleBagChangeCrews" :key="crew.key" :value="crew.key">
+                {{ crew.shipName ?? (crew.role === 'prospector' ? 'Prospecteur' : 'Mineur') }} · {{ crew.cargosCount }} cargo(s) · {{ crew.totalScu.toFixed(1) }} SCU
+              </option>
+            </select>
+            <p v-if="bagChangeError" class="text-xs text-rose-300">{{ bagChangeError }}</p>
+          </div>
+
+          <div class="mt-4 flex justify-end gap-2">
+            <button type="button" @click="closeBagChangeModal()" class="rounded-xl border border-th-subtle bg-white/5 px-3 py-1.5 text-xs text-th-muted hover:bg-white/10">Annuler</button>
+            <button type="button" @click="submitBagChange()"
+              :disabled="!bagChangeSelectedCrewKey || mining.loading.bagChange"
+              class="rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500/15 disabled:opacity-50">
+              {{ mining.loading.bagChange ? 'Transfert...' : 'Confirmer le transfert' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Journal -->
       <section class="rounded-2xl border border-th-subtle bg-black/20">
         <button class="flex w-full items-center justify-between px-4 py-3" @click="sessionLogOpen = !sessionLogOpen">
@@ -1363,7 +1476,7 @@ function showNewSessionForm() {
           </svg>
         </button>
         <div v-if="sessionLogOpen" class="max-h-52 overflow-y-auto border-t border-white/5 p-3 space-y-1">
-          <div v-for="entry in mining.sessionActiveLogs" :key="entry.id" class="flex gap-2 text-xs">
+          <div v-for="entry in mining.sessionActiveLogs.slice(0, 5)" :key="entry.id" class="flex gap-2 text-xs">
             <span class="shrink-0 text-base leading-none">{{ entry.icon }}</span>
             <span class="text-th-muted">{{ entry.message }}</span>
           </div>
@@ -1504,4 +1617,3 @@ function showNewSessionForm() {
 
   </div>
 </template>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              

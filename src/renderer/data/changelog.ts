@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.1.0',
+    date: '2026-05-19',
+    changes: [
+      { type: 'feature', text: 'Ajout d\'un système de minimap sur l\'overlay' },
+      { type: 'improvement', text: 'Ajout d\'un bouton dans le transport pour valider l\'étape sur l\'overlay' },
+      { type: 'fix', text: 'Correction des bugs présents sur le module de minage' },
+    ]
+  },
+  {
     version: '2.0.0',
     date: '2026-05-15',
     changes: [

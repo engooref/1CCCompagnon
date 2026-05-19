@@ -14,6 +14,8 @@ export function registerRadioIpc() {
     return {
       pttBindings: settings.radioPttBindings ?? DEFAULT_RADIO_SETTINGS.pttBindings,
       radioVolume: settings.radioVolume       ?? DEFAULT_RADIO_SETTINGS.radioVolume,
+      radioEffectEnabled: settings.radioEffectEnabled ?? DEFAULT_RADIO_SETTINGS.radioEffectEnabled,
+      radioEffectIntensity: settings.radioEffectIntensity ?? DEFAULT_RADIO_SETTINGS.radioEffectIntensity,
     }
   })
 
@@ -22,6 +24,8 @@ export function registerRadioIpc() {
     setSettings({
       ...(partial.pttBindings !== undefined && { radioPttBindings: partial.pttBindings }),
       ...(partial.radioVolume !== undefined && { radioVolume:      partial.radioVolume }),
+      ...(partial.radioEffectEnabled !== undefined && { radioEffectEnabled: partial.radioEffectEnabled }),
+      ...(partial.radioEffectIntensity !== undefined && { radioEffectIntensity: partial.radioEffectIntensity }),
     })
 
     if (partial.pttBindings !== undefined) {

@@ -120,13 +120,18 @@ export function useMapLeaflet() {
   let _mapBounds: [[number, number], [number, number]] | null = null
   let _resizeObserver: ResizeObserver | null = null
 
-  function init(el: HTMLElement, cfg: MapConfig, imageBlobUrl: string, interactive = true) {
+  // interactive: false = lecture seule (overlay plein écran)
+  //              true  = pan molette uniquement (mode overlay interactif)
+  //              'full'= drag clic gauche + scroll zoom (minimap)
+  function init(el: HTMLElement, cfg: MapConfig, imageBlobUrl: string, interactive: boolean | 'full' = true) {
     if (_map) destroy()
 
     const { width, height } = cfg
     const gridCols = clamp(parseInt(String(cfg.gridCols ?? 20), 10), 2, 60)
     const cellSize = width / gridCols
     const gridRows = Math.max(2, Math.round(height / cellSize))
+    const fullInteractive = interactive === 'full'
+    const anyInteractive  = !!interactive
 
     _map = L.map(el, {
       crs: L.CRS.Simple,
@@ -137,11 +142,11 @@ export function useMapLeaflet() {
       wheelPxPerZoomLevel: 60,
       attributionControl: false,
       doubleClickZoom: false,
-      dragging: interactive,
-      scrollWheelZoom: interactive,
+      dragging: fullInteractive,
+      scrollWheelZoom: fullInteractive,
       touchZoom: false,
       keyboard: false,
-      zoomControl: interactive,
+      zoomControl: fullInteractive,
     })
 
     _mapBounds = [[0, 0], [height, width]]
@@ -169,8 +174,8 @@ export function useMapLeaflet() {
       L.polyline([[lat, 0], [lat, width]], go).addTo(gridGroup)
     }
 
-    // Drag bouton molette (pan)
-    if (interactive) {
+    // Drag bouton molette (pan) — uniquement en mode interactif non-full
+    if (anyInteractive && !fullInteractive) {
       _map.dragging.disable()
       let panning = false, lastX = 0, lastY = 0
       el.addEventListener('mousedown', e => {

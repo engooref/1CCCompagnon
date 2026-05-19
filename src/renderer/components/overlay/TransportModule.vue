@@ -8,9 +8,11 @@ import { usePinnedTransport } from '../../composables/usePinnedTransport'
 const props = withDefaults(defineProps<{
   preview?: boolean
   previewOrder?: TransportOrder | null
+  interactionMode?: boolean
 }>(), {
   preview: false,
   previewOrder: null,
+  interactionMode: false,
 })
 
 const { pinnedId } = usePinnedTransport()
@@ -22,6 +24,7 @@ let urls: ReturnType<typeof createOverlayUrls> | null = null
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 const marketOppsEnabled = ref(false)
 let marketOppsBudget: number | null = null
+const savingStep = ref(false)
 
 async function toggleMarketOppsLocal() {
   marketOppsEnabled.value = !marketOppsEnabled.value
@@ -149,6 +152,27 @@ async function fetchActiveOrder() {
       null
   } catch {
     // overlay optionnel
+  }
+}
+
+async function validateCurrentStep() {
+  if (props.preview || !token || !urls || !nextLeg.value?.legId || savingStep.value) return
+
+  const currentLegId = nextLeg.value.legId
+  savingStep.value = true
+  try {
+    await http.post(
+      urls.transports.progress(currentLegId),
+      JSON.stringify({ completed: true }),
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
+    )
+    await fetchActiveOrder()
+    await fetchMarketOpps()
+    void window.oneCC.refreshOverlayTransport()
+  } catch {
+    // action silencieuse dans l'overlay
+  } finally {
+    savingStep.value = false
   }
 }
 
@@ -342,6 +366,15 @@ onUnmounted(() => {
 
       <!-- ── Pied : next hint + progress ── -->
       <div class="space-y-1.5 pt-2">
+        <button
+          v-if="nextLeg && !preview && interactionMode"
+          class="w-full rounded-md border border-accent/35 bg-accent/15 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-accent transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="savingStep"
+          @click="validateCurrentStep"
+        >
+          {{ savingStep ? 'Validation…' : 'Valider et passer a l\'etape suivante' }}
+        </button>
+
         <!-- Hint prochaine étape -->
         <div v-if="nextNextLeg" class="flex items-center gap-1.5">
           <span class="shrink-0 text-[9px] uppercase tracking-widest text-th-disabled">suivant</span>

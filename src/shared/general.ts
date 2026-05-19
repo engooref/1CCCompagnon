@@ -26,7 +26,7 @@ export interface OverlayElementPos {
   yPct: number
 }
 
-export type OverlayModuleType = 'transport' | 'radio' | 'notification' | 'mining' | 'session-log'
+export type OverlayModuleType = 'transport' | 'radio' | 'notification' | 'mining' | 'session-log' | 'map'
 export type OverlayMiningPanelType = 'rocks' | 'cargo' | 'participants' | 'actions' | 'infos'
 export type OverlayAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
 export type OverlayRadioDensity = 'compact' | 'medium' | 'detailed'
@@ -68,6 +68,7 @@ export const DEFAULT_OVERLAY_MODULES: OverlayModuleConfig[] = [
   { id: 'mining-session-participants', type: 'mining', miningPanelType: 'participants', title: 'Équipe', visible: false, minimized: false, width: 280, height: 200, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'bottom-left', category: 'mining', allowInteraction: true },
   { id: 'mining-session-infos', type: 'mining', miningPanelType: 'infos', title: 'Infos session', visible: false, minimized: false, width: 260, height: 240, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'bottom-right', category: 'mining', allowInteraction: true },
   { id: 'mining-session-log', type: 'session-log', title: 'Journal session', visible: false, minimized: false, width: 300, height: 200, opacity: 0.85, locked: false, zIndex: 15, fontSize: 1, bgColor: '', anchor: 'top-left', category: 'mining', allowInteraction: false },
+  { id: 'minimap', type: 'map', title: 'Mini-carte', visible: false, minimized: false, width: 300, height: 240, opacity: 0.85, locked: false, zIndex: 20, fontSize: 1, bgColor: '', anchor: 'bottom-right', category: 'navigation', allowInteraction: true },
 ]
 
 // ─── Notifications overlay ────────────────────────────────────────────────────
@@ -149,6 +150,8 @@ export interface AppSettings {
   /** @deprecated remplacé par radioPttBindings */
   radioPttKey?: string
   radioVolume?: number
+  radioEffectEnabled?: boolean
+  radioEffectIntensity?: number
   /** Associations canal → touche PTT (multi-canal murmure) */
   radioPttBindings?: Array<{ channelId: string; keyCode: number | null; key: string }>
 }
@@ -301,6 +304,7 @@ export interface MiningWOLine {
   yieldPercent: number
   quantityScuInput: number
   quantityScuOutput: number
+  quality: number
 }
 
 export interface MiningWorkOrder {
@@ -338,6 +342,7 @@ export interface MiningSession {
   systemName?: string | null
   defaultBodyId?: number | null
   defaultBodyName?: string | null
+  defaultBodyLabel?: string | null
   defaultRefineryId?: number | null
   defaultRefineryName?: string | null
   operationCreated?: boolean
@@ -399,7 +404,6 @@ export interface MiningRock {
   resistance?: number | null
   posX?: number | null
   posY?: number | null
-  posZ?: number | null
   notes?: string | null
   minerals: MiningRockMineral[]
   reportedBy?: string | null

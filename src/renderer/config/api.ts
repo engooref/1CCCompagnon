@@ -84,6 +84,7 @@ export function createOverlayUrls(settings: AppSettings) {
       refineryNotifyAck: url(base, o, 'mining', 'refinery', 'notifyAck'),
       refineryYieldsBonus: url(base, o, 'mining', 'refinery', 'yieldsBonus'),
       sessions:      url(base, o, 'mining', 'session', 'index'),
+      sessionsBagChange: url(base, o, 'mining', 'session', 'bagChange'),
       sessionsShipsSearch: url(base, o, 'mining', 'session', 'shipsSearch'),
       sessionsShips: url(base, o, 'mining', 'session', 'ships'),
       loadoutShips:  url(base, o, 'mining', 'loadout', 'ships'),

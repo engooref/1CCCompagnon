@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { usePinnedTransport } from '../composables/usePinnedTransport'
+import RefineryDashboard from '../components/dashboard/RefineryDashboard.vue'
 
 // ─── Stores & composables ─────────────────────────────────────────────────────
 
@@ -203,6 +204,9 @@ const recentOrders = computed(() => orders.value.slice(0, 3))
       </div>
 
     </div>
+
+    <!-- ── Raffineries en cours ────────────────────────────────────────────── -->
+    <RefineryDashboard />
 
     <!-- ── Agenda à venir ─────────────────────────────────────────────────── -->
     <div v-if="app.status.authReady" class="shrink-0 flex flex-col gap-2">

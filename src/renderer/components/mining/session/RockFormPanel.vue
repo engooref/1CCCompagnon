@@ -128,8 +128,8 @@ function cancel() {
           @click="applyOcrToForm()"
         >⬆ OCR</button>
       </div>
-      <div class="grid grid-cols-3 gap-2">
-        <div v-for="[axis, lbl] in [['posX','X'],['posY','Y'],['posZ','Z']]" :key="axis">
+      <div class="grid grid-cols-2 gap-2">
+        <div v-for="[axis, lbl] in [['posX','X'],['posY','Y']]" :key="axis">
           <label class="mb-1 block text-[10px] text-th-muted">Coordonnée {{ lbl }}</label>
           <input v-model="(mining.rockForm as any)[axis]" type="text" inputmode="decimal" :placeholder="lbl"
             class="w-full rounded-xl border border-th-subtle bg-black/30 px-3 py-1.5 text-xs text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none" />

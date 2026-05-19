@@ -164,6 +164,11 @@ export function registerAppIpc(
     return true
   })
 
+  ipcMain.handle('app:set-pinned-map', async (_e, id: number | null) => {
+    sendToOverlay('overlay:pinned-map', id)
+    return true
+  })
+
   ipcMain.handle('app:get-api-key', async () => getApiKey())
   ipcMain.handle('app:get-version', async () => getAppVersion())
   // Native auto-updater (electron-updater)

@@ -407,21 +407,15 @@ app.whenReady().then(async () => {
 
     onUnfocus() {
       isGameFocused = false
-      const ow = getOverlayWindow()
-      // Mode interaction : l'overlay prend le focus → SC perd le sien.
-      // On ignore complètement le hide ; la désactivation se fait via la touche.
-      if (interactionActive) {
-        logger.info('[overlay] SC perd le focus — mode interaction actif, ignoré')
-        return
-      }
-      // Mode édition : même logique, mais si l'overlay n'a pas le focus
-      // (alt-tab vers autre chose), on ferme l'édition sans cacher l'overlay.
+      // En mode édition, SC perd le focus car l'overlay est interactif
+      // Si c'est l'overlay lui-même qui a pris le focus (clic dans l'éditeur), on ignore
       if (overlayEditMode) {
+        const ow = getOverlayWindow()
         if (ow && !ow.isDestroyed() && ow.isFocused()) {
-          logger.info('[overlay] SC perd le focus — mode édition, overlay focusé, ignoré')
+          logger.info('[overlay] SC perd le focus — overlay a le focus (clic éditeur), ignoré')
           return
         }
-        logger.info('[overlay] SC perd le focus — mode édition, fermeture sans hide')
+        logger.info('[overlay] SC perd le focus — edit mode actif, fermeture éditeur sans hide')
         setOverlayEditMode(false)
         return
       }
@@ -444,9 +438,11 @@ app.whenReady().then(async () => {
   // ── Map toggle key ────────────────────────────────────────────────────────────
 
   const toggleMapVisibility = () => {
-    if (!isGameFocused) return
+    const devMode = !app.isPackaged
+    logger.info('[map-toggle] triggered — isGameFocused:', isGameFocused, 'dev:', devMode)
+    if (!isGameFocused && !devMode) { logger.warn('[map-toggle] blocked: game not focused'); return }
     const ow = getOverlayWindow()
-    if (!ow) return
+    if (!ow) { logger.warn('[map-toggle] blocked: no overlay window'); return }
 
     if (!ow.isVisible()) {
       // Overlay caché → entrer en map-only mode
@@ -460,6 +456,7 @@ app.whenReady().then(async () => {
     }
 
     mapCurrentlyVisible = !mapCurrentlyVisible
+    logger.info('[map-toggle] mapCurrentlyVisible →', mapCurrentlyVisible)
     sendToOverlay('overlay:map-toggle', undefined)
 
     // Fermeture carte en map-only → cacher l'overlay
@@ -837,58 +834,6 @@ app.whenReady().then(async () => {
   ;(global as any).__setCycleCustomKey = (payload: { accel: string; keyCode: number | null } | null) => {
     if (!payload) { registerCycleCustomKey(null, null); return }
     registerCycleCustomKey(payload.accel || null, payload.keyCode)
-  }
-
-  // ─── Touche cycle profil OCR ─────────────────────────────────────────────
-
-  let ocrCycleHandler: ((e: any) => void) | null = null
-
-  function registerOcrCycleProfileKey(accel?: string | null, keyCode?: number | null) {
-    if (ocrCycleHandler) { uIOhook.off('keydown', ocrCycleHandler); ocrCycleHandler = null }
-    if (accel) {
-      const uiCode = accelToUiohook(accel)
-      if (uiCode !== null) {
-        ocrCycleHandler = (e: any) => {
-          if (!accelMatchesEvent(accel, e)) return
-          const label: string | null = (global as any).__cycleOcrProfile?.()
-          if (label) {
-            sendToOverlay('overlay:notification', {
-              id: 'ocr-profile-' + Date.now(),
-              title: 'Profil OCR',
-              message: label,
-              type: 'info',
-              duration: 2500,
-            })
-          }
-        }
-        uIOhook.on('keydown', ocrCycleHandler)
-      }
-    } else if (typeof keyCode === 'number') {
-      const uiCode = DOM_TO_UIOHOOK[keyCode]
-      if (uiCode !== undefined) {
-        ocrCycleHandler = (e: any) => {
-          if (e?.keycode !== uiCode || e.ctrlKey || e.altKey || e.shiftKey) return
-          const label: string | null = (global as any).__cycleOcrProfile?.()
-          if (label) {
-            sendToOverlay('overlay:notification', {
-              id: 'ocr-profile-' + Date.now(),
-              title: 'Profil OCR',
-              message: label,
-              type: 'info',
-              duration: 2500,
-            })
-          }
-        }
-        uIOhook.on('keydown', ocrCycleHandler)
-      }
-    }
-  }
-
-  registerOcrCycleProfileKey(getSettings().ocrCycleProfileKey, getSettings().ocrCycleProfileKeyCode)
-
-  ;(global as any).__setOcrCycleProfileKey = (payload: { accel: string; keyCode: number | null } | null) => {
-    if (!payload) { registerOcrCycleProfileKey(null, null); return }
-    registerOcrCycleProfileKey(payload.accel || null, payload.keyCode)
   }
 
   // ─── Touche interaction modules ──────────────────────────────────────────

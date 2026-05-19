@@ -38,6 +38,7 @@ declare global {
       setWindowSize: (size: string) => Promise<boolean>
       setToggleKey:    (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
       setMapToggleKey: (key: string | { accel: string; keyCode: number | null }) => Promise<boolean>
+      setPinnedMap:    (id: number | null) => Promise<boolean>
       setCycleModeKey:    (key: string | { accel: string; keyCode: number | null } | null) => Promise<boolean>
       setCycleBuiltInKey: (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
       setCycleCustomKey:       (key: { accel: string; keyCode: number | null } | null) => Promise<boolean>
@@ -56,7 +57,10 @@ declare global {
       onOverlayEditMode:     (cb: (enabled: boolean) => void) => void
       onMapToggle:           (cb: () => void) => void
       offMapToggle:          () => void
+      onPinnedMap?:          (cb: (id: number | null) => void) => void
+      offPinnedMap?:         () => void
       onMapOnlyMode:         (cb: (v: boolean) => void) => void
+      onInteractionMode:     (cb: (active: boolean) => void) => void
       offOverlay:            () => void
 
       // Overlay editor
@@ -74,6 +78,8 @@ declare global {
       refreshOverlayTransport: () => Promise<boolean>
       onTransportRefresh: (cb: () => void) => void
       offTransportRefresh: () => void
+      onSessionEvent: (cb: (data: string) => void) => void
+      offSessionEvent: () => void
 
       // Notifications
       showNotification: (title: string, body: string) => Promise<void>

@@ -88,6 +88,7 @@ const defaults: AppSettings = {
       rocks: '/mining/api/rocks',
       session: {
         index: '/mining/api/sessions',
+        bagChange: '/mining/api/sessions/{id}/bag-change',
         shipsSearch: '/mining/api/ships/search',
         ships: '/mining/api/ships/mining'
       },
@@ -116,6 +117,8 @@ const defaults: AppSettings = {
   radioPttKeyCode: null,
   radioPttKey:     '',
   radioVolume:     1.0,
+  radioEffectEnabled: true,
+  radioEffectIntensity: 0.6,
   radioPttBindings: [],
 }
 

@@ -507,6 +507,31 @@ export async function pickupCargo(sessionId: number, cargoId: number): Promise<a
   return data?.data ?? data
 }
 
+export async function fetchBodyLabel(bodyId: number): Promise<string | null> {
+  const headers = _headers()
+  const base = _base()
+  const { data } = await http.get(`${base}/mining/api/bodyInfo/${bodyId}`, { headers })
+  return data?.hierarchy ?? data?.name ?? null
+}
+
+export async function transferCrewCargosToSupport(
+  sessionId: number,
+  source: { crewId?: number | null; crewKey?: string | null },
+  notes?: string | null,
+): Promise<any> {
+  const headers = { ..._headers(), 'Content-Type': 'application/json' }
+  const base = _base()
+  const urls = _urls()
+  const sessionsUrl = urls?.mining?.sessions ?? `${base}/mining/api/sessions`
+  const crewId = source.crewId
+  const { data } = await http.post(
+    `${sessionsUrl}/${sessionId}/crews/${crewId}/support-bag-transfer`,
+    { notes: notes ?? null },
+    { headers },
+  )
+  return data?.data ?? data
+}
+
 export async function suggestZone(payload: {
   locationId: string
   locationType: string

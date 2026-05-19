@@ -83,9 +83,15 @@ export interface RadioSettings {
   pttBindings: PttBinding[]
   /** Volume audio entrant 0.0 – 1.0 */
   radioVolume: number
+  /** Activer le traitement voix type talkie-walkie */
+  radioEffectEnabled: boolean
+  /** Intensité du rendu radio 0.0 – 1.0 */
+  radioEffectIntensity: number
 }
 
 export const DEFAULT_RADIO_SETTINGS: RadioSettings = {
   pttBindings: [],
   radioVolume: 1.0,
+  radioEffectEnabled: true,
+  radioEffectIntensity: 0.6,
 }

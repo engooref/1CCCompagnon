@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { LayoutState, OverlayModuleConfig, OverlayRadioDensity, OverlayModuleCategory } from '@shared/general'
+import type { LayoutState, OverlayModuleConfig, OverlayRadioDensity, OverlayModuleCategory, OverlayModuleType } from '@shared/general'
 import TransportModule from '../components/overlay/TransportModule.vue'
 import MapModule from '../components/overlay/MapModule.vue'
 import RadioModule from '../components/overlay/RadioModule.vue'
@@ -80,7 +80,7 @@ watch(mapVisible, (visible) => {
   if (visible) nextTick(() => mapModuleRef.value?.refresh())
 })
 
-const { pinnedMapId } = usePinnedMap()
+const { pinnedMapId, pin: pinMap, unpin: unpinMap } = usePinnedMap()
 const { pinnedSessionId, pin: pinSession, unpin: unpinSession } = usePinnedSession()
 const { pinnedTransport, pin: pinTransport, unpin: unpinTransport } = usePinnedTransport()
 const { positions, modules, getStyle, loadLayout, applyLayout } = useOverlayLayout()
@@ -153,6 +153,8 @@ const MODULE_CATEGORY: Record<OverlayModuleType, OverlayModuleCategory> = {
   transport:    'navigation',
   notification: 'hud',
   mining:       'mining',
+  'session-log':'mining',
+  map:          'navigation',
 }
 
 const CATEGORY_LABELS: Record<OverlayModuleCategory, string> = {
@@ -169,11 +171,27 @@ const modulesByCategory = computed(() => {
   const map = new Map<OverlayModuleCategory, OverlayModuleConfig[]>()
   for (const mod of modules) {
     const cat = MODULE_CATEGORY[mod.type] ?? 'autre'
+    if (import.meta.env.DEV) {
+      console.debug('[overlay] module category resolved', {
+        id: mod.id,
+        type: mod.type,
+        category: cat,
+      })
+    }
     if (!map.has(cat)) map.set(cat, [])
     map.get(cat)!.push(mod)
   }
   const sorted = new Map<OverlayModuleCategory, OverlayModuleConfig[]>()
   for (const cat of CATEGORY_ORDER) { if (map.has(cat)) sorted.set(cat, map.get(cat)!) }
+  if (import.meta.env.DEV) {
+    console.debug('[overlay] modules grouped by category',
+      Array.from(sorted.entries()).map(([category, mods]) => ({
+        category,
+        count: mods.length,
+        moduleIds: mods.map((m) => m.id),
+      })),
+    )
+  }
   return sorted
 })
 
@@ -191,11 +209,23 @@ function isVisible(mod: (typeof modules)[number]): boolean {
   if (!mod.visible) return false
   if (mod.visibleOnlyInInteraction && !interactionMode.value && !editMode.value) return false
   if (mod.type === 'transport') return editMode.value || !!pinnedTransport.value
+  // Minimap : masquée quand la carte plein écran est active (les deux sont mutuellement exclusifs)
+  if (mod.type === 'map') {
+    const result = editMode.value || (!mapVisible.value && !!pinnedMapId.value)
+    console.log('[minimap] isVisible check', {
+      editMode: editMode.value,
+      mapVisible: mapVisible.value,
+      pinnedMapId: pinnedMapId.value,
+      modVisible: mod.visible,
+      result,
+    })
+    return result
+  }
   return true
 }
 
 /** Types de modules qui supportent l'interaction souris (défini côté dev). */
-const INTERACTABLE_MODULE_TYPES = new Set(['radio'])
+const INTERACTABLE_MODULE_TYPES = new Set(['radio', 'transport'])
 
 function isModuleInteractive(mod: OverlayModuleConfig): boolean {
   return interactionMode.value && (mod.allowInteraction || INTERACTABLE_MODULE_TYPES.has(mod.type))
@@ -246,6 +276,8 @@ onMounted(async () => {
   mapOverlayOpacity.value = settings.mapOverlayOpacity ?? 0.85
 
   await Promise.all([loadLayout(), modeStore.load(), miningStore.init()])
+
+  console.log('[minimap] modules after loadLayout:', modules.map(m => ({ id: m.id, type: m.type, visible: m.visible })))
 
   window.oneCC.onActiveModeChange((modeId) => {
     const prev = modeStore.activeModeId
@@ -302,18 +334,29 @@ onMounted(async () => {
   })
 
   window.oneCC.onMapToggle(() => {
-    mapVisible.value = !mapVisible.value
+    const minimapMod = modules.find(m => m.id === 'minimap')
+    if (minimapMod?.visible) {
+      // Module présent : switch minimap ↔ plein écran
+      mapVisible.value = !mapVisible.value
+    } else {
+      // Comportement classique : plein écran ↔ masqué
+      mapVisible.value = !mapVisible.value
+    }
+  })
+
+  window.oneCC.onPinnedMap?.((id: number | null) => {
+    if (id) pinMap(id); else unpinMap()
   })
 
   window.oneCC.onMapOnlyMode((v) => { mapOnlyMode.value = v })
-  window.oneCC.onInteractionMode((active: boolean) => { interactionMode.value = active })
+  ;(window.oneCC as any).onInteractionMode?.((active: boolean) => { interactionMode.value = active })
 
   window.oneCC.onSettingsUpdate((s: any) => {
     if (s?.mapOverlayOpacity != null) mapOverlayOpacity.value = s.mapOverlayOpacity
   })
 
   // Point d'entrée unique : tous les events Mercure session propagés depuis le main process
-  window.oneCC.onSessionEvent((raw: string) => {
+  ;(window.oneCC as any).onSessionEvent?.((raw: string) => {
     try {
       const data = typeof raw === 'string' ? JSON.parse(raw) : raw
       miningStore._handleSessionEvent(data)
@@ -441,19 +484,32 @@ onUnmounted(() => {
             class="absolute module-draggable"
             :data-module-id="mod.id"
             :class="{
-              'pointer-events-none': !editMode && !isModuleInteractive(mod),
-              'pointer-events-auto': !editMode && isModuleInteractive(mod),
+              'pointer-events-none': !editMode && !isModuleInteractive(mod) && mod.type !== 'map',
+              'pointer-events-auto': !editMode && (isModuleInteractive(mod) || mod.type === 'map'),
               'pointer-events-auto cursor-move': editMode,
               'overlay-module--selected': editMode && selectedId === mod.id,
               'overlay-module--interactive': !editMode && isModuleInteractive(mod),
             }"
             :style="getStyle(mod.id, scBounds?.width, scBounds?.height)"
-            @mousedown="editMode && startDrag($event, mod.id, overlayBounds)"
+            @mousedown="editMode && (mod.type === 'map' ? selectModule(mod.id, overlayBounds) : startDrag($event, mod.id, overlayBounds))"
           >
             <template v-if="!mod.minimized">
-              <div class="w-full overflow-hidden rounded-2xl" :style="{ zoom: mod.fontSize ?? 1 }">
+              <!-- Rendu map hors du wrapper overflow-hidden pour ne pas couper Leaflet -->
+              <div v-if="mod.type === 'map'" class="w-full relative" :style="{ height: (mod.height ?? 240) + 'px' }">
+                <MapModule interactive="full" />
+                <!-- Handle de déplacement en mode éditeur (barre au-dessus de la carte) -->
+                <div
+                  v-if="editMode"
+                  class="absolute inset-x-0 top-0 h-6 z-[10001] cursor-move flex items-center justify-center"
+                  style="background: rgba(0,0,0,0.45); border-radius: 12px 12px 0 0;"
+                  @mousedown.stop="startDrag($event, mod.id, overlayBounds)"
+                >
+                  <span class="text-[9px] uppercase tracking-widest text-white/40 select-none pointer-events-none">⠿ mini-carte</span>
+                </div>
+              </div>
+              <div v-else class="w-full overflow-hidden rounded-2xl" :style="{ zoom: mod.fontSize ?? 1 }">
                 <NotificationModule v-if="mod.type === 'notification'" :preview="editMode" />
-                <TransportModule v-else-if="mod.type === 'transport'" />
+                <TransportModule v-else-if="mod.type === 'transport'" :interaction-mode="interactionMode" />
                 <RadioModule
                   v-else-if="mod.type === 'radio'"
                   :config="mod"

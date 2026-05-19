@@ -62,6 +62,11 @@ export function useOverlayLayout() {
       (d) => d.type === 'mining' && !mods.find((m) => m.id === d.id)
     )
     if (missingMining.length) mods = [...mods, ...missingMining]
+    // Garantit que le module minimap est présent même dans les layouts anciens
+    if (!mods.find((m) => m.id === 'minimap')) {
+      const minimapDefault = DEFAULT_OVERLAY_MODULES.find((m) => m.id === 'minimap')!
+      mods = [...mods, minimapDefault]
+    }
     replaceModules(mods)
   }
 
@@ -78,7 +83,7 @@ export function useOverlayLayout() {
     const style: Record<string, string> = {
       position: 'absolute',
       width: `${width}px`,
-      height: 'auto',
+      height: mod?.type === 'map' ? `${Math.round(mod.height ?? 240)}px` : 'auto',
       '--bg-alpha': `${mod?.opacity ?? 0.65}`,
       zIndex: `${mod?.zIndex ?? 1}`,
       '--bg-color': (mod?.bgColor || '#000000'),

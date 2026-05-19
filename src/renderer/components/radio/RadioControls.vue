@@ -98,6 +98,46 @@ const transmittingChannelName = computed(() =>
       <p class="text-[10px] text-th-muted/60">Coupe le micro en dessous du seuil (clavier, ventilateur…)</p>
     </div>
 
+    <!-- Effet radio -->
+    <div class="space-y-2 rounded-md border border-th-subtle bg-th-card/40 p-2.5">
+      <button
+        @click="radio.setRadioEffectEnabled(!radio.settings.radioEffectEnabled)"
+        class="w-full flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs font-semibold transition"
+        :class="radio.settings.radioEffectEnabled
+          ? 'border-accent/40 bg-accent/[0.08] text-accent'
+          : 'border-th-subtle bg-th-card text-th-secondary hover:text-th-primary hover:border-th-muted/50'"
+      >
+        <span class="flex items-center gap-2">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19V6l12-2v13M9 19a2 2 0 11-4 0 2 2 0 014 0zm12-2a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+          Effet radio
+        </span>
+        <span class="text-[10px] opacity-70">{{ radio.settings.radioEffectEnabled ? 'Actif' : 'Inactif' }}</span>
+      </button>
+
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <p class="text-[10px] text-th-muted uppercase tracking-wider">Intensité</p>
+          <span class="text-[10px] tabular-nums text-th-secondary">
+            {{ Math.round(radio.settings.radioEffectIntensity * 100) }}%
+          </span>
+        </div>
+        <input
+          type="range" min="0" max="1" step="0.01"
+          :value="radio.settings.radioEffectIntensity"
+          :disabled="!radio.settings.radioEffectEnabled"
+          @input="(e) => radio.setRadioEffectIntensity(parseFloat((e.target as HTMLInputElement).value))"
+          class="w-full h-1.5 rounded-full cursor-pointer appearance-none disabled:opacity-40 disabled:cursor-not-allowed"
+          :style="{
+            background: `linear-gradient(to right, rgb(var(--accent-rgb)) ${radio.settings.radioEffectIntensity * 100}%, rgb(30,41,59) 0%)`
+          }"
+        />
+        <p class="text-[10px] text-th-muted/60">Applique un rendu talkie-walkie sur émission et réception.</p>
+      </div>
+    </div>
+
     <!-- Monitor micro -->
     <button
       @click="radio.toggleMonitor()"

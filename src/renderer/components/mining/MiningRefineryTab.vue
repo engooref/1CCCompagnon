@@ -17,6 +17,7 @@ type FormLine = {
   uid: number
   commodityId: string
   scuInput: string
+  qualityInput: string
   query: string
   search: string
   open: boolean
@@ -42,7 +43,7 @@ const showMethodList = ref(false)
 let formLineUid = 0
 
 function createEmptyLine(): FormLine {
-  return { uid: formLineUid++, commodityId: '', scuInput: '', query: '', search: '', open: false, hi: -1 }
+  return { uid: formLineUid++, commodityId: '', scuInput: '', qualityInput: '', query: '', search: '', open: false, hi: -1 }
 }
 
 const form = ref({
@@ -200,6 +201,10 @@ function getLineInput(line: { scuInput?: number | string; quantityScuInput?: num
   return Number(line.scuInput ?? line.quantityScuInput ?? 0)
 }
 
+function getQualityInput(line: { qualityInput?: number | string; }): number {
+  return Number(line.qualityInput ?? 0)
+}
+
 function getLineOutput(
   line: { scuInput?: number | string; quantityScuInput?: number | string; scuOutput?: number | string; quantityScuOutput?: number | string; yieldPercent?: number | string | null },
   methodKey: string,
@@ -253,7 +258,7 @@ function currentYieldPct(): number | null {
 
 function previewLinesForTime() {
   return form.value.lines
-    .filter((line) => line.commodityId && getLineInput(line) > 0)
+    .filter((line) => line.commodityId && getLineInput(line) > 0 && getQualityInput(line) > 0)
     .map((line) => ({
       commodityId: Number(line.commodityId),
       scuInput: Math.max(1, Math.trunc(Number(line.scuInput) || 0)) / 100,
@@ -262,12 +267,6 @@ function previewLinesForTime() {
 
 function hasDurationPreviewInputs(): boolean {
   return Boolean(form.value.method && previewLinesForTime().length > 0)
-}
-
-function previewCostAuec(): number | null {
-  const cost = getMethodCostPerScu(form.value.method)
-  if (cost == null) return null
-  return form.value.lines.reduce((total, line) => total + (getLineInput(line) / 100) * cost, 0)
 }
 
 function totalValidScuInput(): number {
@@ -402,7 +401,7 @@ function previewCscuOutput(scuInputCscu: string | number): string {
 function woIsValid(): boolean {
   if (!form.value.refineryPoiId) return false
   if (!form.value.method) return false
-  return form.value.lines.some((line) => line.commodityId && getLineInput(line) > 0)
+  return form.value.lines.some((line) => line.commodityId && getLineInput(line) > 0 && getQualityInput(line) > 0)
 }
 
 function refineryDisplayNameById(id: string | number): string {
@@ -585,6 +584,11 @@ function clampCscuInput(e: Event, line: FormLine) {
   line.scuInput = val === '' ? '' : String(Math.max(1, Math.trunc(Number(val) || 0)))
 }
 
+function clampQualityInput(e: Event, line: FormLine) {
+  const val = (e.target as HTMLInputElement).value
+  line.qualityInput = val === '' ? '' : String(Math.max(0, Math.min(1000, Math.trunc(Number(val) || 0))))
+}
+
 function closeMineralListSoon(line: FormLine) {
   window.setTimeout(() => { line.open = false }, 140)
 }
@@ -660,10 +664,11 @@ function removeLine(index: number) {
 async function submitForm() {
   formError.value = null
   const lines = form.value.lines
-    .filter((line) => line.commodityId && getLineInput(line) > 0)
+    .filter((line) => line.commodityId && getLineInput(line) > 0 && getQualityInput(line) > 0)
     .map((line) => ({
       commodityId: Number(line.commodityId),
       scuInput: Math.max(1, Math.trunc(Number(line.scuInput) || 0)) / 100,
+      quality: Math.max(0, Math.min(1000, Math.trunc(Number(line.qualityInput) || 0))),
     }))
 
   if (!lines.length) {
@@ -918,7 +923,6 @@ onUnmounted(() => {
           <div class="mt-2 flex flex-wrap gap-2 text-[11px] text-th-muted">
             <span v-if="currentYieldPct() != null" class="rounded-full border border-accent/20 bg-accent/[0.08] px-2 py-1 text-accent">Rendement {{ currentYieldPct() }}%</span>
             <span v-if="selectedMethod" class="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1">Durée ×{{ getMethodDurationMultiplier(form.method) }}</span>
-            <span v-if="previewCostAuec() != null" class="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1">{{ previewCostAuec()?.toLocaleString('fr-FR') }} aUEC</span>
           </div>
         </div>
       </div>
@@ -969,8 +973,9 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div v-if="form.lines.length" class="hidden grid-cols-[minmax(0,1.5fr)_6.5rem_5.5rem_2rem] gap-2 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-th-muted md:grid">
+        <div v-if="form.lines.length" class="hidden grid-cols-[minmax(0,1.5fr)_6.5rem_6.5rem_5.5rem_2rem] gap-2 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-th-muted md:grid">
           <span>Minerai</span>
+          <span class="text-center">Qualité</span>
           <span class="text-center">cSCU brut</span>
           <span class="text-center">Yields ↗</span>
           <span></span>
@@ -980,7 +985,7 @@ onUnmounted(() => {
           <div
             v-for="(line, index) in form.lines"
             :key="line.uid"
-            class="grid gap-2 rounded-xl border border-th-subtle bg-black/20 p-2 md:grid-cols-[minmax(0,1.5fr)_6.5rem_5.5rem_2rem] md:items-center"
+            class="grid gap-2 rounded-xl border border-th-subtle bg-black/20 p-2 md:grid-cols-[minmax(0,1.5fr)_6.5rem_6.5rem_5.5rem_2rem] md:items-center"
           >
             <div class="relative">
               <input
@@ -1035,6 +1040,20 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+
+            <input
+              v-model="line.qualityInput"
+              class="w-full rounded-lg border border-th-subtle bg-black/30 px-3 py-2 text-center text-sm text-th-primary placeholder:text-th-muted focus:border-accent/40 focus:outline-none"
+              inputmode="numeric"
+              min="0"
+              max="1000"
+              pattern="[0-9]*"
+              placeholder="Qualité"
+              step="1"
+              type="number"
+              @keydown="blockNonInteger($event)"
+              @input="clampQualityInput($event, line)"
+            />
 
             <input
               v-model="line.scuInput"
@@ -1139,7 +1158,6 @@ onUnmounted(() => {
           <span v-if="effectiveDurationSeconds() !== null" class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-th-primary">⏱ {{ woDisplayDuration(effectiveDurationSeconds()!) }}</span>
           <span v-else-if="previewLoading" class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-th-muted">⏱ calcul…</span>
           <span v-else-if="previewHasConfig === false" class="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-amber-300">⚠ temps imprécis</span>
-          <span v-if="previewCostAuec() != null" class="rounded-full border border-accent/20 bg-accent/[0.08] px-3 py-1.5 text-accent">aUEC {{ Math.ceil(previewCostAuec() ?? 0).toLocaleString('fr-FR') }}</span>
         </div>
       </div>
     </div>
@@ -1336,8 +1354,9 @@ onUnmounted(() => {
         </div>
 
         <div v-if="wo.lines?.length" class="mt-4 overflow-hidden rounded-xl border border-white/8 bg-black/15">
-          <div class="grid grid-cols-[minmax(0,1.5fr)_5.5rem_4rem_6rem] gap-2 border-b border-white/8 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-th-muted">
+          <div class="grid grid-cols-[minmax(0,1.5fr)_5.5rem_5.5rem_4rem_6rem] gap-2 border-b border-white/8 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-th-muted">
             <span>Minerai</span>
+            <span class="text-center">Qualité</span>
             <span class="text-center">cSCU brut</span>
             <span class="text-center">Yield</span>
             <span class="text-center">cSCU raff.</span>
@@ -1346,9 +1365,10 @@ onUnmounted(() => {
           <div
             v-for="line in wo.lines"
             :key="line.id"
-            class="grid grid-cols-[minmax(0,1.5fr)_5.5rem_4rem_6rem] gap-2 border-b border-white/5 px-3 py-2 text-sm last:border-b-0"
+            class="grid grid-cols-[minmax(0,1.5fr)_5.5rem_5.5rem_4rem_6rem] gap-2 border-b border-white/5 px-3 py-2 text-sm last:border-b-0"
           >
             <span class="truncate text-th-primary">{{ line.commodityName }}</span>
+            <span class="text-center text-th-primary">{{ line.quality }}</span>
             <span class="text-center text-th-primary">{{ Math.round(getLineInput(line) * 100) }} cSCU</span>
             <span class="text-center text-th-muted">{{ line.yieldPercent }}%</span>
             <span class="text-center text-accent">{{ Math.round(getLineOutput(line, wo.method) * 100) }} cSCU</span>

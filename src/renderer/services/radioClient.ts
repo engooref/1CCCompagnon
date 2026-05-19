@@ -38,6 +38,20 @@ interface ChannelEntry {
   whisperOnly: boolean
 }
 
+interface RxEffectChain {
+  channelId: string
+  track: RemoteAudioTrack
+  element: HTMLMediaElement
+  source: MediaElementAudioSourceNode
+  highPass: BiquadFilterNode
+  presence: BiquadFilterNode
+  lowPass: BiquadFilterNode
+  drive: WaveShaperNode
+  dryGain: GainNode
+  wetGain: GainNode
+  outputGain: GainNode
+}
+
 export class RadioClient {
   // ── Shared audio pipeline ──────────────────────────────────────────────
   private rawStream: MediaStream | null = null
@@ -51,6 +65,15 @@ export class RadioClient {
   private _gateThreshold = 0
   private _gateOpen = false
   private _monitoring = false
+  private _radioEffectEnabled = true
+  private _radioEffectIntensity = 0.6
+  private txDryGain: GainNode | null = null
+  private txWetGain: GainNode | null = null
+  private txPresence: BiquadFilterNode | null = null
+  private txLowPass: BiquadFilterNode | null = null
+  private txDrive: WaveShaperNode | null = null
+  private readonly rxChains = new Map<string, RxEffectChain>()
+  private readonly rxTrackToKey = new WeakMap<RemoteAudioTrack, string>()
 
   // ── Per-channel rooms ──────────────────────────────────────────────────
   private channels: Map<string, ChannelEntry> = new Map()
@@ -302,7 +325,18 @@ export class RadioClient {
   private applyVolumeToRoom(room: Room): void {
     for (const p of room.remoteParticipants.values()) {
       for (const pub of p.audioTrackPublications.values()) {
-        if (pub.track) (pub.track as RemoteAudioTrack).setVolume(this._volume)
+        if (!pub.track) continue
+        const track = pub.track as RemoteAudioTrack
+        const key = this.rxTrackToKey.get(track)
+        if (key) {
+          const chain = this.rxChains.get(key)
+          if (chain) {
+            chain.outputGain.gain.value = this._volume
+            track.setVolume(1)
+            continue
+          }
+        }
+        track.setVolume(this._volume)
       }
     }
   }
@@ -376,15 +410,43 @@ export class RadioClient {
     this.gateGain = this.audioCtx.createGain()
     this.gateGain.gain.value = 1.0
 
+    this.txPresence = this.audioCtx.createBiquadFilter()
+    this.txPresence.type = 'peaking'
+    this.txPresence.frequency.value = 2200
+    this.txPresence.Q.value = 1.2
+    this.txPresence.gain.value = 8
+
+    this.txLowPass = this.audioCtx.createBiquadFilter()
+    this.txLowPass.type = 'lowpass'
+    this.txLowPass.frequency.value = 3400
+    this.txLowPass.Q.value = 0.7
+
+    this.txDrive = this.audioCtx.createWaveShaper()
+    this.txDrive.curve = this.createDistortionCurve(0.45)
+    this.txDrive.oversample = '2x'
+
+    this.txDryGain = this.audioCtx.createGain()
+    this.txWetGain = this.audioCtx.createGain()
+
     this.processedDestination = this.audioCtx.createMediaStreamDestination()
 
-    // source → preAmp → HPF → compressor → analyser → gate → destination
+    // source → preAmp → HPF → compressor
+    //                                  ├→ analyser (niveau/gate)
+    //                                  ├→ dry → gate
+    //                                  └→ radio FX (presence+LPF+drive) → gate
     source.connect(this.preAmpGain)
     this.preAmpGain.connect(hpf)
     hpf.connect(compressor)
     compressor.connect(this.analyser)
-    this.analyser.connect(this.gateGain)
+    compressor.connect(this.txDryGain)
+    this.txDryGain.connect(this.gateGain)
+    compressor.connect(this.txPresence)
+    this.txPresence.connect(this.txLowPass)
+    this.txLowPass.connect(this.txDrive)
+    this.txDrive.connect(this.txWetGain)
+    this.txWetGain.connect(this.gateGain)
     this.gateGain.connect(this.processedDestination)
+    this.applyTxEffectSettings()
 
     // Polling niveau RMS + contrôle noise gate
     this.micLevelInterval = setInterval(() => {
@@ -429,7 +491,13 @@ export class RadioClient {
     this.analyserData = null
     this.preAmpGain = null
     this.gateGain = null
+    this.txDryGain = null
+    this.txWetGain = null
+    this.txPresence = null
+    this.txLowPass = null
+    this.txDrive = null
     this.processedDestination = null
+    this.cleanupRxChains()
     this.audioCtx?.close()
     this.audioCtx = null
     this.rawStream?.getTracks().forEach(t => t.stop())
@@ -444,6 +512,163 @@ export class RadioClient {
     if (this.preAmpGain) this.preAmpGain.gain.value = Math.max(0, value)
   }
 
+  setRadioEffectEnabled(enabled: boolean): void {
+    this._radioEffectEnabled = enabled
+    this.applyTxEffectSettings()
+    this.applyRxEffectSettings()
+  }
+
+  setRadioEffectIntensity(value: number): void {
+    this._radioEffectIntensity = Math.max(0, Math.min(1, value))
+    this.applyTxEffectSettings()
+    this.applyRxEffectSettings()
+  }
+
+  private applyTxEffectSettings(): void {
+    if (!this.txDryGain || !this.txWetGain || !this.txDrive) return
+
+    if (!this._radioEffectEnabled) {
+      this.txDryGain.gain.value = 1
+      this.txWetGain.gain.value = 0
+      this.txDrive.curve = this.createDistortionCurve(0.02)
+      return
+    }
+
+    const intensity = this._radioEffectIntensity
+    this.txDryGain.gain.value = 1 - (0.5 * intensity)
+    this.txWetGain.gain.value = 0.35 + (0.45 * intensity)
+    this.txDrive.curve = this.createDistortionCurve(0.25 + (0.55 * intensity))
+  }
+
+  private applyRxEffectSettings(): void {
+    for (const chain of this.rxChains.values()) {
+      this.updateRxMix(chain)
+    }
+  }
+
+  private updateRxMix(chain: RxEffectChain): void {
+    chain.outputGain.gain.value = this._volume
+    if (!this._radioEffectEnabled) {
+      chain.dryGain.gain.value = 1
+      chain.wetGain.gain.value = 0
+      chain.drive.curve = this.createDistortionCurve(0.02)
+      return
+    }
+
+    const intensity = this._radioEffectIntensity
+    chain.dryGain.gain.value = 1 - (0.45 * intensity)
+    chain.wetGain.gain.value = 0.35 + (0.5 * intensity)
+    chain.drive.curve = this.createDistortionCurve(0.22 + (0.58 * intensity))
+  }
+
+  private createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
+    const k = Math.max(0.01, amount) * 100
+    const nSamples = 1024
+    const curve = new Float32Array(nSamples) as Float32Array<ArrayBuffer>
+    for (let i = 0; i < nSamples; i += 1) {
+      const x = (i * 2) / nSamples - 1
+      curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x))
+    }
+    return curve
+  }
+
+  private attachRemoteTrackWithEffect(channelId: string, track: RemoteAudioTrack): void {
+    const key = `${channelId}:${track.sid}`
+    this.cleanupRxChain(key)
+
+    const element = track.attach() as HTMLMediaElement
+    track.setVolume(1)
+
+    if (!this.audioCtx) {
+      track.setVolume(this._volume)
+      return
+    }
+
+    try {
+      const source = this.audioCtx.createMediaElementSource(element)
+
+      const highPass = this.audioCtx.createBiquadFilter()
+      highPass.type = 'highpass'
+      highPass.frequency.value = 300
+      highPass.Q.value = 0.7
+
+      const presence = this.audioCtx.createBiquadFilter()
+      presence.type = 'peaking'
+      presence.frequency.value = 2200
+      presence.Q.value = 1.2
+      presence.gain.value = 8
+
+      const lowPass = this.audioCtx.createBiquadFilter()
+      lowPass.type = 'lowpass'
+      lowPass.frequency.value = 3400
+      lowPass.Q.value = 0.7
+
+      const drive = this.audioCtx.createWaveShaper()
+      drive.curve = this.createDistortionCurve(0.4)
+      drive.oversample = '2x'
+
+      const dryGain = this.audioCtx.createGain()
+      const wetGain = this.audioCtx.createGain()
+      const outputGain = this.audioCtx.createGain()
+
+      source.connect(dryGain)
+      dryGain.connect(outputGain)
+
+      source.connect(highPass)
+      highPass.connect(presence)
+      presence.connect(lowPass)
+      lowPass.connect(drive)
+      drive.connect(wetGain)
+      wetGain.connect(outputGain)
+
+      outputGain.connect(this.audioCtx.destination)
+
+      const chain: RxEffectChain = {
+        channelId,
+        track,
+        element,
+        source,
+        highPass,
+        presence,
+        lowPass,
+        drive,
+        dryGain,
+        wetGain,
+        outputGain,
+      }
+      this.rxChains.set(key, chain)
+      this.rxTrackToKey.set(track, key)
+      this.updateRxMix(chain)
+    } catch {
+      track.setVolume(this._volume)
+    }
+  }
+
+  private cleanupRxChain(key: string): void {
+    const chain = this.rxChains.get(key)
+    if (!chain) return
+
+    try { chain.source.disconnect() } catch {}
+    try { chain.highPass.disconnect() } catch {}
+    try { chain.presence.disconnect() } catch {}
+    try { chain.lowPass.disconnect() } catch {}
+    try { chain.drive.disconnect() } catch {}
+    try { chain.dryGain.disconnect() } catch {}
+    try { chain.wetGain.disconnect() } catch {}
+    try { chain.outputGain.disconnect() } catch {}
+    try { chain.track.detach(chain.element) } catch {}
+    try { chain.element.remove() } catch {}
+
+    this.rxChains.delete(key)
+  }
+
+  private cleanupRxChains(channelId?: string): void {
+    for (const [key, chain] of this.rxChains.entries()) {
+      if (channelId && chain.channelId !== channelId) continue
+      this.cleanupRxChain(key)
+    }
+  }
+
   // ── Room events ────────────────────────────────────────────────────────
 
   private setupRoomEvents(channelId: string, room: Room, entry: ChannelEntry): void {
@@ -451,12 +676,21 @@ export class RadioClient {
       if (track.kind === Track.Kind.Audio) {
         // En mode murmure, on n'écoute pas les autres — émission uniquement
         if (entry.whisperOnly) return
-        track.attach()
-        ;(track as RemoteAudioTrack).setVolume(this._volume)
+        this.attachRemoteTrackWithEffect(channelId, track as RemoteAudioTrack)
       }
     })
 
     room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+      if (track.kind === Track.Kind.Audio) {
+        const audioTrack = track as RemoteAudioTrack
+        const key = this.rxTrackToKey.get(audioTrack)
+        if (key) {
+          this.cleanupRxChain(key)
+        } else {
+          track.detach()
+        }
+        return
+      }
       track.detach()
     })
 
@@ -483,6 +717,7 @@ export class RadioClient {
 
     room.on(RoomEvent.Disconnected, (reason) => {
       console.debug(`[RADIO][client][LiveKit] Disconnected canal=${channelId} reason=${reason}`, new Error('trace').stack)
+      this.cleanupRxChains(channelId)
       const entry = this.channels.get(channelId)
       if (entry) {
         entry.micTrack?.stop()

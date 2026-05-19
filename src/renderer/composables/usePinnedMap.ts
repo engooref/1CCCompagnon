@@ -18,11 +18,13 @@ export function usePinnedMap() {
   function pin(id: number) {
     pinnedMapId.value = id
     localStorage.setItem(STORAGE_KEY, String(id))
+    ;(window as any).oneCC?.setPinnedMap?.(id)
   }
 
   function unpin() {
     pinnedMapId.value = null
     localStorage.removeItem(STORAGE_KEY)
+    ;(window as any).oneCC?.setPinnedMap?.(null)
   }
 
   function toggle(id: number) {

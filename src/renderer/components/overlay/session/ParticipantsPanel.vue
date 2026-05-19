@@ -35,8 +35,21 @@ interface CrewGroup {
   key: string
   crewId: number | null
   shipName: string | null
-  status: string
+  status: string | null
+  suggested: string
+  effectiveStatus: string
   members: Participant[]
+}
+
+function suggestCrewStatus(members: Participant[]): string {
+  const userIds = new Set(members.map((m) => m.userId).filter(Boolean))
+  const rocks = (mining.sessionActive?.rocks ?? []).filter((r: any) => userIds.has(r.claimedByUserId))
+  if (rocks.some((r: any) => r.status === 'incident'))   return 'incident'
+  if (rocks.some((r: any) => r.status === 'extraction')) return 'extraction'
+  if (rocks.some((r: any) => ['fracturing', 'mining'].includes(r.status))) return 'fracturing'
+  if (rocks.some((r: any) => r.status === 'claimed'))    return 'positioning'
+  if (rocks.some((r: any) => r.status === 'en_route'))   return 'transit'
+  return 'standby'
 }
 
 const crews = computed<CrewGroup[]>(() => {
@@ -46,7 +59,7 @@ const crews = computed<CrewGroup[]>(() => {
     const key = p.crewKey ?? `__solo_${p.id}`
     if (!map.has(key)) {
       const apiCrew = apiCrews.find((c: any) => c.crewKey === key)
-      map.set(key, { key, crewId: apiCrew?.id ?? null, shipName: p.shipName ?? null, status: apiCrew?.status ?? 'standby', members: [] })
+      map.set(key, { key, crewId: apiCrew?.id ?? null, shipName: p.shipName ?? null, status: apiCrew?.status ?? null, suggested: 'standby', effectiveStatus: 'standby', members: [] })
     }
     map.get(key)!.members.push(p)
   }
@@ -58,6 +71,8 @@ const crews = computed<CrewGroup[]>(() => {
       if (b.isSubCaptain) return 1
       return 0
     })
+    crew.suggested      = suggestCrewStatus(crew.members)
+    crew.effectiveStatus = crew.status ?? crew.suggested
   }
   return Array.from(map.values())
 })
@@ -65,23 +80,25 @@ const crews = computed<CrewGroup[]>(() => {
 // ── Statut équipage ──────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<string, string> = {
   transit: 'En transit', scouting: 'Scan zone', positioning: 'En position',
-  fracturing: 'Fracturation', extraction: 'Extraction', full_cargo: 'Soute pleine',
-  return_trip: 'Retour', refining: 'Raffinage', standby: 'Stand-by',
-  incident: 'Incident', done: 'Terminé',
+  fracturing: 'Fracturation', extraction: 'Extraction',
+  refining: 'Raffinage', standby: 'Stand-by',
+  incident: 'Incident',
 }
-const STATUS_OPTIONS = [
+
+const STATUS_OPTIONS_BASE = [
   { value: 'transit',      label: 'En transit' },
   { value: 'scouting',     label: 'Scan de zone' },
   { value: 'positioning',  label: 'En position' },
   { value: 'fracturing',   label: 'Fracturation' },
   { value: 'extraction',   label: 'Extraction' },
-  { value: 'full_cargo',   label: 'Soute pleine' },
-  { value: 'return_trip',  label: 'Retour raffinerie' },
   { value: 'refining',     label: 'Raffinage' },
   { value: 'standby',      label: 'Stand-by' },
   { value: 'incident',     label: 'Incident' },
-  { value: 'done',         label: 'Terminé' },
 ]
+
+function statusOptions(crew: CrewGroup): { value: string; label: string }[] {
+  return [{ value: '', label: `Auto : ${crewStatusLabel(crew.suggested)}` }, ...STATUS_OPTIONS_BASE]
+}
 
 function crewStatusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status
@@ -93,8 +110,6 @@ function crewStatusClass(status: string): string {
     scouting:    'border-violet-400/30 bg-violet-950/40 text-violet-300/80',
     fracturing:  'border-orange-400/30 bg-orange-950/40 text-orange-300/80',
     extraction:  'border-cyan-400/30 bg-cyan-950/40 text-cyan-300/80',
-    full_cargo:  'border-amber-400/30 bg-amber-950/40 text-amber-300/80',
-    return_trip: 'border-amber-400/30 bg-amber-950/40 text-amber-300/80',
     refining:    'border-emerald-400/25 bg-emerald-950/40 text-emerald-300/80',
     incident:    'border-rose-400/30 bg-rose-950/40 text-rose-300/80',
     standby:     'border-white/[0.08] bg-th-card/40 text-white/60',
@@ -103,7 +118,7 @@ function crewStatusClass(status: string): string {
 }
 
 function onCrewStatusChange(key: string, val: string) {
-  mining.setCrewStatusOverride(key, val || 'standby')
+  mining.setCrewStatusOverride(key, val || null)
 }
 
 // ── Duty par membre ──────────────────────────────────────────────────────────
@@ -112,8 +127,7 @@ const DUTY_LABELS: Record<string, string> = {
   scout: 'Scout', support: 'Support', refinery_runner: 'Raffinerie',
 }
 function dutyOptions(p: Participant): { value: string; label: string }[] {
-  const auto = { value: '', label: 'Auto' }
-  const base = [auto, { value: 'pilot', label: 'Pilote' }, { value: 'laser_operator', label: 'Laser' }]
+  const base = [{ value: 'pilot', label: 'Pilote' }, { value: 'laser_operator', label: 'Laser' }]
   if (p.role === 'prospector') return [...base, { value: 'scout', label: 'Scout' }]
   if (p.role === 'support')    return [...base, { value: 'support', label: 'Support' }]
   return [...base, { value: 'collector', label: 'Collecte' }]
@@ -177,16 +191,16 @@ function onAssignSubCaptain(p: Participant) {
         </span>
         <OverlaySelect
           v-if="canManage"
-          :model-value="crew.status"
-          :options="STATUS_OPTIONS"
+          :model-value="crew.status ?? ''"
+          :options="statusOptions(crew)"
           max-width="110px"
           @update:model-value="onCrewStatusChange(crew.key, $event)"
         />
         <span
           v-else
           class="shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
-          :class="crewStatusClass(crew.status)"
-        >{{ crewStatusLabel(crew.status) }}</span>
+          :class="crewStatusClass(crew.effectiveStatus)"
+        >{{ crewStatusLabel(crew.effectiveStatus) }}</span>
       </div>
 
       <!-- Membres -->

@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('oneCC', {
   setWindowSize: (size: string) => ipcRenderer.invoke('app:set-window-size', size),
   setToggleKey:    (payload: any) => ipcRenderer.invoke('app:set-toggle-key', payload),
   setMapToggleKey: (payload: any) => ipcRenderer.invoke('app:set-map-toggle-key', payload),
+  setPinnedMap: (id: number | null) => ipcRenderer.invoke('app:set-pinned-map', id),
   setCycleModeKey:       (payload: any) => ipcRenderer.invoke('app:set-cycle-mode-key', payload),
   setCycleBuiltInKey:    (payload: any) => ipcRenderer.invoke('app:set-cycle-builtin-key', payload),
   setCycleCustomKey:     (payload: any) => ipcRenderer.invoke('app:set-cycle-custom-key', payload),
@@ -56,6 +57,8 @@ contextBridge.exposeInMainWorld('oneCC', {
   onOverlayEditMode: (cb: (enabled: boolean) => void) => ipcRenderer.on('overlay:edit-mode', (_e, enabled) => cb(enabled)),
   onMapToggle:  (cb: () => void) => ipcRenderer.on('overlay:map-toggle', () => cb()),
   offMapToggle: () => ipcRenderer.removeAllListeners('overlay:map-toggle'),
+  onPinnedMap: (cb: (id: number | null) => void) => ipcRenderer.on('overlay:pinned-map', (_e, id) => cb(id)),
+  offPinnedMap: () => ipcRenderer.removeAllListeners('overlay:pinned-map'),
   /** Bounds logiques (CSS px) de la fenêtre SC sur l'écran. null = SC absent/minimisé. */
   onOverlayGameBounds: (cb: (b: { x: number; y: number; width: number; height: number } | null) => void) =>
     ipcRenderer.on('overlay:game-bounds', (_e, b) => cb(b)),
@@ -71,6 +74,7 @@ contextBridge.exposeInMainWorld('oneCC', {
     ipcRenderer.removeAllListeners('overlay:layout-update')
     ipcRenderer.removeAllListeners('overlay:edit-mode')
     ipcRenderer.removeAllListeners('overlay:map-toggle')
+    ipcRenderer.removeAllListeners('overlay:pinned-map')
     ipcRenderer.removeAllListeners('overlay:game-bounds')
     ipcRenderer.removeAllListeners('overlay:map-only-mode')
     ipcRenderer.removeAllListeners('overlay:active-mode')

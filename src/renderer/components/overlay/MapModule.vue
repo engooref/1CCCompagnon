@@ -7,6 +7,8 @@ import { usePinnedMap } from '../../composables/usePinnedMap'
 import { useMercure } from '../../composables/useMercure'
 import { useMapLeaflet, type MapFeature } from '../../composables/useMapLeaflet'
 
+const props = withDefaults(defineProps<{ interactive?: boolean | 'full' }>(), { interactive: false })
+
 const { pinnedMapId, unpin } = usePinnedMap()
 const { connected: liveConnected, sseError, connect: connectMercure, disconnect: disconnectMercure } = useMercure()
 
@@ -106,7 +108,7 @@ async function loadMap(id: number | null) {
   if (gen !== loadGen) { logger.warn('[MapModule] loadMap: génération obsolète après nextTick'); return }
 
   logger.info('[MapModule] loadMap: init Leaflet')
-  leaflet.init(mapContainer.value, info, imageBlobUrl, false)
+  leaflet.init(mapContainer.value, info, imageBlobUrl, props.interactive)
   mapReady.value = true
   logger.info('[MapModule] loadMap: mapReady = true')
 

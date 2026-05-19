@@ -49,3 +49,10 @@ html.overlay-mode #app {
   border-radius: 9999px;
 }
 
+/* Ajout d'une exception pour les dropdowns */
+.relative .dropdown {
+  position: absolute;
+  z-index: 9999;
+  overflow: visible;
+}
+

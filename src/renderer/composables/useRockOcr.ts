@@ -43,7 +43,6 @@ export function useRockOcr() {
         resistance:      mining.rockForm.resistance,
         posX:            mining.rockForm.posX,
         posY:            mining.rockForm.posY,
-        posZ:            mining.rockForm.posZ,
         minerals:        mining.rockForm.minerals.map(m => ({ name: m._name, pct: m.percentage })),
       }, null, 2))
     } else {

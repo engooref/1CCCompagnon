@@ -41,8 +41,10 @@ import {
   assignSubCaptain as svcAssignSubCaptain,
   leaveParticipant as svcLeaveParticipant,
   updateSessionDefaultBody as svcUpdateSessionDefaultBody,
+  fetchBodyLabel as svcFetchBodyLabel,
   updateSessionDefaultRefinery as svcUpdateSessionDefaultRefinery,
   pickupCargo as svcPickupCargo,
+  transferCrewCargosToSupport as svcTransferCrewCargosToSupport,
   createSessionOperation as svcCreateSessionOperation,
   searchMiningShips as svcSearchMiningShips,
   fetchSessionShips as svcFetchSessionShips,
@@ -185,7 +187,6 @@ export const useMiningStore = defineStore('mining', {
       editRockId:      null as number | null,
       posX:            '' as string,
       posY:            '' as string,
-      posZ:            '' as string,
       bodySearch:      '',
       bodyResults:     [] as any[],
       selectedBody:    null as any | null,
@@ -266,6 +267,7 @@ export const useMiningStore = defineStore('mining', {
       deleteRock:           false,
       assignRock:           false,
       pickupCargo:          false,
+      bagChange:            false,
       loadShips:            false,
       updateSessionBody:    false,
       updateSessionRefinery: false,
@@ -663,6 +665,11 @@ export const useMiningStore = defineStore('mining', {
           cargos: session.cargos ?? [],
           logs: [],
         }
+        if (session.defaultBodyId) {
+          svcFetchBodyLabel(session.defaultBodyId)
+            .then((label) => { if (this.sessionActive) this.sessionActive.defaultBodyLabel = label })
+            .catch(() => {})
+        }
       } catch (err) {
         logger.error('[mining] loadSessionDetail failed', err)
         this.errors.session = 'Impossible de charger les détails de la session.'
@@ -748,15 +755,23 @@ export const useMiningStore = defineStore('mining', {
         case 'session_updated':
           if (data.session) Object.assign(session, data.session)
           break
-        case 'participant_joined':
-          if (!session.participants.find((p) => p.id === data.participant?.id)) {
-            session.participants.push(data.participant)
-          }
-          this._pushSessionLog('👤', `${data.participant?.username ?? '?'} a rejoint la session.`, 'success')
+        case 'participant_joined': {
+          const participant = data.participant
+          if (!participant?.id) break
+          const idx = session.participants.findIndex((p) => p.id === participant.id)
+          if (idx !== -1) session.participants[idx] = participant
+          else session.participants.push(participant)
+          this._upsertCrewFromParticipant(participant)
+          this._pushSessionLog('👤', `${participant?.username ?? '?'} a rejoint la session.`, 'success')
           break
+        }
         case 'participant_updated': {
-          const idx = session.participants.findIndex((p) => p.id === data.participant?.id)
-          if (idx !== -1) session.participants[idx] = data.participant
+          const participant = data.participant
+          if (!participant?.id) break
+          const idx = session.participants.findIndex((p) => p.id === participant.id)
+          if (idx !== -1) session.participants[idx] = participant
+          else session.participants.push(participant)
+          this._upsertCrewFromParticipant(participant)
           break
         }
         case 'crew_updated': {
@@ -769,10 +784,21 @@ export const useMiningStore = defineStore('mining', {
           }
           break
         }
+        case 'crew_dissolved': {
+          const crewId = data.crewId ?? data.crew?.id
+          if (crewId != null && Array.isArray((session as any).crews)) {
+            ;(session as any).crews = (session as any).crews.filter((c: any) => Number(c.id) !== Number(crewId))
+          }
+          break
+        }
         case 'participant_left':
         case 'participant_removed': {
           const leftId = data.participantId ?? data.participant?.id
+          const leftParticipant = leftId
+            ? session.participants.find((p) => p.id === leftId)
+            : null
           if (leftId) session.participants = session.participants.filter((p) => p.id !== leftId)
+          this._removeCrewIfEmpty(leftParticipant)
           this._pushSessionLog('🚪', 'Un participant a quitté la session.', 'warning')
           break
         }
@@ -838,6 +864,20 @@ export const useMiningStore = defineStore('mining', {
           } else if (data.cargo) {
             this._applyCargoUpdate(data.cargo)
           }
+          break
+
+        case 'session_default_refinery_changed':
+          if (data.defaultRefineryId != null) session.defaultRefineryId = data.defaultRefineryId
+          if (data.defaultRefineryName != null) session.defaultRefineryName = data.defaultRefineryName
+          break
+
+        case 'session_default_body_changed':
+          if (data.defaultBodyId != null) session.defaultBodyId = data.defaultBodyId
+          if (data.defaultBodyName != null) session.defaultBodyName = data.defaultBodyName
+          break
+
+        case 'operation_created':
+          if (data.operationCreated != null) session.operationCreated = data.operationCreated
           break
       }
     },
@@ -936,6 +976,71 @@ export const useMiningStore = defineStore('mining', {
       this.sessionActive.cargos = list
     },
 
+    _upsertCrewFromParticipant(participant: any | null | undefined) {
+      if (!participant || !this.sessionActive) return
+
+      const crewId = participant.crewId != null ? Number(participant.crewId) : null
+      const crewKey = participant.crewKey ?? null
+      if (crewId == null && !crewKey) return
+
+      const crews = (this.sessionActive as any).crews
+      if (!Array.isArray(crews)) return
+
+      const idx = crews.findIndex((c: any) =>
+        (crewId != null && Number(c.id) === crewId)
+        || (crewKey && c.crewKey === crewKey),
+      )
+
+      const patch = this._definedPatch({
+        id: crewId ?? undefined,
+        crewKey,
+        role: participant.role,
+        shipId: participant.shipId,
+        shipName: participant.shipName,
+        crewTotal: participant.crewTotal,
+        crewUsed: participant.crewUsed,
+        status: participant.crewStatus,
+      })
+
+      if (idx !== -1) {
+        crews[idx] = { ...crews[idx], ...patch, id: crews[idx].id ?? patch.id }
+        return
+      }
+
+      if (crewId == null) return
+      crews.push({
+        id: crewId,
+        sessionId: this.sessionActive.id,
+        role: participant.role ?? 'miner',
+        crewKey,
+        crewTotal: participant.crewTotal ?? null,
+        crewUsed: participant.crewUsed ?? null,
+        status: participant.crewStatus ?? null,
+        shipId: participant.shipId ?? null,
+        shipName: participant.shipName ?? null,
+      })
+    },
+
+    _removeCrewIfEmpty(participant: any | null | undefined) {
+      if (!participant || !this.sessionActive) return
+      const crews = (this.sessionActive as any).crews
+      if (!Array.isArray(crews)) return
+
+      const crewId = participant.crewId != null ? Number(participant.crewId) : null
+      const crewKey = participant.crewKey ?? null
+      if (crewId == null && !crewKey) return
+
+      const hasMembers = (this.sessionActive.participants ?? []).some((p: any) =>
+        (crewId != null && Number(p.crewId) === crewId)
+        || (crewKey && p.crewKey === crewKey),
+      )
+      if (hasMembers) return
+
+      ;(this.sessionActive as any).crews = crews.filter((c: any) =>
+        !((crewId != null && Number(c.id) === crewId) || (crewKey && c.crewKey === crewKey)),
+      )
+    },
+
     _pushSessionLog(icon: string, message: string, category = 'info') {
       if (!this.sessionActive) return
       const entry: MiningSessionLog = {
@@ -945,6 +1050,11 @@ export const useMiningStore = defineStore('mining', {
         message,
         category,
       }
+      // Vérifie si un événement similaire existe déjà
+      const isDuplicate = this.sessionActive.logs.some(log => log.message === message && log.time === entry.time);
+      if (isDuplicate) return;
+
+      // Ajoute l'événement s'il n'est pas un doublon
       this.sessionActive.logs.unshift(entry)
       if (this.sessionActive.logs.length > 100) {
         this.sessionActive.logs = this.sessionActive.logs.slice(0, 100)
@@ -1008,7 +1118,7 @@ export const useMiningStore = defineStore('mining', {
     openRockForm() {
       this.rockForm = {
         show: true, saving: false, error: null, editRockId: null,
-        posX: '', posY: '', posZ: '',
+        posX: '', posY: '',
         bodySearch: this.sessionActive?.defaultBodyName ?? '',
         bodyResults: [],
         selectedBody: this.sessionActive?.defaultBodyId
@@ -1117,7 +1227,6 @@ export const useMiningStore = defineStore('mining', {
           bodyName:        this.rockForm.bodySearch.trim() || undefined,
           posX:            n(this.rockForm.posX),
           posY:            n(this.rockForm.posY),
-          posZ:            n(this.rockForm.posZ),
           sizeScuEstimate: n(this.rockForm.sizeScuEstimate),
           mass:            n(this.rockForm.mass),
           instability:     n(this.rockForm.instability),
@@ -1510,8 +1619,10 @@ export const useMiningStore = defineStore('mining', {
       try {
         await svcUpdateSessionDefaultBody(sessionId, bodyId)
         if (this.sessionActive) {
-          this.sessionActive.defaultBodyId   = bodyId
-          this.sessionActive.defaultBodyName = this.changeZone.selectedBody?.name ?? null
+          this.sessionActive.defaultBodyId    = bodyId
+          this.sessionActive.defaultBodyName  = this.changeZone.selectedBody?.name ?? null
+          this.sessionActive.defaultBodyLabel = this.changeZone.selectedBody?.name ?? null
+          this.sessionActive.systemName       = this.changeZone.selectedBody?.systemName ?? this.sessionActive.systemName ?? null
         }
         this.changeZone = { show: false, bodySearch: '', bodyResults: [], selectedBody: null }
         this._pushSessionLog('🗺️', `Zone par défaut changée.`)
@@ -1551,6 +1662,43 @@ export const useMiningStore = defineStore('mining', {
         this.errors.session = parseApiError(err, 'Erreur prise en charge cargo.')
       } finally {
         this.loading.pickupCargo = false
+      }
+    },
+
+    async transferCrewCargosToSupport(sessionId: number, source: { crewId?: number | null; crewKey?: string | null }) {
+      this.loading.bagChange = true
+      try {
+        const data = await svcTransferCrewCargosToSupport(sessionId, source)
+        const cargos = Array.isArray(data?.cargos)
+          ? data.cargos
+          : (data?.cargo ? [data.cargo] : [])
+
+        cargos.forEach((cargo: any) => this._applyCargoUpdate(cargo))
+
+        const summary = data?.summary ?? {
+          linesCount: cargos.length,
+          totalScu: cargos.reduce((total: number, cargo: any) => total + Number(cargo?.quantityScu ?? 0), 0),
+          sourceCrew: data?.sourceCrew ?? null,
+        }
+
+        const sourceLabel = summary?.sourceCrew?.shipName
+          ?? summary?.sourceCrew?.crewKey
+          ?? source.crewKey
+          ?? (source.crewId != null ? `Équipage #${source.crewId}` : 'Équipage source')
+
+        this._pushSessionLog(
+          '🧺',
+          `Changement de sac: ${summary?.linesCount ?? cargos.length} cargo(s) transféré(s) depuis ${sourceLabel}.`,
+          'success',
+        )
+
+        return { cargos, summary }
+      } catch (err: any) {
+        const msg = parseApiError(err, 'Erreur changement de sac.')
+        this.errors.session = msg
+        throw new Error(msg)
+      } finally {
+        this.loading.bagChange = false
       }
     },
 
@@ -1713,7 +1861,6 @@ export const useMiningStore = defineStore('mining', {
         const parts = payload.coordinates.trim().split(/[\s,]+/)
         if (parts[0]) this.rockForm.posX = parts[0]
         if (parts[1]) this.rockForm.posY = parts[1]
-        if (parts[2]) this.rockForm.posZ = parts[2]
       }
       this.rockForm.show = true
     },

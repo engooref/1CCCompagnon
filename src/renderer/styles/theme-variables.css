@@ -34,9 +34,9 @@
   /* ─── Text ──────────────────────────────────────────────────────────────── */
   --text-primary:   #f1f5f9;                /* slate-100                      */
   --text-bright:    #ffffff;                /* texte lumineux (50% vers blanc) */
-  --text-secondary: #94a3b8;                /* slate-400                      */
-  --text-muted:     #475569;                /* slate-600                      */
-  --text-disabled:  #334155;                /* slate-700                      */
+  --text-secondary: #cbd5e1;                /* slate-300                      */
+  --text-muted:     #94a3b8;                /* slate-400                      */
+  --text-disabled:  #475569;                /* slate-600                      */
 
   /* ─── Borders ───────────────────────────────────────────────────────────── */
   --border:        rgba(var(--accent-rgb), 0.20);

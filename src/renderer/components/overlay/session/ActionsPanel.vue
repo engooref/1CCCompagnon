@@ -58,7 +58,21 @@ function onZoneInput() {
   zoneDebounce = setTimeout(async () => {
     try {
       const res = await mining.searchWhereBodies(zoneQuery.value.trim())
-      zoneResults.value = (res ?? []).slice(0, 10).map((b: any) => ({ id: b.id, name: b.name ?? b.bodyName ?? String(b.id) }))
+      const flat: { id: number; name: string }[] = []
+      function flatten(nodes: any[], path = '') {
+        for (const n of nodes ?? []) {
+          const label = path ? `${path} › ${n.name}` : n.name
+          if (n.id != null && (!n.children || n.children.length === 0)) {
+            flat.push({ id: n.id, name: label })
+          } else if (n.children?.length) {
+            flatten(n.children, label)
+          } else if (n.id != null) {
+            flat.push({ id: n.id, name: label })
+          }
+        }
+      }
+      flatten(res ?? [])
+      zoneResults.value = flat.slice(0, 15)
     } catch { zoneResults.value = [] }
     finally { zoneSearching.value = false }
   }, 300)
@@ -110,7 +124,7 @@ async function doLeave() {
       <div class="flex items-center justify-between gap-1">
         <span class="text-[9px] text-white/45">Zone</span>
         <div class="flex items-center gap-1">
-          <span class="max-w-[140px] truncate text-[10px] font-semibold text-th-primary">{{ props.session.defaultBodyName ?? '—' }}</span>
+          <span class="max-w-[140px] truncate text-[10px] font-semibold text-th-primary">{{ props.session.defaultBodyLabel ?? props.session.defaultBodyName ?? '—' }}</span>
           <button
             v-if="canEdit && isCreator"
             class="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[8px] font-bold text-sky-300 hover:bg-sky-500/20"

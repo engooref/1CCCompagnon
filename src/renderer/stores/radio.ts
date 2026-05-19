@@ -367,10 +367,14 @@ export const useRadioStore = defineStore('radio', {
       // Charger RadioClient de manière lazy (évite d'importer livekit-client au démarrage)
       const client = await getRadioClient()
 
-      this.settings = await window.oneCC.radioGetSettings()
+      this.settings = { ...DEFAULT_RADIO_SETTINGS, ...(await window.oneCC.radioGetSettings()) }
       await this.fetchChannels()
       await this.fetchCategories()
       await this.loadDevices()
+
+      client.setVolume(this.settings.radioVolume)
+      client.setRadioEffectEnabled(this.settings.radioEffectEnabled)
+      client.setRadioEffectIntensity(this.settings.radioEffectIntensity)
 
       // Écouter les events RadioClient
       client.on('channelConnected', (channelId) => {
@@ -790,9 +794,23 @@ export const useRadioStore = defineStore('radio', {
     // ── Volume ───────────────────────────────────────────────────────────
 
     setVolume(volume: number) {
-      this.settings.radioVolume = volume
-      radioClient!.setVolume(volume)
-      window.oneCC.radioUpdateSettings({ radioVolume: volume })
+      const clamped = Math.max(0, Math.min(1, volume))
+      this.settings.radioVolume = clamped
+      radioClient!.setVolume(clamped)
+      window.oneCC.radioUpdateSettings({ radioVolume: clamped })
+    },
+
+    setRadioEffectEnabled(enabled: boolean) {
+      this.settings.radioEffectEnabled = enabled
+      radioClient?.setRadioEffectEnabled(enabled)
+      window.oneCC.radioUpdateSettings({ radioEffectEnabled: enabled })
+    },
+
+    setRadioEffectIntensity(value: number) {
+      const clamped = Math.max(0, Math.min(1, value))
+      this.settings.radioEffectIntensity = clamped
+      radioClient?.setRadioEffectIntensity(clamped)
+      window.oneCC.radioUpdateSettings({ radioEffectIntensity: clamped })
     },
 
     // ── PTT Bindings ──────────────────────────────────────────────────────
