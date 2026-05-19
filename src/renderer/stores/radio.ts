@@ -368,6 +368,10 @@ export const useRadioStore = defineStore('radio', {
       const client = await getRadioClient()
 
       this.settings = { ...DEFAULT_RADIO_SETTINGS, ...(await window.oneCC.radioGetSettings()) }
+      this.selectedInputId = this.settings.radioSelectedInputId ?? null
+      this.selectedOutputId = this.settings.radioSelectedOutputId ?? null
+      this.gateThreshold = this.settings.radioGateThreshold ?? 0
+      this.inputGain = this.settings.radioInputGain ?? 1.0
       await this.fetchChannels()
       await this.fetchCategories()
       await this.loadDevices()
@@ -375,6 +379,9 @@ export const useRadioStore = defineStore('radio', {
       client.setVolume(this.settings.radioVolume)
       client.setRadioEffectEnabled(this.settings.radioEffectEnabled)
       client.setRadioEffectIntensity(this.settings.radioEffectIntensity)
+      client.setRadioPan(this.settings.radioPan ?? 0)
+      client.setGateThreshold(this.gateThreshold)
+      client.setInputGain(this.inputGain)
 
       // Écouter les events RadioClient
       client.on('channelConnected', (channelId) => {
@@ -509,6 +516,13 @@ export const useRadioStore = defineStore('radio', {
 
         // Appliquer le volume
         radioClient!.setVolume(this.settings.radioVolume)
+        radioClient!.setRadioPan(this.settings.radioPan ?? 0)
+        radioClient!.setGateThreshold(this.gateThreshold)
+        radioClient!.setInputGain(this.inputGain)
+
+        if (this.selectedOutputId) {
+          await radioClient!.setAudioOutput(this.selectedOutputId)
+        }
 
         // Ne pas démarrer la transmission automatiquement après un join normal.
         // L'émission se fera uniquement via PTT ou appels explicites à startTransmit().
@@ -813,6 +827,13 @@ export const useRadioStore = defineStore('radio', {
       window.oneCC.radioUpdateSettings({ radioEffectIntensity: clamped })
     },
 
+    setRadioPan(value: number) {
+      const clamped = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0
+      this.settings.radioPan = clamped
+      radioClient?.setRadioPan(clamped)
+      window.oneCC.radioUpdateSettings({ radioPan: clamped })
+    },
+
     // ── PTT Bindings ──────────────────────────────────────────────────────
 
     async setPttBinding(targetId: string, keyCode: number | null, key: string) {
@@ -1050,22 +1071,26 @@ export const useRadioStore = defineStore('radio', {
 
     async setAudioInput(deviceId: string) {
       this.selectedInputId = deviceId
+      await window.oneCC.radioUpdateSettings({ radioSelectedInputId: deviceId || null })
       if (radioClient?.connected) await radioClient.setAudioInput(deviceId)
     },
 
     async setAudioOutput(deviceId: string) {
       this.selectedOutputId = deviceId
+      await window.oneCC.radioUpdateSettings({ radioSelectedOutputId: deviceId || null })
       if (radioClient?.connected) await radioClient.setAudioOutput(deviceId)
     },
 
     setGateThreshold(value: number) {
       this.gateThreshold = value
       radioClient?.setGateThreshold(value)
+      window.oneCC.radioUpdateSettings({ radioGateThreshold: value })
     },
 
     setInputGain(value: number) {
       this.inputGain = value
       radioClient?.setInputGain(value)
+      window.oneCC.radioUpdateSettings({ radioInputGain: value })
     },
 
     async toggleMonitor() {

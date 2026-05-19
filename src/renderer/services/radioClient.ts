@@ -44,12 +44,21 @@ interface RxEffectChain {
   element: HTMLMediaElement
   source: MediaElementAudioSourceNode
   highPass: BiquadFilterNode
+  bandPass: BiquadFilterNode
   presence: BiquadFilterNode
   lowPass: BiquadFilterNode
+  compressor: DynamicsCompressorNode
   drive: WaveShaperNode
   dryGain: GainNode
   wetGain: GainNode
+  noiseSource: AudioBufferSourceNode
+  noiseFilter: BiquadFilterNode
+  noiseGain: GainNode
   outputGain: GainNode
+  outputSplitter: ChannelSplitterNode
+  outputLeftGain: GainNode
+  outputRightGain: GainNode
+  outputMerger: ChannelMergerNode
 }
 
 export class RadioClient {
@@ -66,12 +75,13 @@ export class RadioClient {
   private _gateOpen = false
   private _monitoring = false
   private _radioEffectEnabled = true
-  private _radioEffectIntensity = 0.6
-  private txDryGain: GainNode | null = null
-  private txWetGain: GainNode | null = null
-  private txPresence: BiquadFilterNode | null = null
-  private txLowPass: BiquadFilterNode | null = null
-  private txDrive: WaveShaperNode | null = null
+  private _radioEffectIntensity = 0.85
+  private _pan = 0
+  private monitorOutputGain: GainNode | null = null
+  private monitorSplitter: ChannelSplitterNode | null = null
+  private monitorLeftGain: GainNode | null = null
+  private monitorRightGain: GainNode | null = null
+  private monitorMerger: ChannelMergerNode | null = null
   private readonly rxChains = new Map<string, RxEffectChain>()
   private readonly rxTrackToKey = new WeakMap<RemoteAudioTrack, string>()
 
@@ -322,6 +332,19 @@ export class RadioClient {
     }
   }
 
+  /** Balance radio entrante : -1 = 100% gauche, 0 = centre, 1 = 100% droite. */
+  setPan(pan: number): void {
+    this._pan = Math.max(-1, Math.min(1, pan))
+    for (const chain of this.rxChains.values()) {
+      this.updateRxPan(chain)
+    }
+    this.updateMonitorPan()
+  }
+
+  setRadioPan(pan: number): void {
+    this.setPan(pan)
+  }
+
   private applyVolumeToRoom(room: Room): void {
     for (const p of room.remoteParticipants.values()) {
       for (const pub of p.audioTrackPublications.values()) {
@@ -348,14 +371,54 @@ export class RadioClient {
   async startMonitor(): Promise<void> {
     if (!this.gateGain || !this.audioCtx || this._monitoring) return
     await this.audioCtx.resume()
-    this.gateGain.connect(this.audioCtx.destination)
+
+    this.monitorOutputGain = this.audioCtx.createGain()
+    this.monitorOutputGain.gain.value = 1
+    this.monitorSplitter = this.audioCtx.createChannelSplitter(2)
+    this.monitorLeftGain = this.audioCtx.createGain()
+    this.monitorRightGain = this.audioCtx.createGain()
+    this.monitorMerger = this.audioCtx.createChannelMerger(2)
+
+    // Monitor micro avec la même balance hard-pan que la réception radio.
+    // À -1 : droite coupée. À +1 : gauche coupée.
+    this.gateGain.connect(this.monitorOutputGain)
+    this.monitorOutputGain.connect(this.monitorSplitter)
+    this.monitorSplitter.connect(this.monitorLeftGain, 0)
+    this.monitorSplitter.connect(this.monitorLeftGain, 1)
+    this.monitorSplitter.connect(this.monitorRightGain, 0)
+    this.monitorSplitter.connect(this.monitorRightGain, 1)
+    this.monitorLeftGain.connect(this.monitorMerger, 0, 0)
+    this.monitorRightGain.connect(this.monitorMerger, 0, 1)
+    this.monitorMerger.connect(this.audioCtx.destination)
+
+    this.updateMonitorPan()
     this._monitoring = true
   }
 
   stopMonitor(): void {
-    if (!this.gateGain || !this.audioCtx || !this._monitoring) return
-    try { this.gateGain.disconnect(this.audioCtx.destination) } catch {}
+    this.disconnectMonitorChain()
     this._monitoring = false
+  }
+
+  private disconnectMonitorChain(): void {
+    try { this.monitorOutputGain?.disconnect() } catch {}
+    try { this.monitorSplitter?.disconnect() } catch {}
+    try { this.monitorLeftGain?.disconnect() } catch {}
+    try { this.monitorRightGain?.disconnect() } catch {}
+    try { this.monitorMerger?.disconnect() } catch {}
+
+    this.monitorOutputGain = null
+    this.monitorSplitter = null
+    this.monitorLeftGain = null
+    this.monitorRightGain = null
+    this.monitorMerger = null
+  }
+
+  private updateMonitorPan(): void {
+    if (!this.monitorLeftGain || !this.monitorRightGain) return
+    const pan = Math.max(-1, Math.min(1, this._pan))
+    this.monitorLeftGain.gain.value = pan <= 0 ? 1 : 1 - pan
+    this.monitorRightGain.gain.value = pan >= 0 ? 1 : 1 + pan
   }
 
   // ── Audio pipeline (partagé entre tous les canaux) ────────────────────
@@ -410,43 +473,18 @@ export class RadioClient {
     this.gateGain = this.audioCtx.createGain()
     this.gateGain.gain.value = 1.0
 
-    this.txPresence = this.audioCtx.createBiquadFilter()
-    this.txPresence.type = 'peaking'
-    this.txPresence.frequency.value = 2200
-    this.txPresence.Q.value = 1.2
-    this.txPresence.gain.value = 8
-
-    this.txLowPass = this.audioCtx.createBiquadFilter()
-    this.txLowPass.type = 'lowpass'
-    this.txLowPass.frequency.value = 3400
-    this.txLowPass.Q.value = 0.7
-
-    this.txDrive = this.audioCtx.createWaveShaper()
-    this.txDrive.curve = this.createDistortionCurve(0.45)
-    this.txDrive.oversample = '2x'
-
-    this.txDryGain = this.audioCtx.createGain()
-    this.txWetGain = this.audioCtx.createGain()
-
     this.processedDestination = this.audioCtx.createMediaStreamDestination()
 
+    // TX propre : l'effet radio est uniquement en réception.
     // source → preAmp → HPF → compressor
     //                                  ├→ analyser (niveau/gate)
-    //                                  ├→ dry → gate
-    //                                  └→ radio FX (presence+LPF+drive) → gate
+    //                                  └→ gate → Destination LiveKit
     source.connect(this.preAmpGain)
     this.preAmpGain.connect(hpf)
     hpf.connect(compressor)
     compressor.connect(this.analyser)
-    compressor.connect(this.txDryGain)
-    this.txDryGain.connect(this.gateGain)
-    compressor.connect(this.txPresence)
-    this.txPresence.connect(this.txLowPass)
-    this.txLowPass.connect(this.txDrive)
-    this.txDrive.connect(this.txWetGain)
-    this.txWetGain.connect(this.gateGain)
+    compressor.connect(this.gateGain)
     this.gateGain.connect(this.processedDestination)
-    this.applyTxEffectSettings()
 
     // Polling niveau RMS + contrôle noise gate
     this.micLevelInterval = setInterval(() => {
@@ -487,15 +525,11 @@ export class RadioClient {
     }
     this._monitoring = false
     this._gateOpen = false
+    this.disconnectMonitorChain()
     this.analyser = null
     this.analyserData = null
     this.preAmpGain = null
     this.gateGain = null
-    this.txDryGain = null
-    this.txWetGain = null
-    this.txPresence = null
-    this.txLowPass = null
-    this.txDrive = null
     this.processedDestination = null
     this.cleanupRxChains()
     this.audioCtx?.close()
@@ -514,30 +548,12 @@ export class RadioClient {
 
   setRadioEffectEnabled(enabled: boolean): void {
     this._radioEffectEnabled = enabled
-    this.applyTxEffectSettings()
     this.applyRxEffectSettings()
   }
 
   setRadioEffectIntensity(value: number): void {
     this._radioEffectIntensity = Math.max(0, Math.min(1, value))
-    this.applyTxEffectSettings()
     this.applyRxEffectSettings()
-  }
-
-  private applyTxEffectSettings(): void {
-    if (!this.txDryGain || !this.txWetGain || !this.txDrive) return
-
-    if (!this._radioEffectEnabled) {
-      this.txDryGain.gain.value = 1
-      this.txWetGain.gain.value = 0
-      this.txDrive.curve = this.createDistortionCurve(0.02)
-      return
-    }
-
-    const intensity = this._radioEffectIntensity
-    this.txDryGain.gain.value = 1 - (0.5 * intensity)
-    this.txWetGain.gain.value = 0.35 + (0.45 * intensity)
-    this.txDrive.curve = this.createDistortionCurve(0.25 + (0.55 * intensity))
   }
 
   private applyRxEffectSettings(): void {
@@ -546,19 +562,39 @@ export class RadioClient {
     }
   }
 
+  private updateRxPan(chain: RxEffectChain): void {
+    const pan = Math.max(-1, Math.min(1, this._pan))
+    // Hard-pan linéaire : à -1 droite=0, à +1 gauche=0.
+    chain.outputLeftGain.gain.value = pan <= 0 ? 1 : 1 - pan
+    chain.outputRightGain.gain.value = pan >= 0 ? 1 : 1 + pan
+  }
+
   private updateRxMix(chain: RxEffectChain): void {
     chain.outputGain.gain.value = this._volume
+    this.updateRxPan(chain)
+
     if (!this._radioEffectEnabled) {
       chain.dryGain.gain.value = 1
       chain.wetGain.gain.value = 0
+      chain.noiseGain.gain.value = 0
       chain.drive.curve = this.createDistortionCurve(0.02)
       return
     }
 
     const intensity = this._radioEffectIntensity
-    chain.dryGain.gain.value = 1 - (0.45 * intensity)
-    chain.wetGain.gain.value = 0.35 + (0.5 * intensity)
-    chain.drive.curve = this.createDistortionCurve(0.22 + (0.58 * intensity))
+    chain.highPass.frequency.value = 300 + (260 * intensity)
+    chain.bandPass.frequency.value = 1500 + (500 * intensity)
+    chain.bandPass.Q.value = 0.7 + (0.85 * intensity)
+    chain.presence.frequency.value = 2100 + (450 * intensity)
+    chain.presence.gain.value = 7 + (9 * intensity)
+    chain.lowPass.frequency.value = 3600 - (1050 * intensity)
+    chain.compressor.threshold.value = -28 - (12 * intensity)
+    chain.compressor.ratio.value = 6 + (8 * intensity)
+
+    chain.dryGain.gain.value = Math.max(0.03, 0.42 - (0.34 * intensity))
+    chain.wetGain.gain.value = 0.82 + (0.48 * intensity)
+    chain.noiseGain.gain.value = 0.003 + (0.014 * intensity)
+    chain.drive.curve = this.createDistortionCurve(0.32 + (0.9 * intensity))
   }
 
   private createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
@@ -570,6 +606,24 @@ export class RadioClient {
       curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x))
     }
     return curve
+  }
+
+  private createNoiseSource(ctx: AudioContext): AudioBufferSourceNode {
+    const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * 0.35))
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    let last = 0
+    for (let i = 0; i < bufferSize; i += 1) {
+      // Bruit rose simplifié : moins agressif que du white noise pur.
+      const white = (Math.random() * 2) - 1
+      last = (last * 0.86) + (white * 0.14)
+      data[i] = last
+    }
+
+    const source = ctx.createBufferSource()
+    source.buffer = buffer
+    source.loop = true
+    return source
   }
 
   private attachRemoteTrackWithEffect(channelId: string, track: RemoteAudioTrack): void {
@@ -589,39 +643,76 @@ export class RadioClient {
 
       const highPass = this.audioCtx.createBiquadFilter()
       highPass.type = 'highpass'
-      highPass.frequency.value = 300
-      highPass.Q.value = 0.7
+      highPass.frequency.value = 420
+      highPass.Q.value = 0.85
+
+      const bandPass = this.audioCtx.createBiquadFilter()
+      bandPass.type = 'bandpass'
+      bandPass.frequency.value = 1800
+      bandPass.Q.value = 0.95
 
       const presence = this.audioCtx.createBiquadFilter()
       presence.type = 'peaking'
-      presence.frequency.value = 2200
-      presence.Q.value = 1.2
-      presence.gain.value = 8
+      presence.frequency.value = 2350
+      presence.Q.value = 1.35
+      presence.gain.value = 11
 
       const lowPass = this.audioCtx.createBiquadFilter()
       lowPass.type = 'lowpass'
-      lowPass.frequency.value = 3400
-      lowPass.Q.value = 0.7
+      lowPass.frequency.value = 2850
+      lowPass.Q.value = 0.95
+
+      const rxCompressor = this.audioCtx.createDynamicsCompressor()
+      rxCompressor.threshold.value = -34
+      rxCompressor.knee.value = 7
+      rxCompressor.ratio.value = 11
+      rxCompressor.attack.value = 0.001
+      rxCompressor.release.value = 0.055
 
       const drive = this.audioCtx.createWaveShaper()
-      drive.curve = this.createDistortionCurve(0.4)
+      drive.curve = this.createDistortionCurve(0.55)
       drive.oversample = '2x'
 
       const dryGain = this.audioCtx.createGain()
       const wetGain = this.audioCtx.createGain()
+      const noiseGain = this.audioCtx.createGain()
       const outputGain = this.audioCtx.createGain()
+      const outputSplitter = this.audioCtx.createChannelSplitter(2)
+      const outputLeftGain = this.audioCtx.createGain()
+      const outputRightGain = this.audioCtx.createGain()
+      const outputMerger = this.audioCtx.createChannelMerger(2)
+
+      const noiseSource = this.createNoiseSource(this.audioCtx)
+      const noiseFilter = this.audioCtx.createBiquadFilter()
+      noiseFilter.type = 'bandpass'
+      noiseFilter.frequency.value = 1800
+      noiseFilter.Q.value = 0.45
 
       source.connect(dryGain)
       dryGain.connect(outputGain)
 
       source.connect(highPass)
-      highPass.connect(presence)
+      highPass.connect(bandPass)
+      bandPass.connect(presence)
       presence.connect(lowPass)
-      lowPass.connect(drive)
+      lowPass.connect(rxCompressor)
+      rxCompressor.connect(drive)
       drive.connect(wetGain)
       wetGain.connect(outputGain)
 
-      outputGain.connect(this.audioCtx.destination)
+      noiseSource.connect(noiseFilter)
+      noiseFilter.connect(noiseGain)
+      noiseGain.connect(outputGain)
+      noiseSource.start()
+
+      outputGain.connect(outputSplitter)
+      outputSplitter.connect(outputLeftGain, 0)
+      outputSplitter.connect(outputLeftGain, 1)
+      outputSplitter.connect(outputRightGain, 0)
+      outputSplitter.connect(outputRightGain, 1)
+      outputLeftGain.connect(outputMerger, 0, 0)
+      outputRightGain.connect(outputMerger, 0, 1)
+      outputMerger.connect(this.audioCtx.destination)
 
       const chain: RxEffectChain = {
         channelId,
@@ -629,12 +720,21 @@ export class RadioClient {
         element,
         source,
         highPass,
+        bandPass,
         presence,
         lowPass,
+        compressor: rxCompressor,
         drive,
         dryGain,
         wetGain,
+        noiseSource,
+        noiseFilter,
+        noiseGain,
         outputGain,
+        outputSplitter,
+        outputLeftGain,
+        outputRightGain,
+        outputMerger,
       }
       this.rxChains.set(key, chain)
       this.rxTrackToKey.set(track, key)
@@ -648,14 +748,24 @@ export class RadioClient {
     const chain = this.rxChains.get(key)
     if (!chain) return
 
+    try { chain.noiseSource.stop() } catch {}
     try { chain.source.disconnect() } catch {}
     try { chain.highPass.disconnect() } catch {}
+    try { chain.bandPass.disconnect() } catch {}
     try { chain.presence.disconnect() } catch {}
     try { chain.lowPass.disconnect() } catch {}
+    try { chain.compressor.disconnect() } catch {}
     try { chain.drive.disconnect() } catch {}
     try { chain.dryGain.disconnect() } catch {}
     try { chain.wetGain.disconnect() } catch {}
+    try { chain.noiseSource.disconnect() } catch {}
+    try { chain.noiseFilter.disconnect() } catch {}
+    try { chain.noiseGain.disconnect() } catch {}
     try { chain.outputGain.disconnect() } catch {}
+    try { chain.outputSplitter.disconnect() } catch {}
+    try { chain.outputLeftGain.disconnect() } catch {}
+    try { chain.outputRightGain.disconnect() } catch {}
+    try { chain.outputMerger.disconnect() } catch {}
     try { chain.track.detach(chain.element) } catch {}
     try { chain.element.remove() } catch {}
 

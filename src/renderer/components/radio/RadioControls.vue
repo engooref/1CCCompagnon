@@ -15,6 +15,31 @@ const transmittingChannel = computed(() => radio.transmittingChannel)
 const transmittingChannelName = computed(() =>
   radio.channels.find(c => c.id === transmittingChannel.value)?.name ?? transmittingChannel.value ?? ''
 )
+
+const radioPan = computed(() => {
+  const value = Number((radio.settings as any).radioPan ?? 0)
+  if (!Number.isFinite(value)) return 0
+  return Math.max(-1, Math.min(1, value))
+})
+const radioPanLabel = computed(() => {
+  const value = radioPan.value
+  if (Math.abs(value) < 0.01) return 'Centre'
+  return value < 0 ? `Gauche ${Math.round(Math.abs(value) * 100)}%` : `Droite ${Math.round(value * 100)}%`
+})
+
+function setRadioPanFromInput(event: Event) {
+  const value = parseFloat((event.target as HTMLInputElement).value)
+  const api = radio as any
+  if (typeof api.setRadioPan === 'function') api.setRadioPan(value)
+  else if (typeof api.setPan === 'function') api.setPan(value)
+}
+
+function resetRadioPan(event?: MouseEvent) {
+  event?.preventDefault()
+  const api = radio as any
+  if (typeof api.setRadioPan === 'function') api.setRadioPan(0)
+  else if (typeof api.setPan === 'function') api.setPan(0)
+}
 </script>
 
 <template>
@@ -112,7 +137,7 @@ const transmittingChannelName = computed(() =>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M9 19V6l12-2v13M9 19a2 2 0 11-4 0 2 2 0 014 0zm12-2a2 2 0 11-4 0 2 2 0 014 0z"/>
           </svg>
-          Effet radio
+          Effet radio reçu
         </span>
         <span class="text-[10px] opacity-70">{{ radio.settings.radioEffectEnabled ? 'Actif' : 'Inactif' }}</span>
       </button>
@@ -134,7 +159,7 @@ const transmittingChannelName = computed(() =>
             background: `linear-gradient(to right, rgb(var(--accent-rgb)) ${radio.settings.radioEffectIntensity * 100}%, rgb(30,41,59) 0%)`
           }"
         />
-        <p class="text-[10px] text-th-muted/60">Applique un rendu talkie-walkie sur émission et réception.</p>
+        <p class="text-[10px] text-th-muted/60">Applique un rendu talkie-walkie uniquement sur les voix reçues.</p>
       </div>
     </div>
 
@@ -198,6 +223,30 @@ const transmittingChannelName = computed(() =>
           background: `linear-gradient(to right, rgb(var(--accent-rgb)) ${radio.settings.radioVolume * 100}%, rgb(30,41,59) 0%)`
         }"
       />
+    </div>
+
+    <!-- Balance radio -->
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between">
+        <p class="text-[10px] text-th-muted uppercase tracking-wider">Balance réception</p>
+        <span class="text-[10px] tabular-nums text-th-secondary">{{ radioPanLabel }}</span>
+      </div>
+      <div class="grid grid-cols-[2.5rem_1fr_2.5rem] items-center gap-2">
+        <span class="text-[10px] text-th-muted">G</span>
+        <input
+          type="range"
+          min="-1" max="1" step="0.01"
+          :value="radioPan"
+          @input="setRadioPanFromInput"
+          @contextmenu.prevent.stop="resetRadioPan"
+          class="w-full h-1.5 rounded-full cursor-pointer appearance-none"
+          :style="{
+            background: `linear-gradient(to right, rgb(30,41,59) 0%, rgb(var(--accent-rgb)) ${(radioPan + 1) * 50}%, rgb(30,41,59) 0%)`
+          }"
+        />
+        <span class="text-right text-[10px] text-th-muted">D</span>
+      </div>
+      <p class="text-[10px] text-th-muted/60">Déplace les voix radio reçues. À 100%, une seule oreillette joue.</p>
     </div>
 
     <!-- Périphériques audio -->

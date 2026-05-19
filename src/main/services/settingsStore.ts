@@ -119,6 +119,11 @@ const defaults: AppSettings = {
   radioVolume:     1.0,
   radioEffectEnabled: true,
   radioEffectIntensity: 0.6,
+  radioPan: 0,
+  radioSelectedInputId: null,
+  radioSelectedOutputId: null,
+  radioInputGain: 1.0,
+  radioGateThreshold: 0,
   radioPttBindings: [],
 }
 

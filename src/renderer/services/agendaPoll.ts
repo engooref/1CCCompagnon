@@ -47,12 +47,11 @@ export function startAgendaPoll(app: any, intervalMs = 5 * 60 * 1000) {
           if (_notified.has(id)) continue
 
           // send notification
+          if (!ev.accepted) continue; // Vérifie si l'événement est accepté avant d'envoyer la notification
           try {
             const title = `⏰ Événement dans ${thresholdMin} min`
             const body = ev.name || 'Événement'
-            if (window.oneCC?.showNotification) {
-              void window.oneCC.showNotification(title, body)
-            }
+            void window.oneCC.showNotification(title, body)
             _notified.set(id, Date.now())
             logger.info('[AgendaPoll] notification envoyée pour', id)
           } catch (e: any) {

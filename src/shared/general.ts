@@ -152,6 +152,11 @@ export interface AppSettings {
   radioVolume?: number
   radioEffectEnabled?: boolean
   radioEffectIntensity?: number
+  radioPan?: number
+  radioSelectedInputId?: string | null
+  radioSelectedOutputId?: string | null
+  radioInputGain?: number
+  radioGateThreshold?: number
   /** Associations canal → touche PTT (multi-canal murmure) */
   radioPttBindings?: Array<{ channelId: string; keyCode: number | null; key: string }>
 }

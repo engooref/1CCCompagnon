@@ -87,11 +87,26 @@ export interface RadioSettings {
   radioEffectEnabled: boolean
   /** Intensité du rendu radio 0.0 – 1.0 */
   radioEffectIntensity: number
+  /** Balance audio entrante -1.0 (gauche) → 0 (centre) → 1.0 (droite) */
+  radioPan?: number
+  /** Micro sélectionné pour la radio */
+  radioSelectedInputId?: string | null
+  /** Sortie audio sélectionnée pour la radio */
+  radioSelectedOutputId?: string | null
+  /** Gain d'entrée micro */
+  radioInputGain?: number
+  /** Seuil du noise gate */
+  radioGateThreshold?: number
 }
 
 export const DEFAULT_RADIO_SETTINGS: RadioSettings = {
   pttBindings: [],
   radioVolume: 1.0,
   radioEffectEnabled: true,
-  radioEffectIntensity: 0.6,
+  radioEffectIntensity: 0.85,
+  radioPan: 0,
+  radioSelectedInputId: null,
+  radioSelectedOutputId: null,
+  radioInputGain: 1.0,
+  radioGateThreshold: 0,
 }

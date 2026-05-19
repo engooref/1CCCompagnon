@@ -16,6 +16,11 @@ export function registerRadioIpc() {
       radioVolume: settings.radioVolume       ?? DEFAULT_RADIO_SETTINGS.radioVolume,
       radioEffectEnabled: settings.radioEffectEnabled ?? DEFAULT_RADIO_SETTINGS.radioEffectEnabled,
       radioEffectIntensity: settings.radioEffectIntensity ?? DEFAULT_RADIO_SETTINGS.radioEffectIntensity,
+      radioPan: settings.radioPan ?? DEFAULT_RADIO_SETTINGS.radioPan,
+      radioSelectedInputId: settings.radioSelectedInputId ?? DEFAULT_RADIO_SETTINGS.radioSelectedInputId,
+      radioSelectedOutputId: settings.radioSelectedOutputId ?? DEFAULT_RADIO_SETTINGS.radioSelectedOutputId,
+      radioInputGain: settings.radioInputGain ?? DEFAULT_RADIO_SETTINGS.radioInputGain,
+      radioGateThreshold: settings.radioGateThreshold ?? DEFAULT_RADIO_SETTINGS.radioGateThreshold,
     }
   })
 
@@ -26,6 +31,11 @@ export function registerRadioIpc() {
       ...(partial.radioVolume !== undefined && { radioVolume:      partial.radioVolume }),
       ...(partial.radioEffectEnabled !== undefined && { radioEffectEnabled: partial.radioEffectEnabled }),
       ...(partial.radioEffectIntensity !== undefined && { radioEffectIntensity: partial.radioEffectIntensity }),
+      ...(partial.radioPan !== undefined && { radioPan: partial.radioPan }),
+      ...(partial.radioSelectedInputId !== undefined && { radioSelectedInputId: partial.radioSelectedInputId }),
+      ...(partial.radioSelectedOutputId !== undefined && { radioSelectedOutputId: partial.radioSelectedOutputId }),
+      ...(partial.radioInputGain !== undefined && { radioInputGain: partial.radioInputGain }),
+      ...(partial.radioGateThreshold !== undefined && { radioGateThreshold: partial.radioGateThreshold }),
     })
 
     if (partial.pttBindings !== undefined) {
