@@ -12,6 +12,7 @@ export const changelog: ChangelogEntry[] = [
     date: '2026-05-19',
     changes: [
       { type: 'feature', text: 'Ajout d\'un système de minimap sur l\'overlay' },
+      { type: 'feature', text: 'Ajout d\'un effet radio sur la radio activable ou désactivable + ajout d\'un balance pour les communications' },
       { type: 'improvement', text: 'Ajout d\'un bouton dans le transport pour valider l\'étape sur l\'overlay' },
       { type: 'fix', text: 'Correction des bugs présents sur le module de minage' },
     ]
