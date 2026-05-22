@@ -97,6 +97,7 @@ const defaults: AppSettings = {
         ships:   '/mining/api/loadout/ships',
         lasers:  '/mining/api/loadout/lasers',
         modules: '/mining/api/loadout/modules',
+        scraperModules: '/mining/api/loadout/scraper-modules',
       },
       loadouts: '/mining/api/loadouts',
     },

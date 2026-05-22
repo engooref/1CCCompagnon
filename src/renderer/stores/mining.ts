@@ -294,6 +294,7 @@ export const useMiningStore = defineStore('mining', {
       ships:          [] as MiningShip[],
       lasers:         [] as MiningLaser[],
       modules:        [] as MiningModule[],
+      scraperModules: [] as MiningModule[],
       catalogLoaded:  false,
       savedList:      [] as MiningLoadout[],
       savedLoaded:    false,
@@ -1751,10 +1752,11 @@ export const useMiningStore = defineStore('mining', {
       this.loadout.loadingCatalog = true
       this.loadout.error = null
       try {
-        const { ships, lasers, modules } = await svcFetchLoadoutCatalog()
+        const { ships, lasers, modules, scraperModules } = await svcFetchLoadoutCatalog()
         this.loadout.ships   = ships
         this.loadout.lasers  = lasers
         this.loadout.modules = modules
+        this.loadout.scraperModules = scraperModules
         this.loadout.catalogLoaded = true
       } catch (err) {
         logger.error('[mining] loadLoadoutCatalog failed', err)

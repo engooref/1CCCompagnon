@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { http } from '../services/http'
 import { createOverlayUrls } from '../config/api'
@@ -10,12 +10,207 @@ import { usePinnedTransport } from '../composables/usePinnedTransport'
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const app    = useAppStore()
+const route = useRoute()
 const router = useRouter()
 const { isPinned, toggle: togglePin } = usePinnedTransport()
 
 const orders     = computed(() => app.transports)
 const loading    = computed(() => app.transportsLoading)
 const deletingId = ref<number | null>(null)
+
+// ─── Guide interactif liste work orders ─────────────────────────────────────
+
+interface GuideStep {
+  id: string
+  selector: string
+  title: string
+  text: string
+}
+
+interface GuideRect {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
+interface GuideTooltipPos {
+  top: number
+  left: number
+}
+
+const showGuide = ref(false)
+const guideIndex = ref(0)
+const guideRect = ref<GuideRect | null>(null)
+const guideTooltipPos = ref<GuideTooltipPos>({ top: 24, left: 24 })
+const guideSteps = ref<GuideStep[]>([])
+const guideRaf = ref<number | null>(null)
+
+const guideCatalog: GuideStep[] = [
+  {
+    id: 'header',
+    selector: '[data-guide="transport-header"]',
+    title: 'Module work orders',
+    text: 'Ici tu geres la liste complete de tes work orders de transport.',
+  },
+  {
+    id: 'refresh',
+    selector: '[data-guide="refresh"]',
+    title: 'Actualiser la liste',
+    text: 'Ce bouton recharge les work orders depuis le serveur.',
+  },
+  {
+    id: 'new-order',
+    selector: '[data-guide="new-order"]',
+    title: 'Ajouter un work order',
+    text: 'Clique ici pour ouvrir le formulaire de creation d\'un nouveau work order.',
+  },
+  {
+    id: 'list',
+    selector: '[data-guide="workorder-list"]',
+    title: 'Liste des work orders',
+    text: 'Cette zone affiche tous tes work orders. Clique sur une ligne pour ouvrir son detail.',
+  },
+  {
+    id: 'card',
+    selector: '[data-guide="workorder-card"]',
+    title: 'Une ligne work order',
+    text: 'Chaque ligne montre le nom, le statut, les etapes et la progression.',
+  },
+  {
+    id: 'actions',
+    selector: '[data-guide="workorder-actions"]',
+    title: 'Actions rapides',
+    text: 'Tu peux epingler, modifier ou supprimer un work order directement depuis ici.',
+  },
+]
+
+const activeGuideStep = computed(() => guideSteps.value[guideIndex.value] ?? null)
+
+function refreshGuideRect() {
+  const step = activeGuideStep.value
+  if (!showGuide.value || !step) {
+    guideRect.value = null
+    return
+  }
+
+  const node = document.querySelector(step.selector) as HTMLElement | null
+  if (!node) {
+    guideRect.value = null
+    return
+  }
+
+  node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  window.setTimeout(() => {
+    const rect = node.getBoundingClientRect()
+    const pad = 8
+    const spotlight = {
+      top: Math.max(8, rect.top - pad),
+      left: Math.max(8, rect.left - pad),
+      width: rect.width + pad * 2,
+      height: rect.height + pad * 2,
+    }
+    guideRect.value = spotlight
+
+    const tooltipWidth = 360
+    const margin = 16
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const preferBottom = spotlight.top + spotlight.height + 16 + 220 < viewportHeight
+    const top = preferBottom
+      ? Math.min(viewportHeight - 230, spotlight.top + spotlight.height + 12)
+      : Math.max(16, spotlight.top - 220 - 12)
+    const left = Math.max(
+      margin,
+      Math.min(
+        spotlight.left,
+        viewportWidth - tooltipWidth - margin,
+      ),
+    )
+    guideTooltipPos.value = { top, left }
+  }, 120)
+}
+
+function scheduleGuideRectRefresh() {
+  if (!showGuide.value) return
+  if (guideRaf.value != null) cancelAnimationFrame(guideRaf.value)
+  guideRaf.value = requestAnimationFrame(() => {
+    refreshGuideRect()
+  })
+}
+
+function startGuideList() {
+  nextTick(() => {
+    guideSteps.value = guideCatalog.filter((s) => Boolean(document.querySelector(s.selector)))
+    if (!guideSteps.value.length) return
+    guideIndex.value = 0
+    showGuide.value = true
+    refreshGuideRect()
+  })
+}
+
+function stopGuide() {
+  showGuide.value = false
+  guideRect.value = null
+}
+
+function guidePrev() {
+  if (!guideSteps.value.length) return
+  guideIndex.value = Math.max(0, guideIndex.value - 1)
+  refreshGuideRect()
+}
+
+function guideNext() {
+  if (!guideSteps.value.length) return
+  if (guideIndex.value >= guideSteps.value.length - 1) {
+    stopGuide()
+    return
+  }
+  guideIndex.value += 1
+  refreshGuideRect()
+}
+
+function handleGuideKeydown(event: KeyboardEvent) {
+  if (!showGuide.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    stopGuide()
+    return
+  }
+  if (event.key === 'ArrowRight' || event.key === 'Enter') {
+    event.preventDefault()
+    guideNext()
+    return
+  }
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    guidePrev()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', scheduleGuideRectRefresh)
+  window.addEventListener('keydown', handleGuideKeydown)
+  if (route.hash === '#guide-list') startGuideList()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', scheduleGuideRectRefresh)
+  window.removeEventListener('keydown', handleGuideKeydown)
+  if (guideRaf.value != null) cancelAnimationFrame(guideRaf.value)
+})
+
+watch(() => route.hash, (hash) => {
+  if (hash === '#guide-list') startGuideList()
+})
+
+watch(() => guideIndex.value, () => {
+  scheduleGuideRectRefresh()
+})
+
+watch(() => orders.value.length, () => {
+  if (showGuide.value) scheduleGuideRectRefresh()
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +257,7 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
     <template v-else>
 
       <!-- ── Header bar ─────────────────────────────────────────────────── -->
-      <div class="shrink-0 flex items-center justify-between gap-3">
+      <div data-guide="transport-header" class="shrink-0 flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <div class="h-7 w-7 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
             <svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -77,6 +272,7 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
         </div>
 
         <button
+          data-guide="refresh"
           @click="app.fetchTransports()"
           :disabled="loading"
           class="flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent/70 hover:bg-accent/10 hover:text-accent transition disabled:opacity-40"
@@ -89,6 +285,7 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
         </button>
 
         <button
+          data-guide="new-order"
           @click="router.push({ name: 'transport-new' })"
           class="flex items-center gap-1.5 rounded-md border border-emerald-400/25 bg-emerald-400/8 px-2.5 py-1 text-xs font-medium text-emerald-300/80 hover:bg-emerald-400/12 hover:text-emerald-200 transition"
         >
@@ -97,10 +294,21 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
           </svg>
           Nouvel ordre
         </button>
+
+        <button
+          @click="startGuideList"
+          class="flex items-center gap-1.5 rounded-md border border-accent/25 bg-accent/8 px-2.5 py-1 text-xs font-medium text-accent/80 hover:bg-accent/15 hover:text-accent transition"
+          title="Guide de la liste des work orders"
+        >
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.55-1.165 1.83-2 3.272-2 1.934 0 3.5 1.343 3.5 3 0 1.236-.87 2.298-2.104 2.762-.67.252-1.146.85-1.146 1.567V15M12 18h.01"/>
+          </svg>
+          Guide liste
+        </button>
       </div>
 
       <!-- ── Scrollable content ────────────────────────────────────────── -->
-      <div class="flex-1 min-h-0 overflow-y-auto">
+      <div @scroll.passive="scheduleGuideRectRefresh" class="flex-1 min-h-0 overflow-y-auto">
 
       <!-- ── Loading / Error / Empty ────────────────────────────────────── -->
       <div v-if="loading && !orders.length" class="rounded-lg border border-accent/10 bg-black/20 p-4 text-sm text-th-muted">
@@ -115,10 +323,11 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
       </div>
 
       <!-- ── Orders list ────────────────────────────────────────────────── -->
-      <div v-else class="space-y-2">
+      <div v-else data-guide="workorder-list" class="space-y-2">
         <div
           v-for="order in orders"
           :key="order.id"
+          :data-guide="order.id === orders[0]?.id ? 'workorder-card' : undefined"
           class="group rounded-lg border border-accent/20 bg-black/20 p-4 cursor-pointer hover:border-accent/40 hover:bg-black/30 transition-colors"
           @click="router.push({ name: 'transport-detail', params: { id: order.id } })"
         >
@@ -170,7 +379,7 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
             </div>
 
             <!-- Pin + Edit + Delete + Chevron -->
-            <div class="shrink-0 flex items-center gap-1 mt-0.5" @click.stop>
+            <div :data-guide="order.id === orders[0]?.id ? 'workorder-actions' : undefined" class="shrink-0 flex items-center gap-1 mt-0.5" @click.stop>
               <button
                 @click="togglePin(order.id)"
                 class="rounded border p-1 transition"
@@ -218,6 +427,64 @@ async function deleteOrder(order: TransportOrder, e: MouseEvent) {
       </div>
 
       </div><!-- end scrollable -->
+
+      <div v-if="showGuide" class="fixed inset-0 z-[70]">
+        <div class="absolute inset-0 bg-black/55" />
+
+        <div
+          v-if="guideRect"
+          class="absolute rounded-xl border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] pointer-events-none"
+          :style="{
+            top: `${guideRect.top}px`,
+            left: `${guideRect.left}px`,
+            width: `${guideRect.width}px`,
+            height: `${guideRect.height}px`,
+          }"
+        />
+
+        <div
+          class="absolute w-[360px] rounded-xl border border-accent/30 bg-th-base/95 backdrop-blur-sm shadow-2xl p-4 space-y-3"
+          :style="{
+            top: `${guideTooltipPos.top}px`,
+            left: `${guideTooltipPos.left}px`,
+          }"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[11px] font-bold uppercase tracking-widest text-th-secondary">Guide work orders</p>
+            <button @click="stopGuide" class="text-th-muted hover:text-th-secondary transition text-xs">Fermer</button>
+          </div>
+
+          <div v-if="activeGuideStep">
+            <p class="text-sm font-semibold text-th-primary">{{ activeGuideStep.title }}</p>
+            <p class="text-xs text-th-secondary mt-1 leading-relaxed">{{ activeGuideStep.text }}</p>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[11px] text-th-muted">
+              Etape {{ Math.min(guideIndex + 1, guideSteps.length) }} / {{ guideSteps.length }}
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                @click="guidePrev"
+                :disabled="guideIndex === 0"
+                class="rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-[11px] font-semibold text-th-secondary hover:text-th-primary transition disabled:opacity-40"
+              >
+                Precedent
+              </button>
+              <button
+                @click="guideNext"
+                class="rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/20 transition"
+              >
+                {{ guideIndex >= guideSteps.length - 1 ? 'Terminer' : 'Suivant' }}
+              </button>
+            </div>
+          </div>
+
+          <p class="text-[10px] text-th-muted">
+            Raccourcis: <span class="font-semibold">←</span> precedent, <span class="font-semibold">→</span> suivant, <span class="font-semibold">Echap</span> fermer
+          </p>
+        </div>
+      </div>
 
     </template>
   </section>

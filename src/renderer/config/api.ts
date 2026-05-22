@@ -90,6 +90,7 @@ export function createOverlayUrls(settings: AppSettings) {
       loadoutShips:  url(base, o, 'mining', 'loadout', 'ships'),
       loadoutLasers: url(base, o, 'mining', 'loadout', 'lasers'),
       loadoutModules:url(base, o, 'mining', 'loadout', 'modules'),
+      loadoutScraperModules: url(base, o, 'mining', 'loadout', 'scraperModules'),
       loadouts:      url(base, o, 'mining', 'loadouts'),
     },
   }

@@ -287,18 +287,32 @@ export async function fetchLoadoutCatalog() {
   const headers = _headers()
   const base = _base()
   const urls = _urls()
-  const shipsUrl   = urls?.mining?.loadoutShips   ?? `${base}/mining/api/loadout/ships`
-  const lasersUrl  = urls?.mining?.loadoutLasers  ?? `${base}/mining/api/loadout/lasers`
-  const modulesUrl = urls?.mining?.loadoutModules ?? `${base}/mining/api/loadout/modules`
-  const [sRes, lRes, mRes] = await Promise.all([
+  const shipsUrl   = urls?.mining?.loadoutShips   || `${base}/mining/api/loadout/ships`
+  const lasersUrl  = urls?.mining?.loadoutLasers  || `${base}/mining/api/loadout/lasers`
+  const modulesUrl = urls?.mining?.loadoutModules || `${base}/mining/api/loadout/modules`
+  const scraperModulesUrl = urls?.mining?.loadoutScraperModules || `${base}/loadout/scraper-modules`
+  const [sRes, lRes, mRes, smRes] = await Promise.allSettled([
     http.get(shipsUrl,   { headers }),
     http.get(lasersUrl,  { headers }),
     http.get(modulesUrl, { headers }),
+    http.get(scraperModulesUrl, { headers }),
   ])
-  const ships   = Array.isArray(sRes.data) ? sRes.data : (sRes.data?.data ?? [])
-  const lasers  = Array.isArray(lRes.data) ? lRes.data : (lRes.data?.data ?? [])
-  const modules = Array.isArray(mRes.data) ? mRes.data : (mRes.data?.data ?? [])
-  return { ships, lasers, modules }
+
+  const unwrap = (res: PromiseSettledResult<any>) => {
+    if (res.status !== 'fulfilled') return []
+    const data = res.value?.data
+    return Array.isArray(data) ? data : (data?.data ?? [])
+  }
+
+  if (sRes.status !== 'fulfilled') throw sRes.reason
+  if (lRes.status !== 'fulfilled') throw lRes.reason
+  if (mRes.status !== 'fulfilled') throw mRes.reason
+
+  const ships = unwrap(sRes)
+  const lasers = unwrap(lRes)
+  const modules = unwrap(mRes)
+  const scraperModules = unwrap(smRes)
+  return { ships, lasers, modules, scraperModules }
 }
 
 export async function fetchUserLoadouts(): Promise<MiningLoadout[]> {

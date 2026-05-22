@@ -104,30 +104,172 @@ const laserQuery  = ref<string[]>([])
 const laserOpen   = ref<boolean[]>([])
 const moduleQuery = ref<string[][]>([])
 const moduleOpen  = ref<Record<number, boolean>[]>([])
+const moduleSearch = ref<string[][]>([])
+const moduleActive = ref<Record<number, number>>([])
 
 // ── Ship filtering ────────────────────────────────────────────────────────────
 
 const filteredShips = computed(() => mining.loadout.ships)
 
+const SALVAGE_SLOT_COUNT = 2
+
+function normalizeText(v: unknown): string {
+  return String(v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function toNumberOrNull(v: unknown): number | null {
+  if (v == null || v === '') return null
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  const cleaned = String(v).trim().replace(',', '.').replace(/[^0-9.+-]/g, '')
+  if (!cleaned) return null
+  const n = Number(cleaned)
+  return Number.isNaN(n) ? null : n
+}
+
+function normalizeStatKey(key: string): string {
+  return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function findStatValue(source: any, aliases: string[], depth = 0): unknown {
+  if (source == null || depth > 4) return null
+  const wanted = aliases.map((k) => normalizeStatKey(k))
+
+  if (Array.isArray(source)) {
+    for (const entry of source) {
+      const found = findStatValue(entry, aliases, depth + 1)
+      if (found != null && found !== '') return found
+    }
+    return null
+  }
+
+  if (typeof source !== 'object') return null
+
+  for (const key of Object.keys(source)) {
+    if (wanted.includes(normalizeStatKey(key))) {
+      const val = source[key]
+      if (val != null && val !== '') return val
+    }
+  }
+
+  for (const key of Object.keys(source)) {
+    const nested = source[key]
+    if (nested && typeof nested === 'object') {
+      const found = findStatValue(nested, aliases, depth + 1)
+      if (found != null && found !== '') return found
+    }
+  }
+
+  return null
+}
+
+function formatSalvageMetric(value: number | null, unit = '', percent = false): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  const shown = percent && Math.abs(value) <= 1 ? value * 100 : value
+  return `${shown.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}${percent ? ' %' : (unit ? ` ${unit}` : '')}`
+}
+
+function getSelectedShipSalvageBuff(): Record<string, unknown> {
+  return ((selectedShip.value as any)?.salvageBuff ?? {}) as Record<string, unknown>
+}
+
+function salvageModuleFinalStats(module: MiningModule | null) {
+  const source = module as any
+  const buff = getSelectedShipSalvageBuff()
+
+  const moduleRadius = toNumberOrNull(findStatValue(source, ['radius', 'radiusMultiplier', 'extractionRadius', 'extractionArea', 'areaOfEffect', 'aoe', 'salvageRadius', 'salvageRadiusMultiplier', 'salvageArea', 'scrapeRadius', 'scraperRadius', 'beamRadius']))
+  const moduleSpeed = toNumberOrNull(findStatValue(source, ['extractionSpeed', 'extractionSpeedMultiplier', 'extractionRate', 'extractionRateMultiplier', 'speed', 'speedMultiplier', 'salvageSpeed', 'salvageSpeedMultiplier', 'scrapeSpeed', 'scraperSpeed']))
+  const moduleEfficiency = toNumberOrNull(findStatValue(source, ['extractionEfficiency', 'extractionEfficiencyMultiplier', 'efficiency', 'efficiencyMultiplier', 'salvageEfficiency', 'salvageEfficiencyMultiplier', 'scrapeEfficiency', 'scraperEfficiency']))
+
+  const shipRadiusMul = toNumberOrNull((buff as any).radiusMultiplier) ?? 1
+  const shipSpeedMul = toNumberOrNull((buff as any).salvageSpeedMultiplier) ?? 1
+  const shipEfficiencyMul = toNumberOrNull((buff as any).extractionEfficiency) ?? 1
+
+  const radius = moduleRadius != null ? moduleRadius * shipRadiusMul : null
+  const speed = moduleSpeed != null ? moduleSpeed * shipSpeedMul : null
+  const efficiency = moduleEfficiency != null ? moduleEfficiency * shipEfficiencyMul : null
+
+  return {
+    radius,
+    speed,
+    efficiency,
+    radiusDisplay: formatSalvageMetric(radius, 'm'),
+    speedDisplay: formatSalvageMetric(speed),
+    efficiencyDisplay: formatSalvageMetric(efficiency, '', true),
+  }
+}
+
+function isSalvageShip(ship: MiningShip | null | undefined): boolean {
+  if (!ship) return false
+  if ((ship as any).isSalvage === true) return true
+  const raw = [
+    (ship as any).role,
+    (ship as any).type,
+    (ship as any).category,
+    (ship as any).kind,
+    (ship as any).duty,
+    (ship as any).gameplay,
+    (ship as any).allowedDuties,
+    (ship as any).tags,
+  ].map((v) => normalizeText(v)).join(' ')
+  return raw.includes('salvage')
+}
+
+function isSalvageLoadout(lo: MiningLoadout): boolean {
+  if ((lo as any).isSalvage === true) return true
+  if ((lo as any).isMining === true) return false
+  const ship = mining.loadout.ships.find((s) => s.id === lo.shipId)
+  if (ship) return isSalvageShip(ship)
+  const raw = [
+    (lo as any).shipRole,
+    (lo as any).shipType,
+    (lo as any).shipCategory,
+    (lo as any).role,
+    (lo as any).type,
+    (lo as any).category,
+    (lo as any).gameplay,
+    (lo as any).allowedDuties,
+  ].map((v) => normalizeText(v)).join(' ')
+  return raw.includes('salvage')
+}
+
+function resolveModuleRef(ref: unknown, salvage = false): MiningModule | null {
+  if (ref == null) return null
+  const catalog = salvage
+    ? mining.loadout.scraperModules
+    : mining.loadout.modules
+  const id = typeof ref === 'number'
+    ? ref
+    : Number((ref as any)?.id ?? (ref as any)?.moduleId ?? (ref as any)?.componentId)
+  if (Number.isFinite(id)) {
+    const byId = catalog.find((m) => Number(m.id) === Number(id))
+    if (byId) return byId
+  }
+  const name = normalizeText((ref as any)?.name ?? (ref as any)?.moduleName ?? (ref as any)?.componentName ?? (ref as any)?.shortName)
+  if (!name) return null
+  return catalog.find((m) => normalizeText(m.name ?? m.shortName) === name) ?? null
+}
+
 const selectedShip = computed(() =>
   mining.loadout.ships.find((s) => s.id === selectedShipId.value) ?? null,
 )
+
+const selectedShipIsSalvage = computed(() => isSalvageShip(selectedShip.value))
 
 function quickShips(tokens: string[]): MiningShip[] {
   const seen = new Set<number>()
   const out: MiningShip[] = []
   const ships = mining.loadout.ships || []
-  const normalize = (v: string) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
   for (const token of tokens) {
-    const t = normalize(token)
+    const t = normalizeText(token)
     if (!t) continue
-    const match = ships.find((s) => normalize((s.name ?? '') + ' ' + (s.nameFull ?? '')).includes(t))
+    const match = ships.find((s) => normalizeText((s.name ?? '') + ' ' + (s.nameFull ?? '')).includes(t))
     if (match && !seen.has(match.id)) { seen.add(match.id); out.push(match) }
   }
   return out
 }
 const airShips    = computed(() => quickShips(['mole', 'prospector', 'golem']))
 const groundShips = computed(() => quickShips(['roc ds', 'roc']))
+const salvageShips = computed(() => quickShips(['reclaimer', 'vulture', 'fortune', 'moth', 'salvation']))
 
 // ── Ship selection ────────────────────────────────────────────────────────────
 
@@ -136,27 +278,115 @@ function syncDropdownArrays() {
   laserOpen.value   = turrets.value.map(() => false)
   moduleQuery.value = turrets.value.map((t) => t.modules.map((m) => m?.name ?? ''))
   moduleOpen.value  = turrets.value.map(() => ({}))
+  moduleSearch.value = turrets.value.map(() => [])
+  moduleActive.value = turrets.value.map(() => ({}))
+}
+
+function ensureModuleSlotState(ti: number, mi: number) {
+  if (!moduleOpen.value[ti]) moduleOpen.value[ti] = {}
+  if (!moduleSearch.value[ti]) moduleSearch.value[ti] = []
+  if (!moduleActive.value[ti]) moduleActive.value[ti] = {}
+  if (moduleSearch.value[ti][mi] == null) moduleSearch.value[ti][mi] = ''
+  if (moduleActive.value[ti][mi] == null) moduleActive.value[ti][mi] = -1
+}
+
+function clampListIndex(index: number, length: number): number {
+  if (length <= 0) return -1
+  if (index < 0) return 0
+  if (index >= length) return length - 1
+  return index
+}
+
+function openModuleDropdown(ti: number, mi: number) {
+  ensureModuleSlotState(ti, mi)
+  moduleOpen.value[ti] = { ...(moduleOpen.value[ti] ?? {}), [mi]: true }
+  moduleSearch.value[ti][mi] = ''
+  const len = filteredModules(ti, mi).length
+  moduleActive.value[ti][mi] = len > 0 ? 0 : -1
+}
+
+function closeModuleDropdown(ti: number, mi: number) {
+  ensureModuleSlotState(ti, mi)
+  moduleOpen.value[ti] = { ...(moduleOpen.value[ti] ?? {}), [mi]: false }
+}
+
+function moveModuleActive(ti: number, mi: number, offset: number) {
+  ensureModuleSlotState(ti, mi)
+  const len = filteredModules(ti, mi).length
+  if (!len) {
+    moduleActive.value[ti][mi] = -1
+    return
+  }
+  const current = Number(moduleActive.value[ti][mi] ?? -1)
+  const next = current < 0 ? (offset > 0 ? 0 : len - 1) : current + offset
+  moduleActive.value[ti][mi] = clampListIndex(next, len)
+}
+
+function selectActiveModule(ti: number, mi: number) {
+  ensureModuleSlotState(ti, mi)
+  const list = filteredModules(ti, mi)
+  const idx = Number(moduleActive.value[ti][mi] ?? -1)
+  if (idx >= 0 && idx < list.length) {
+    selectModule(ti, mi, list[idx])
+  }
+}
+
+function handleModuleKeydown(e: KeyboardEvent, ti: number, mi: number) {
+  ensureModuleSlotState(ti, mi)
+  const isOpen = !!moduleOpen.value[ti]?.[mi]
+  if (!isOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    e.preventDefault()
+    openModuleDropdown(ti, mi)
+    return
+  }
+  if (!isOpen) return
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    moveModuleActive(ti, mi, 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    moveModuleActive(ti, mi, -1)
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    selectActiveModule(ti, mi)
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    closeModuleDropdown(ti, mi)
+  }
 }
 
 function selectShip(ship: MiningShip) {
   selectedShipId.value = ship.id
   editId.value = null
+  const salvage = isSalvageShip(ship)
 
   turrets.value = (ship.turrets ?? []).map((t) => {
-    const laserRef = t.defaultLaser
+    const laserRef = salvage ? null : t.defaultLaser
     const laser = laserRef
       ? (typeof laserRef === 'number'
           ? mining.loadout.lasers.find((l) => l.id === laserRef) ?? null
-          : mining.loadout.lasers.find((l) => l.id === laserRef?.id) ?? null)
+          : mining.loadout.lasers.find((l) => l.id === (laserRef as any)?.id) ?? null)
       : null
-    const slots = Math.max(0, laser?.moduleSlots ?? 0)
+    const slots = salvage ? SALVAGE_SLOT_COUNT : Math.max(0, laser?.moduleSlots ?? 0)
+    const defaults = salvage
+      ? [
+          ...(Array.isArray((t as any).defaultModules) ? (t as any).defaultModules : []),
+          ...(Array.isArray((t as any).scraperModules) ? (t as any).scraperModules : []),
+          ...(Array.isArray((t as any).defaultScraperModules) ? (t as any).defaultScraperModules : []),
+          ...(Array.isArray((t as any).defaultComponents) ? (t as any).defaultComponents : []),
+        ]
+      : []
+    const baseModules = salvage
+      ? Array.from({ length: slots }, (_, idx) => resolveModuleRef(defaults[idx] ?? null, true))
+      : Array.from({ length: slots }, () => null)
     return {
       portName: t.portName,
       label:    t.label ?? null,
       maxSize:  t.maxSize ?? null,
       minSize:  t.minSize ?? null,
       laser,
-      modules:  Array.from({ length: slots }, () => null),
+      modules:  baseModules,
       _modified: false,
       _saved:    false,
     }
@@ -167,6 +397,7 @@ function selectShip(ship: MiningShip) {
 // ── Laser / module dropdowns ──────────────────────────────────────────────────
 
 function filteredLasers(ti: number): MiningLaser[] {
+  if (selectedShipIsSalvage.value) return []
   const turret = turrets.value[ti]
   const maxSize = turret?.maxSize
   const q = (laserQuery.value[ti] ?? '').toLowerCase().trim()
@@ -182,16 +413,20 @@ function filteredLasers(ti: number): MiningLaser[] {
 function filteredModules(ti: number, mi: number): MiningModule[] {
   const laser = turrets.value[ti]?.laser
   const laserSize = Number(laser?.size ?? 0)
-  const q = (moduleQuery.value[ti]?.[mi] ?? '').toLowerCase().trim()
-  return mining.loadout.modules.filter((m) => {
+  const q = (moduleSearch.value[ti]?.[mi] ?? '').toLowerCase().trim()
+  const catalog = selectedShipIsSalvage.value
+    ? mining.loadout.scraperModules
+    : mining.loadout.modules
+  return catalog.filter((m) => {
     const modSize = Number(m.size ?? 0)
-    if (laserSize > 0 && modSize > 0 && modSize > laserSize) return false
+    if (!selectedShipIsSalvage.value && laserSize > 0 && modSize > 0 && modSize > laserSize) return false
     if (q && !(m.name + ' ' + (m.manufacturer ?? '')).toLowerCase().includes(q)) return false
     return true
   })
 }
 
 function selectLaser(ti: number, laser: MiningLaser | null) {
+  if (selectedShipIsSalvage.value) return
   // Prevent changing lasers if the selected ship locks laser editing
   if (selectedShip && selectedShip.value && (selectedShip.value as any).laserEditable === false) return
   const turret = turrets.value[ti]
@@ -215,6 +450,8 @@ function selectModule(ti: number, mi: number, mod: MiningModule | null) {
   turret._saved = false
   if (!moduleQuery.value[ti]) moduleQuery.value[ti] = []
   moduleQuery.value[ti][mi] = mod?.name ?? ''
+  if (!moduleSearch.value[ti]) moduleSearch.value[ti] = []
+  moduleSearch.value[ti][mi] = ''
   moduleOpen.value[ti] = { ...(moduleOpen.value[ti] ?? {}), [mi]: false }
 }
 
@@ -349,6 +586,7 @@ const globalStats = computed(() => {
 // ── Quick stats for saved/public cards ────────────────────────────────────────
 
 interface LoadoutQuickStats {
+  isSalvage?: boolean
   laserCount: number
   moduleCount?: number
   totalModuleSlots?: number
@@ -405,11 +643,64 @@ interface LoadoutQuickStats {
 
   // fallback short rows
   modRows?: Array<{ key: string; label: string; final: number }>
+
+  salvageInstalledCount?: number
+  salvageModuleCount?: number
+  salvageTractorCount?: number
 }
 
 function computeLoadoutQuickStats(lo: MiningLoadout): LoadoutQuickStats {
+  const salvage = isSalvageLoadout(lo)
   const laserSlots  = Array.isArray(lo.slots) ? lo.slots.filter((s) => s.slotType === 'laser').sort((a, b) => Number(a.slotIndex) - Number(b.slotIndex)) : []
-  const moduleSlots = Array.isArray(lo.slots) ? lo.slots.filter((s) => s.slotType === 'module') : []
+  const moduleSlots = Array.isArray(lo.slots) ? lo.slots.filter((s) => s.slotType === 'module' || s.slotType === 'scraperModule') : []
+
+  if (salvage) {
+    const equippedModules = moduleSlots
+      .map((ms) => ms.componentId ? resolveModuleRef({ id: ms.componentId }, true) : null)
+      .filter((m): m is MiningModule => m !== null)
+
+    const allItems = equippedModules as any[]
+    const equipmentPrice = allItems.some((i) => i?.priceBuy != null)
+      ? allItems.filter((i) => i?.priceBuy != null).reduce((a, i) => a + Number(i.priceBuy), 0)
+      : null
+    const equipmentPriceDisplay = equipmentPrice != null ? Math.round(equipmentPrice).toLocaleString('fr-FR') + ' aUEC' : null
+    const priceMissingItems = allItems.length - allItems.filter((i) => i?.priceBuy != null).length
+
+    const tractorCount = equippedModules.filter((m) => {
+      const text = normalizeText([
+        (m as any).name,
+        (m as any).shortName,
+        (m as any).type,
+        (m as any).category,
+        (m as any).kind,
+        (m as any).role,
+        (m as any).gameplay,
+        (m as any).tags,
+      ].join(' '))
+      return text.includes('tractor')
+    }).length
+
+    return {
+      isSalvage: true,
+      laserCount: 0,
+      moduleCount: equippedModules.length,
+      totalModuleSlots: Math.max(SALVAGE_SLOT_COUNT, equippedModules.length),
+      filledModules: equippedModules.length,
+      turretBadges: [],
+      equipmentPrice,
+      equipmentPriceDisplay,
+      totalPrice: equipmentPrice,
+      totalPriceDisplay: equipmentPriceDisplay,
+      priceMissingItems,
+      hasPartialPricing: priceMissingItems > 0,
+      powerMod: 1,
+      powerModFmt: null,
+      minPowerMod: 1,
+      salvageInstalledCount: equippedModules.length,
+      salvageTractorCount: tractorCount,
+      salvageModuleCount: Math.max(0, equippedModules.length - tractorCount),
+    }
+  }
 
   const turretCalcs = laserSlots.map((ls) => {
     const laser = ls.laserId ? mining.loadout.lasers.find((l) => l.id === ls.laserId) ?? null : null
@@ -549,28 +840,312 @@ function computeLoadoutQuickStats(lo: MiningLoadout): LoadoutQuickStats {
 
 // ── Shopping list ─────────────────────────────────────────────────────────────
 
+type ShoppingPriceOption = {
+  terminalId: number
+  terminalName: string
+  priceBuy: number
+}
+
+type ShoppingLine = {
+  key: string
+  type: 'ship' | 'laser' | 'module'
+  label: string
+  size: number | null
+  manufacturer: string | null
+  quantity: number
+  currency: string
+  options: ShoppingPriceOption[]
+  selectedTerminalId: number | null
+  selectedTerminalName: string | null
+  unitPrice: number | null
+  totalPrice: number | null
+}
+
+const shoppingTerminals = ref<Record<string, number | null>>({})
+const shoppingIncludeShip = ref(false)
+const shoppingSortKey = ref<'type' | 'label' | 'quantity' | 'terminal' | 'unitPrice' | 'totalPrice'>('type')
+const shoppingSortDir = ref<'asc' | 'desc'>('asc')
+
+function shoppingSetSort(key: 'type' | 'label' | 'quantity' | 'terminal' | 'unitPrice' | 'totalPrice') {
+  if (shoppingSortKey.value === key) {
+    shoppingSortDir.value = shoppingSortDir.value === 'asc' ? 'desc' : 'asc'
+    return
+  }
+  shoppingSortKey.value = key
+  shoppingSortDir.value = 'asc'
+}
+
+function shoppingSortIndicator(key: 'type' | 'label' | 'quantity' | 'terminal' | 'unitPrice' | 'totalPrice'): string {
+  if (shoppingSortKey.value !== key) return ''
+  return shoppingSortDir.value === 'asc' ? ' ▲' : ' ▼'
+}
+
+function shoppingPriceOptions(item: any): ShoppingPriceOption[] {
+  const explicit = Array.isArray(item?.priceOptions)
+    ? item.priceOptions
+      .map((p: any) => ({
+        terminalId: Number(p?.terminalId),
+        terminalName: String(p?.terminalName ?? '').trim(),
+        priceBuy: Number(p?.priceBuy),
+      }))
+      .filter((p: ShoppingPriceOption) => Number.isFinite(p.terminalId) && !!p.terminalName && Number.isFinite(p.priceBuy))
+    : []
+
+  if (explicit.length) return explicit
+
+  const fallbackPrice = toNumberOrNull(item?.priceBuy)
+  if (fallbackPrice == null) return []
+  return [{ terminalId: 0, terminalName: 'Terminal non defini', priceBuy: fallbackPrice }]
+}
+
+function shoppingSetTerminal(lineKey: string, terminalId: string | number | null) {
+  if (!lineKey) return
+  const n = terminalId == null || terminalId === '' ? null : Number(terminalId)
+  shoppingTerminals.value[lineKey] = Number.isFinite(n as number) ? (n as number) : null
+}
+
+function cheapestOption(options: ShoppingPriceOption[]): ShoppingPriceOption | null {
+  if (!options.length) return null
+  return options.reduce((best, cur) => {
+    if (!best) return cur
+    return cur.priceBuy < best.priceBuy ? cur : best
+  }, null as ShoppingPriceOption | null)
+}
+
 const shoppingLines = computed(() => {
-  const aggregate = new Map<string, any>()
+  const aggregate = new Map<string, {
+    key: string
+    type: 'ship' | 'laser' | 'module'
+    label: string
+    size: number | null
+    manufacturer: string | null
+    quantity: number
+    currency: string
+    source: any
+  }>()
+
   for (const t of turrets.value) {
     if (t.laser) {
       const key = `laser:${t.laser.id}`
       const ex = aggregate.get(key)
       if (ex) ex.quantity++
-      else aggregate.set(key, { key, type: 'laser', label: t.laser.name, size: t.laser.size,
-        manufacturer: t.laser.manufacturer ?? null, quantity: 1, priceBuy: t.laser.priceBuy ?? null })
+      else aggregate.set(key, {
+        key,
+        type: 'laser',
+        label: t.laser.name,
+        size: t.laser.size,
+        manufacturer: t.laser.manufacturer ?? null,
+        quantity: 1,
+        currency: String(t.laser.priceCurrency ?? 'AUEC').toUpperCase(),
+        source: t.laser,
+      })
     }
+
     for (const m of t.modules.filter(Boolean) as MiningModule[]) {
       const key = `module:${m.id}`
       const ex = aggregate.get(key)
       if (ex) ex.quantity++
-      else aggregate.set(key, { key, type: 'module', label: m.name, size: m.size ?? null,
-        manufacturer: m.manufacturer ?? null, quantity: 1, priceBuy: m.priceBuy ?? null })
+      else aggregate.set(key, {
+        key,
+        type: 'module',
+        label: m.name,
+        size: m.size ?? null,
+        manufacturer: m.manufacturer ?? null,
+        quantity: 1,
+        currency: String(m.priceCurrency ?? 'AUEC').toUpperCase(),
+        source: m,
+      })
     }
   }
-  return Array.from(aggregate.values()).sort((a, b) =>
-    ({ laser: 0, module: 1 } as any)[a.type] - ({ laser: 0, module: 1 } as any)[b.type],
-  )
+
+  if (selectedShip.value) {
+    const ship = selectedShip.value as any
+    const key = `ship:${ship.id}`
+    const shipSource = {
+      ...ship,
+      name: ship.nameFull ?? ship.name,
+      priceBuy: ship.price ?? null,
+      priceCurrency: ship.priceCurrency ?? 'AUEC',
+      priceOptions: Array.isArray(ship.priceOptions) ? ship.priceOptions : [],
+    }
+    aggregate.set(key, {
+      key,
+      type: 'ship',
+      label: shipSource.name,
+      size: null,
+      manufacturer: ship.companyName ?? ship.manufacturer ?? null,
+      quantity: 1,
+      currency: String(shipSource.priceCurrency ?? 'AUEC').toUpperCase(),
+      source: shipSource,
+    })
+  }
+
+  const lines: ShoppingLine[] = Array.from(aggregate.values()).map((entry) => {
+    const options = shoppingPriceOptions(entry.source)
+    const preferred = shoppingTerminals.value[entry.key]
+    const selected = options.find((o) => Number(o.terminalId) === Number(preferred)) ?? options[0] ?? null
+
+    return {
+      key: entry.key,
+      type: entry.type,
+      label: entry.label,
+      size: entry.size,
+      manufacturer: entry.manufacturer,
+      quantity: entry.quantity,
+      currency: entry.currency,
+      options,
+      selectedTerminalId: selected?.terminalId ?? null,
+      selectedTerminalName: selected?.terminalName ?? null,
+      unitPrice: selected?.priceBuy ?? null,
+      totalPrice: selected?.priceBuy != null ? selected.priceBuy * entry.quantity : null,
+    }
+  })
+
+  const typeOrder: Record<string, number> = { ship: 0, laser: 1, module: 2 }
+  const sortDir = shoppingSortDir.value === 'desc' ? -1 : 1
+
+  const compare = (va: unknown, vb: unknown) => {
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
+    if (vb == null) return -1
+    if (typeof va === 'number' || typeof vb === 'number') return Number(va) - Number(vb)
+    return String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
+  }
+
+  return lines.sort((a, b) => {
+    const av = (() => {
+      if (shoppingSortKey.value === 'type') return typeOrder[a.type] ?? 99
+      if (shoppingSortKey.value === 'label') return a.label
+      if (shoppingSortKey.value === 'quantity') return Number(a.quantity || 0)
+      if (shoppingSortKey.value === 'terminal') return a.selectedTerminalName || ''
+      if (shoppingSortKey.value === 'unitPrice') return a.unitPrice != null ? Number(a.unitPrice) : Number.MAX_SAFE_INTEGER
+      if (shoppingSortKey.value === 'totalPrice') return a.totalPrice != null ? Number(a.totalPrice) : Number.MAX_SAFE_INTEGER
+      return a.label
+    })()
+
+    const bv = (() => {
+      if (shoppingSortKey.value === 'type') return typeOrder[b.type] ?? 99
+      if (shoppingSortKey.value === 'label') return b.label
+      if (shoppingSortKey.value === 'quantity') return Number(b.quantity || 0)
+      if (shoppingSortKey.value === 'terminal') return b.selectedTerminalName || ''
+      if (shoppingSortKey.value === 'unitPrice') return b.unitPrice != null ? Number(b.unitPrice) : Number.MAX_SAFE_INTEGER
+      if (shoppingSortKey.value === 'totalPrice') return b.totalPrice != null ? Number(b.totalPrice) : Number.MAX_SAFE_INTEGER
+      return b.label
+    })()
+
+    const primary = compare(av, bv)
+    if (primary !== 0) return primary * sortDir
+
+    const t = compare(typeOrder[a.type] ?? 99, typeOrder[b.type] ?? 99)
+    if (t !== 0) return t
+    return compare(a.label, b.label)
+  })
 })
+
+const shoppingVisibleLines = computed(() =>
+  shoppingLines.value.filter((line) => shoppingIncludeShip.value || line.type !== 'ship'),
+)
+
+const shoppingSelectedTerminalCount = computed(() => {
+  const ids = new Set<number>()
+  for (const line of shoppingVisibleLines.value) {
+    const tid = line.selectedTerminalId
+    if (tid != null && tid > 0) ids.add(tid)
+  }
+  return ids.size
+})
+
+const shoppingSummary = computed(() => {
+  const totals = new Map<string, number>()
+  for (const line of shoppingVisibleLines.value) {
+    if (line.totalPrice == null) continue
+    const c = String(line.currency || 'AUEC').toUpperCase()
+    totals.set(c, (totals.get(c) ?? 0) + Number(line.totalPrice))
+  }
+  return Array.from(totals.entries())
+    .map(([currency, total]) => ({
+      currency,
+      display: `${Math.round(total).toLocaleString('fr-FR')} ${currency}`,
+    }))
+    .sort((a, b) => a.currency.localeCompare(b.currency, 'fr'))
+})
+
+function shoppingOptimizeTerminals() {
+  const lines = shoppingVisibleLines.value
+  if (!lines.length) return
+
+  const byCurrency = new Map<string, ShoppingLine[]>()
+  for (const line of lines) {
+    const currency = String(line.currency || 'AUEC').toUpperCase()
+    if (!byCurrency.has(currency)) byCurrency.set(currency, [])
+    byCurrency.get(currency)?.push(line)
+  }
+
+  const assignments: Record<string, number | null> = { ...shoppingTerminals.value }
+
+  for (const groupLines of byCurrency.values()) {
+    const candidatesByLine: Record<string, ShoppingPriceOption[]> = {}
+    const uncovered = new Set<string>()
+
+    for (const line of groupLines) {
+      const opts = line.options.filter((o) => Number(o.terminalId) > 0 && Number(o.priceBuy) > 0)
+      candidatesByLine[line.key] = opts
+      if (opts.length) uncovered.add(line.key)
+    }
+
+    const chosenTerminals = new Set<number>()
+
+    while (uncovered.size > 0) {
+      const terminalIds = new Set<number>()
+      for (const key of uncovered) {
+        for (const opt of candidatesByLine[key] ?? []) {
+          terminalIds.add(Number(opt.terminalId))
+        }
+      }
+
+      let bestTerminal: number | null = null
+      let bestCoverage = -1
+      let bestCost = Number.MAX_SAFE_INTEGER
+
+      for (const tid of terminalIds) {
+        let coverage = 0
+        let cost = 0
+        for (const key of uncovered) {
+          const match = (candidatesByLine[key] ?? []).find((o) => Number(o.terminalId) === Number(tid))
+          if (!match) continue
+          coverage += 1
+          cost += Number(match.priceBuy || 0)
+        }
+
+        if (coverage <= 0) continue
+        const betterCoverage = coverage > bestCoverage
+        const sameCoverageBetterCost = coverage === bestCoverage && cost < bestCost
+        if (betterCoverage || sameCoverageBetterCost) {
+          bestTerminal = tid
+          bestCoverage = coverage
+          bestCost = cost
+        }
+      }
+
+      if (bestTerminal == null) break
+      chosenTerminals.add(bestTerminal)
+
+      for (const key of Array.from(uncovered)) {
+        const hasBest = (candidatesByLine[key] ?? []).some((o) => Number(o.terminalId) === Number(bestTerminal))
+        if (hasBest) uncovered.delete(key)
+      }
+    }
+
+    for (const line of groupLines) {
+      if (!line.options.length) continue
+      const grouped = line.options.filter((o) => chosenTerminals.has(Number(o.terminalId)))
+      const selected = cheapestOption(grouped.length ? grouped : line.options)
+      assignments[line.key] = selected?.terminalId ?? null
+    }
+  }
+
+  shoppingTerminals.value = assignments
+}
 
 // ── Save / load / delete ──────────────────────────────────────────────────────
 
@@ -578,10 +1153,13 @@ async function saveLoadout() {
   if (!loadoutName.value.trim() || !selectedShipId.value) return
   saveError.value = null
   const slots: MiningLoadout['slots'] = []
+  const salvage = selectedShipIsSalvage.value
   turrets.value.forEach((t, ti) => {
-    slots.push({ slotType: 'laser', slotIndex: ti, portName: t.portName, laserId: t.laser?.id ?? null })
+    if (!salvage) {
+      slots.push({ slotType: 'laser', slotIndex: ti, portName: t.portName, laserId: t.laser?.id ?? null })
+    }
     t.modules.forEach((m, mi) => {
-      if (m) slots.push({ slotType: 'module', slotIndex: mi, laserSlotIndex: ti, componentId: m.id })
+      if (m) slots.push({ slotType: salvage ? 'scraperModule' : 'module', slotIndex: mi, laserSlotIndex: ti, componentId: m.id })
     })
   })
   try {
@@ -590,6 +1168,7 @@ async function saveLoadout() {
       name:     loadoutName.value.trim(),
       shipId:   selectedShipId.value,
       isPublic: loadoutIsPublic.value,
+      isSalvage: salvage,
       slots,
     })
     if (saved?.id) editId.value = saved.id
@@ -602,30 +1181,59 @@ function hydrateFromLoadout(lo: MiningLoadout) {
   const ship = mining.loadout.ships.find((s) => s.id === lo.shipId)
   if (!ship) return
   selectShip(ship)
+  const salvage = isSalvageLoadout(lo)
   editId.value          = lo.id
   loadoutName.value     = lo.name
   loadoutIsPublic.value = lo.isPublic ?? false
 
   const laserSlots  = lo.slots.filter((s) => s.slotType === 'laser')
-  const moduleSlots = lo.slots.filter((s) => s.slotType === 'module')
+  const moduleSlots = lo.slots.filter((s) => s.slotType === 'module' || s.slotType === 'scraperModule')
 
-  for (const ls of laserSlots) {
-    const ti = ls.slotIndex
-    if (!turrets.value[ti]) continue
-    const laser = ls.laserId ? mining.loadout.lasers.find((l) => l.id === ls.laserId) ?? null : null
-    turrets.value[ti].laser = laser
-    const slots = Math.max(0, laser?.moduleSlots ?? 0)
-    turrets.value[ti].modules = Array.from({ length: slots }, () => null)
-    turrets.value[ti]._modified = true
-    turrets.value[ti]._saved    = true
+  if (!salvage) {
+    for (const ls of laserSlots) {
+      const ti = ls.slotIndex
+      if (!turrets.value[ti]) continue
+      const laser = ls.laserId ? mining.loadout.lasers.find((l) => l.id === ls.laserId) ?? null : null
+      turrets.value[ti].laser = laser
+      const slots = Math.max(0, laser?.moduleSlots ?? 0)
+      turrets.value[ti].modules = Array.from({ length: slots }, () => null)
+      turrets.value[ti]._modified = true
+      turrets.value[ti]._saved    = true
+    }
+  } else {
+    for (let ti = 0; ti < turrets.value.length; ti++) {
+      turrets.value[ti].laser = null
+      turrets.value[ti].modules = Array.from({ length: SALVAGE_SLOT_COUNT }, () => null)
+      turrets.value[ti]._modified = true
+      turrets.value[ti]._saved = true
+    }
   }
+
   for (const ms of moduleSlots) {
     const ti = ms.laserSlotIndex ?? -1
     if (ti < 0 || !turrets.value[ti]) continue
-    const mod = ms.componentId ? mining.loadout.modules.find((m) => m.id === ms.componentId) ?? null : null
+    const mod = ms.componentId ? resolveModuleRef({ id: ms.componentId }, salvage) : null
     if (!mod) continue
-    const emptySlot = turrets.value[ti].modules.findIndex((m) => !m)
-    if (emptySlot >= 0) turrets.value[ti].modules[emptySlot] = mod
+    const slotIndex = Number(ms.slotIndex)
+    if (salvage && Number.isFinite(slotIndex) && slotIndex >= 0 && slotIndex < turrets.value[ti].modules.length) {
+      turrets.value[ti].modules[slotIndex] = mod
+    } else {
+      const emptySlot = turrets.value[ti].modules.findIndex((m) => !m)
+      if (emptySlot >= 0) turrets.value[ti].modules[emptySlot] = mod
+    }
+  }
+
+  if (salvage) {
+    // Compat loadouts legacy: modules salvage parfois sauvegardés en slotType laser.
+    for (const ls of laserSlots) {
+      const ti = ls.slotIndex
+      if (ti < 0 || !turrets.value[ti]) continue
+      if (!ls.laserId) continue
+      const mod = resolveModuleRef({ id: ls.laserId }, true)
+      if (!mod) continue
+      const emptySlot = turrets.value[ti].modules.findIndex((m) => !m)
+      if (emptySlot >= 0) turrets.value[ti].modules[emptySlot] = mod
+    }
   }
   syncDropdownArrays()
   activeSubTab.value = 'builder'
@@ -649,6 +1257,7 @@ function shipNameFor(lo: MiningLoadout): string {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
+  shoppingIncludeShip.value = localStorage.getItem('ml_includeShipPrice') === '1'
   await mining.loadLoadoutCatalog()
   await Promise.all([mining.loadUserLoadouts(), mining.loadPublicLoadouts()])
 })
@@ -713,6 +1322,16 @@ onMounted(async () => {
                 : 'border-white/10 text-th-muted hover:border-amber-400/30 hover:text-th-primary'"
               @click="selectShip(s)"
             >{{ s.name }}</button>
+            <span class="text-white/20">|</span>
+            <span class="text-xs text-th-muted">Salvage :</span>
+            <button
+              v-for="s in salvageShips" :key="s.id"
+              class="px-3 py-1 rounded-lg text-xs font-medium border transition-all"
+              :class="selectedShipId === s.id
+                ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-300'
+                : 'border-white/10 text-th-muted hover:border-emerald-400/30 hover:text-th-primary'"
+              @click="selectShip(s)"
+            >{{ s.name }}</button>
           </div>
 
           <!-- search input removed per request -->
@@ -720,6 +1339,10 @@ onMounted(async () => {
           <div v-if="selectedShip" class="text-sm text-th-muted">
             {{ selectedShip.nameFull ?? selectedShip.name }}
             <span class="text-th-primary font-medium">— {{ turrets.length }} tourelle(s)</span>
+            <span
+              class="ml-2 text-xs font-semibold uppercase tracking-wider"
+              :class="selectedShipIsSalvage ? 'text-amber-300/80' : 'text-cyan-300/80'"
+            >{{ selectedShipIsSalvage ? 'Salvage' : 'Minage' }}</span>
           </div>
         </div>
 
@@ -740,7 +1363,7 @@ onMounted(async () => {
             </div>
 
             <!-- Laser dropdown -->
-            <div class="relative">
+            <div v-if="!selectedShipIsSalvage" class="relative">
               <label class="text-xs text-th-muted mb-1.5 block font-medium">Laser</label>
               <div class="relative">
                 <input
@@ -773,46 +1396,85 @@ onMounted(async () => {
               </div>
             </div>
 
+            <div v-else class="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">
+              Hardpoint salvage: modules scraper uniquement.
+            </div>
+
             <!-- Module dropdowns -->
-            <div v-if="turret.laser && turret.modules.length" class="space-y-2">
+            <div v-if="(selectedShipIsSalvage || turret.laser) && turret.modules.length" class="space-y-3">
               <label class="text-xs text-th-muted font-medium">
-                Modules
+                {{ selectedShipIsSalvage ? 'Modules salvage' : 'Modules' }}
                 <span class="text-th-primary">{{ turret.modules.filter(Boolean).length }}/{{ turret.modules.length }}</span>
               </label>
-              <div v-for="(mod, mi) in turret.modules" :key="mi" class="relative">
+              <div v-for="(mod, mi) in turret.modules" :key="mi" class="relative pb-2 last:pb-0">
                 <div class="relative">
                   <input
                     v-model="moduleQuery[ti][mi]"
+                    readonly
                     type="text"
                     :placeholder="`Module ${mi + 1}`"
                     class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 pr-8 text-sm text-th-primary placeholder:text-th-muted outline-none focus:border-accent/40"
-                    @focus="moduleOpen[ti] = { ...moduleOpen[ti], [mi]: true }"
-                    @blur="setTimeout(() => { moduleOpen[ti] = { ...moduleOpen[ti], [mi]: false } }, 150)"
+                    @focus="openModuleDropdown(ti, mi)"
+                    @click="openModuleDropdown(ti, mi)"
+                    @keydown="handleModuleKeydown($event, ti, mi)"
+                    @blur="setTimeout(() => { closeModuleDropdown(ti, mi) }, 150)"
                   />
                   <button
                     v-if="mod"
                     class="absolute right-2.5 top-1/2 -translate-y-1/2 text-th-muted hover:text-th-primary text-xs"
                     @mousedown.prevent="selectModule(ti, mi, null)"
                   >✕</button>
-                  <div v-if="moduleOpen[ti]?.[mi] && filteredModules(ti, mi).length"
+                  <div v-if="moduleOpen[ti]?.[mi]"
                        class="absolute z-20 top-full mt-1 w-full bg-[#0d1117] border border-white/10 rounded-lg overflow-y-auto max-h-44 shadow-xl">
+                    <div class="sticky top-0 z-10 bg-[#0d1117] border-b border-white/10 p-2">
+                      <input
+                        v-model="moduleSearch[ti][mi]"
+                        ref="moduleSearchInput"
+                        type="text"
+                        placeholder="Rechercher un module…"
+                        class="w-full bg-black/30 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-th-primary placeholder:text-th-muted outline-none focus:border-accent/40"
+                        @keydown="handleModuleKeydown($event, ti, mi)"
+                      />
+                    </div>
+                    <template v-if="filteredModules(ti, mi).length">
                     <button
-                      v-for="m in filteredModules(ti, mi)" :key="m.id"
-                      class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center justify-between"
+                      v-for="(m, idx) in filteredModules(ti, mi)" :key="m.id"
+                      class="w-full px-3 py-2 text-left flex items-center justify-between"
+                      :class="(moduleActive[ti]?.[mi] ?? -1) === idx ? 'bg-white/10' : 'hover:bg-white/5'"
+                      @mouseenter="moduleActive[ti] = { ...(moduleActive[ti] ?? {}), [mi]: idx }"
                       @mousedown.prevent="selectModule(ti, mi, m)"
                     >
                       <span class="text-sm text-th-primary">{{ m.name }}</span>
                       <span class="text-xs" :class="m.isActive ? 'text-accent' : 'text-th-muted'">
-                        {{ m.isActive ? 'Actif' : 'Passif' }}
+                        {{ m.isActive ? 'Actif' : (selectedShipIsSalvage ? 'Salvage' : 'Passif') }}
                       </span>
                     </button>
+                    </template>
+                    <div v-else class="px-3 py-2.5 text-xs text-th-muted">
+                      Aucun module trouvé.
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="selectedShipIsSalvage && mod" class="mt-1 grid grid-cols-3 gap-2">
+                  <div class="rounded-md border border-white/10 bg-black/20 px-2.5 py-2">
+                    <div class="text-[10px] uppercase tracking-wider text-th-muted">Radius</div>
+                    <div class="text-xs font-semibold text-th-primary">{{ salvageModuleFinalStats(mod).radiusDisplay }}</div>
+                  </div>
+                  <div class="rounded-md border border-white/10 bg-black/20 px-2.5 py-2">
+                    <div class="text-[10px] uppercase tracking-wider text-th-muted">Extraction Speed</div>
+                    <div class="text-xs font-semibold text-th-primary">{{ salvageModuleFinalStats(mod).speedDisplay }}</div>
+                  </div>
+                  <div class="rounded-md border border-white/10 bg-black/20 px-2.5 py-2">
+                    <div class="text-[10px] uppercase tracking-wider text-th-muted">Efficiency</div>
+                    <div class="text-xs font-semibold text-th-primary">{{ salvageModuleFinalStats(mod).efficiencyDisplay }}</div>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Per-turret stats -->
-            <div v-if="turret.laser" class="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-3 border-t border-white/[0.05]">
+            <div v-if="!selectedShipIsSalvage && turret.laser" class="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-3 border-t border-white/[0.05]">
               <div class="text-xs">
                 <span class="text-th-muted">Puissance : </span>
                 <span class="text-th-primary font-semibold">
@@ -830,11 +1492,15 @@ onMounted(async () => {
                 </div>
               </template>
             </div>
+
+            <div v-else-if="selectedShipIsSalvage" class="pt-3 border-t border-white/[0.05] text-xs text-th-muted">
+              Modules équipés: <span class="text-th-primary font-semibold">{{ turret.modules.filter(Boolean).length }}/{{ turret.modules.length }}</span>
+            </div>
           </div>
         </div>
 
         <!-- Global stats (multi-turret) -->
-        <div v-if="globalPower.max != null"
+        <div v-if="!selectedShipIsSalvage && globalPower.max != null"
              class="rounded-xl border border-accent/20 bg-accent/[0.04] p-4 space-y-3">
           <p class="text-xs font-semibold text-accent/70 uppercase tracking-wider">Statistiques globales</p>
           <div class="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -862,24 +1528,92 @@ onMounted(async () => {
             @click="showShopping = !showShopping"
           >
             <span>{{ showShopping ? '▼' : '▶' }}</span>
-            Liste de course ({{ shoppingLines.length }} article(s))
+            Liste de course ({{ shoppingVisibleLines.length }} article(s))
           </button>
           <div v-if="showShopping" class="mt-2 rounded-xl border border-white/[0.07] bg-black/20 p-3 space-y-2">
-            <div v-for="line in shoppingLines" :key="line.key" class="flex items-center justify-between text-sm">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="shrink-0 text-xs uppercase tracking-wider font-bold"
-                  :class="line.type === 'laser' ? 'text-accent' : 'text-violet-400'">
-                  {{ line.type === 'laser' ? 'Laser' : 'Mod.' }}
-                </span>
-                <span class="text-th-primary truncate">{{ line.label }}</span>
-                <span v-if="line.size" class="text-th-muted shrink-0">S{{ line.size }}</span>
+            <div class="flex items-center justify-between gap-2 text-xs text-th-muted">
+              <span>{{ shoppingSelectedTerminalCount }} terminal(s) utilisé(s)</span>
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-200 text-xs font-mono hover:bg-emerald-500/25 transition"
+                @click="shoppingOptimizeTerminals"
+                v-if="shoppingVisibleLines.length > 1"
+              >
+                Regrouper au max
+              </button>
+            </div>
+
+            <label class="flex items-center gap-2 text-xs text-th-muted">
+              <input
+                type="checkbox"
+                class="form-checkbox rounded"
+                v-model="shoppingIncludeShip"
+                @change="localStorage.setItem('ml_includeShipPrice', shoppingIncludeShip ? '1' : '0')"
+              />
+              Inclure vaisseau
+            </label>
+
+            <div class="flex flex-wrap gap-1.5 text-[11px]">
+              <button type="button" class="px-2 py-1 rounded border border-white/10 text-th-muted hover:text-th-primary hover:border-white/20"
+                @click="shoppingSetSort('type')">Type{{ shoppingSortIndicator('type') }}</button>
+              <button type="button" class="px-2 py-1 rounded border border-white/10 text-th-muted hover:text-th-primary hover:border-white/20"
+                @click="shoppingSetSort('label')">Composant{{ shoppingSortIndicator('label') }}</button>
+              <button type="button" class="px-2 py-1 rounded border border-white/10 text-th-muted hover:text-th-primary hover:border-white/20"
+                @click="shoppingSetSort('quantity')">Qté{{ shoppingSortIndicator('quantity') }}</button>
+              <button type="button" class="px-2 py-1 rounded border border-white/10 text-th-muted hover:text-th-primary hover:border-white/20"
+                @click="shoppingSetSort('terminal')">Terminal{{ shoppingSortIndicator('terminal') }}</button>
+              <button type="button" class="px-2 py-1 rounded border border-white/10 text-th-muted hover:text-th-primary hover:border-white/20"
+                @click="shoppingSetSort('unitPrice')">Prix unit.{{ shoppingSortIndicator('unitPrice') }}</button>
+              <button type="button" class="px-2 py-1 rounded border border-white/10 text-th-muted hover:text-th-primary hover:border-white/20"
+                @click="shoppingSetSort('totalPrice')">Total{{ shoppingSortIndicator('totalPrice') }}</button>
+            </div>
+
+            <div v-for="line in shoppingVisibleLines" :key="line.key" class="rounded-lg border border-white/10 bg-black/20 p-2.5 space-y-2">
+              <div class="flex items-center justify-between text-sm">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="shrink-0 text-xs uppercase tracking-wider font-bold"
+                    :class="line.type === 'ship' ? 'text-emerald-300' : (line.type === 'laser' ? 'text-accent' : 'text-violet-400')">
+                    {{ line.type === 'ship' ? 'Ship' : (line.type === 'laser' ? 'Laser' : 'Mod.') }}
+                  </span>
+                  <span class="text-th-primary truncate">{{ line.label }}</span>
+                  <span v-if="line.size" class="text-th-muted shrink-0">S{{ line.size }}</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 text-th-muted ml-2">
+                  <span v-if="line.quantity > 1" class="font-medium">×{{ line.quantity }}</span>
+                  <span v-if="line.totalPrice != null" class="text-th-primary font-medium">
+                    {{ Math.round(line.totalPrice).toLocaleString('fr-FR') }} {{ line.currency }}
+                  </span>
+                </div>
               </div>
-              <div class="flex items-center gap-2 shrink-0 text-th-muted ml-2">
-                <span v-if="line.quantity > 1" class="font-medium">×{{ line.quantity }}</span>
-                <span v-if="line.priceBuy" class="text-th-primary font-medium">
-                  {{ Math.round(line.priceBuy * line.quantity).toLocaleString('fr-FR') }} aUEC
+
+              <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 items-center text-xs">
+                <select
+                  class="w-full rounded-lg bg-[#070c14]/70 border border-white/10 px-2 py-1 text-th-primary"
+                  :value="line.selectedTerminalId ?? ''"
+                  @change="shoppingSetTerminal(line.key, ($event.target as HTMLSelectElement).value)"
+                  :disabled="!line.options.length"
+                >
+                  <option v-if="!line.options.length" value="">Aucun terminal</option>
+                  <option v-for="opt in line.options" :key="`${line.key}-${opt.terminalId}`" :value="opt.terminalId">
+                    {{ opt.terminalName }}
+                  </option>
+                </select>
+                <span class="text-th-muted">Unit:</span>
+                <span class="text-th-primary font-medium text-right min-w-[80px]">
+                  {{ line.unitPrice != null ? `${Math.round(line.unitPrice).toLocaleString('fr-FR')} ${line.currency}` : '—' }}
                 </span>
               </div>
+            </div>
+
+            <div class="pt-1 flex flex-wrap gap-2">
+              <span
+                v-for="sum in shoppingSummary"
+                :key="sum.currency"
+                class="px-2.5 py-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-xs font-mono"
+              >
+                <span class="opacity-70">{{ sum.currency }}</span>
+                <span class="ml-2 font-semibold">{{ sum.display }}</span>
+              </span>
             </div>
           </div>
         </div>
@@ -1001,6 +1735,26 @@ onMounted(async () => {
             <!-- Stats (site-like 6-col grid) -->
             <div class="px-4 py-3 border-t border-white/[0.02]">
               <template v-for="qs in [computeLoadoutQuickStats(lo)]" :key="`qs-` + lo.id">
+                <div v-if="qs.isSalvage" class="grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <div class="text-sm font-semibold text-th-primary">{{ qs.salvageInstalledCount ?? 0 }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">INSTALLÉS</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-th-primary">{{ qs.salvageModuleCount ?? 0 }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">SALVAGE</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-th-primary">{{ qs.salvageTractorCount ?? 0 }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">TRACTOR</div>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium text-th-primary">{{ qs.equipmentPriceDisplay ?? '—' }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">PRIX ÉQUIP.</div>
+                  </div>
+                </div>
+
+                <template v-else>
                 <div class="grid grid-cols-6 gap-2 text-center">
                   <div>
                     <div class="text-sm font-semibold text-th-primary">{{ qs.totalEffMinPwr != null ? Math.round(qs.totalEffMinPwr).toLocaleString('fr-FR') : '—' }}</div>
@@ -1054,6 +1808,7 @@ onMounted(async () => {
                     <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">PRIX ÉQUIP.</div>
                   </div>
                 </div>
+                </template>
               </template>
             </div>
           </template>
@@ -1108,6 +1863,26 @@ onMounted(async () => {
             <!-- Stats (site-like 6-col grid) -->
             <div class="px-4 py-3 border-t border-white/[0.02]">
               <template v-for="qs in [computeLoadoutQuickStats(lo)]" :key="`qs-pub-` + lo.id">
+                <div v-if="qs.isSalvage" class="grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <div class="text-sm font-semibold text-th-primary">{{ qs.salvageInstalledCount ?? 0 }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">INSTALLÉS</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-th-primary">{{ qs.salvageModuleCount ?? 0 }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">SALVAGE</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-th-primary">{{ qs.salvageTractorCount ?? 0 }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">TRACTOR</div>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium text-th-primary">{{ qs.equipmentPriceDisplay ?? '—' }}</div>
+                    <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">PRIX ÉQUIP.</div>
+                  </div>
+                </div>
+
+                <template v-else>
                 <div class="grid grid-cols-6 gap-2 text-center">
                   <div>
                     <div class="text-sm font-semibold text-th-primary">{{ qs.totalEffMinPwr != null ? Math.round(qs.totalEffMinPwr).toLocaleString('fr-FR') : '—' }}</div>
@@ -1161,6 +1936,7 @@ onMounted(async () => {
                     <div class="text-[10px] text-th-muted uppercase tracking-wider mt-0.5">PRIX ÉQUIP.</div>
                   </div>
                 </div>
+                </template>
               </template>
             </div>
           </template>

@@ -54,6 +54,10 @@ interface RxEffectChain {
   noiseSource: AudioBufferSourceNode
   noiseFilter: BiquadFilterNode
   noiseGain: GainNode
+  /** Analyse le niveau de la voix RX pour ne pas laisser le souffle radio en continu. */
+  activityAnalyser: AnalyserNode
+  activityData: Uint8Array<ArrayBuffer>
+  noiseGateInterval: ReturnType<typeof setInterval> | null
   outputGain: GainNode
   outputSplitter: ChannelSplitterNode
   outputLeftGain: GainNode
@@ -593,8 +597,35 @@ export class RadioClient {
 
     chain.dryGain.gain.value = Math.max(0.03, 0.42 - (0.34 * intensity))
     chain.wetGain.gain.value = 0.82 + (0.48 * intensity)
-    chain.noiseGain.gain.value = 0.003 + (0.014 * intensity)
+
+    // Important : pas de souffle permanent.
+    // Le gain de bruit reste à 0 ici, puis tickRxNoiseGate() l'ouvre
+    // uniquement quand une vraie voix reçue est détectée.
+    chain.noiseGain.gain.setTargetAtTime(0, this.audioCtx?.currentTime ?? 0, 0.03)
     chain.drive.curve = this.createDistortionCurve(0.32 + (0.9 * intensity))
+  }
+
+  private getRxNoiseGainValue(): number {
+    if (!this._radioEffectEnabled) return 0
+    const intensity = this._radioEffectIntensity
+    return 0.002 + (0.012 * intensity)
+  }
+
+  private tickRxNoiseGate(chain: RxEffectChain): void {
+    const ctx = this.audioCtx
+    if (!ctx || !this.rxChains.has(`${chain.channelId}:${chain.track.sid}`)) return
+
+    chain.activityAnalyser.getByteTimeDomainData(chain.activityData)
+    let sumSq = 0
+    for (const v of chain.activityData) {
+      const n = (v - 128) / 128
+      sumSq += n * n
+    }
+
+    const rms = Math.sqrt(sumSq / chain.activityData.length)
+    const active = this._radioEffectEnabled && rms > 0.008
+    const target = active ? this.getRxNoiseGainValue() : 0
+    chain.noiseGain.gain.setTargetAtTime(target, ctx.currentTime, active ? 0.012 : 0.055)
   }
 
   private createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
@@ -630,13 +661,25 @@ export class RadioClient {
     const key = `${channelId}:${track.sid}`
     this.cleanupRxChain(key)
 
-    const element = track.attach() as HTMLMediaElement
-    track.setVolume(1)
-
     if (!this.audioCtx) {
       track.setVolume(this._volume)
       return
     }
+
+    // Évite un second chemin audio LiveKit/HTML qui resterait centré.
+    // On garde un seul élément, routé dans notre graphe WebAudio.
+    try {
+      for (const oldElement of track.detach()) {
+        try { oldElement.pause() } catch {}
+        try { oldElement.remove() } catch {}
+      }
+    } catch {}
+
+    const element = track.attach() as HTMLMediaElement
+    element.autoplay = true
+    element.playsInline = true
+    element.volume = 1
+    track.setVolume(1)
 
     try {
       const source = this.audioCtx.createMediaElementSource(element)
@@ -682,11 +725,22 @@ export class RadioClient {
       const outputRightGain = this.audioCtx.createGain()
       const outputMerger = this.audioCtx.createChannelMerger(2)
 
+      const activityAnalyser = this.audioCtx.createAnalyser()
+      activityAnalyser.fftSize = 512
+      activityAnalyser.smoothingTimeConstant = 0.2
+      const activityData = new Uint8Array(activityAnalyser.fftSize) as Uint8Array<ArrayBuffer>
+
       const noiseSource = this.createNoiseSource(this.audioCtx)
       const noiseFilter = this.audioCtx.createBiquadFilter()
       noiseFilter.type = 'bandpass'
       noiseFilter.frequency.value = 1800
       noiseFilter.Q.value = 0.45
+      noiseGain.gain.value = 0
+
+      // Source unique : toute la réception part dans ce graphe.
+      // Le dry, le wet radio et le souffle passent ensuite dans le même outputGain,
+      // donc la balance finale agit sur la VOIX reçue, pas seulement sur l'effet.
+      source.connect(activityAnalyser)
 
       source.connect(dryGain)
       dryGain.connect(outputGain)
@@ -705,6 +759,7 @@ export class RadioClient {
       noiseGain.connect(outputGain)
       noiseSource.start()
 
+      // Hard-pan final sur le mix complet RX.
       outputGain.connect(outputSplitter)
       outputSplitter.connect(outputLeftGain, 0)
       outputSplitter.connect(outputLeftGain, 1)
@@ -730,16 +785,28 @@ export class RadioClient {
         noiseSource,
         noiseFilter,
         noiseGain,
+        activityAnalyser,
+        activityData,
+        noiseGateInterval: null,
         outputGain,
         outputSplitter,
         outputLeftGain,
         outputRightGain,
         outputMerger,
       }
+
       this.rxChains.set(key, chain)
       this.rxTrackToKey.set(track, key)
       this.updateRxMix(chain)
+      chain.noiseGateInterval = setInterval(() => this.tickRxNoiseGate(chain), 35)
+
+      void element.play().catch(() => {
+        // LiveKit/Chrome peut attendre une interaction utilisateur.
+        // Le track reste attaché, il repartira dès que l'audio context sera autorisé.
+      })
     } catch {
+      try { track.detach(element) } catch {}
+      try { element.remove() } catch {}
       track.setVolume(this._volume)
     }
   }
@@ -748,8 +815,13 @@ export class RadioClient {
     const chain = this.rxChains.get(key)
     if (!chain) return
 
+    if (chain.noiseGateInterval) {
+      clearInterval(chain.noiseGateInterval)
+      chain.noiseGateInterval = null
+    }
     try { chain.noiseSource.stop() } catch {}
     try { chain.source.disconnect() } catch {}
+    try { chain.activityAnalyser.disconnect() } catch {}
     try { chain.highPass.disconnect() } catch {}
     try { chain.bandPass.disconnect() } catch {}
     try { chain.presence.disconnect() } catch {}
@@ -769,6 +841,7 @@ export class RadioClient {
     try { chain.track.detach(chain.element) } catch {}
     try { chain.element.remove() } catch {}
 
+    this.rxTrackToKey.delete(chain.track)
     this.rxChains.delete(key)
   }
 

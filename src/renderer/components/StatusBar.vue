@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { changelog } from '../data/changelog'
+import { getHelpTopicForPath, helpFallback } from '../data/helpAssistant'
 
 const app = useAppStore()
+const route = useRoute()
+const router = useRouter()
 const busy = ref(false)
 const version = ref<string | null>(null)
 
@@ -19,6 +23,7 @@ const updatePostponed = ref(false)
 
 // ── Changelog modal ─────────────────────────────────────────────────────────
 const showChangelog = ref(false)
+const showHelp = ref(false)
 
 // ── Login popover ───────────────────────────────────────────────────────────
 const showPanel  = ref(false)
@@ -156,6 +161,43 @@ const statusColor = computed(() => {
 const hasUpdateBadge = computed(() =>
   (nativeUpdateAvailable.value || nativeDownloaded.value) && !showUpdateBanner.value
 )
+
+const helpTopic = computed(() => getHelpTopicForPath(route.path))
+
+const contextualFacts = computed(() => {
+  const facts: string[] = []
+  if (app.status.level === 'loading') {
+    facts.push('Connexion en cours: certaines donnees peuvent etre incompletes.')
+  }
+  if (!app.status.authReady) {
+    facts.push('Session non authentifiee: connecte-toi pour charger les donnees metier.')
+  } else {
+    facts.push(`Session active: ${app.profileLabel}`)
+  }
+  if (typeof app.status.latencyMs === 'number') {
+    facts.push(`Latence API actuelle: ${app.status.latencyMs} ms`)
+  }
+  if (route.path.startsWith('/transport')) {
+    if (app.transportsLoading) facts.push('Transport: chargement des ordres en cours...')
+    else facts.push(`Transport: ${app.transports.length} ordre(s) disponible(s).`)
+  }
+  if (route.path.startsWith('/agenda') && app.status.authReady) {
+    if (!app.agendaLoaded) facts.push('Agenda: chargement des evenements en cours...')
+    else facts.push(`Agenda: ${app.agendaEvents.length} evenement(s) charge(s).`)
+  }
+  if (route.path.startsWith('/overlay')) {
+    facts.push(app.overlayVisible ? 'Overlay actuellement visible.' : 'Overlay actuellement masque.')
+  }
+  return facts
+})
+
+const helpActions = computed(() => helpTopic.value.actions ?? helpFallback.actions ?? [])
+
+function runHelpAction(path: string) {
+  showHelp.value = false
+  if (route.path === path) return
+  void router.push(path)
+}
 
 const changeTypeLabel: Record<string, string> = {
   feature:     'Nouveau',
@@ -321,6 +363,90 @@ const changeTypeClass: Record<string, string> = {
     </div>
   </Transition>
 
+  <!-- ── Modal Assistant ───────────────────────────────────────────────────── -->
+  <Transition name="fade">
+    <div
+      v-if="showHelp"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      @click.self="showHelp = false"
+    >
+      <div class="w-[620px] max-h-[84vh] flex flex-col rounded-2xl border border-accent/20 bg-th-base shadow-2xl shadow-black/80">
+        <div class="flex items-start justify-between gap-3 px-6 py-4 border-b border-accent/15">
+          <div>
+            <h2 class="text-sm font-bold tracking-widest text-th-primary uppercase">Assistant</h2>
+            <p class="text-xs text-th-secondary mt-1">{{ helpTopic.title }}</p>
+            <p class="text-[11px] text-th-muted mt-1">{{ helpTopic.objective }}</p>
+          </div>
+          <button @click="showHelp = false" class="text-th-muted hover:text-th-secondary transition" aria-label="Fermer l'assistant">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          <div>
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-th-secondary">Ce que tu vois actuellement</h3>
+            <ul class="mt-2 space-y-1.5">
+              <li v-for="(item, idx) in helpTopic.visibleNow" :key="`visible-${idx}`" class="text-xs text-th-secondary leading-relaxed flex gap-2">
+                <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-accent/60 shrink-0"/>
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-th-secondary">Etat instantane</h3>
+            <ul class="mt-2 space-y-1.5">
+              <li v-for="(item, idx) in contextualFacts" :key="`ctx-${idx}`" class="text-xs text-th-secondary leading-relaxed flex gap-2">
+                <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-emerald-400/70 shrink-0"/>
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-th-secondary">Conseils</h3>
+            <ul class="mt-2 space-y-1.5">
+              <li v-for="(tip, idx) in helpTopic.tips" :key="`tip-${idx}`" class="text-xs text-th-secondary leading-relaxed flex gap-2">
+                <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-amber-400/70 shrink-0"/>
+                <span>{{ tip }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="helpTopic.prerequisites?.length">
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-th-secondary">Prerequis</h3>
+            <ul class="mt-2 space-y-1.5">
+              <li v-for="(item, idx) in helpTopic.prerequisites" :key="`pre-${idx}`" class="text-xs text-th-secondary leading-relaxed">• {{ item }}</li>
+            </ul>
+          </div>
+
+          <div v-if="helpTopic.limits?.length">
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-th-secondary">Limites</h3>
+            <ul class="mt-2 space-y-1.5">
+              <li v-for="(item, idx) in helpTopic.limits" :key="`lim-${idx}`" class="text-xs text-th-secondary leading-relaxed">• {{ item }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-accent/15">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-th-secondary mb-2">Actions rapides</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="action in helpActions"
+              :key="action.label + action.to"
+              @click="runHelpAction(action.to)"
+              class="rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-[11px] font-semibold text-th-secondary hover:border-accent/30 hover:text-accent transition"
+            >
+              {{ action.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <footer class="relative shrink-0 border-t border-accent/20 px-5 py-2 flex items-center gap-3">
 
     <!-- ── Popover connexion ─────────────────────────────────────────────── -->
@@ -389,6 +515,18 @@ const changeTypeClass: Record<string, string> = {
 
     <div class="ml-auto flex items-center gap-2">
       <span v-if="app.status.latencyMs" class="text-[11px] text-th-muted">{{ app.status.latencyMs }} ms</span>
+
+      <button
+        @click="showHelp = true"
+        class="flex items-center gap-1.5 rounded-md border border-accent/25 bg-accent/8 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/15 transition"
+        title="Ouvrir l'assistant"
+        aria-label="Ouvrir l'assistant"
+      >
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.55-1.165 1.83-2 3.272-2 1.934 0 3.5 1.343 3.5 3 0 1.236-.87 2.298-2.104 2.762-.67.252-1.146.85-1.146 1.567V15M12 18h.01"/>
+        </svg>
+        Aide
+      </button>
 
       <!-- Bouton version → ouvre la modal changelog -->
       <button

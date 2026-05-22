@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { http } from '../services/http'
@@ -83,6 +83,198 @@ const error      = ref<string | null>(null)
 const saveError  = ref<string | null>(null)
 const savedId    = ref<number | null>(null)
 const itineraryGenerated = ref(false)
+
+// ─── Guide interactif ────────────────────────────────────────────────────────
+
+interface GuideStep {
+  id: string
+  selector: string
+  title: string
+  text: string
+}
+
+interface GuideRect {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
+interface GuideTooltipPos {
+  top: number
+  left: number
+}
+
+const GUIDE_EVENT = '1cc:start-transport-form-guide'
+const formScrollRef = ref<HTMLElement | null>(null)
+const showGuide = ref(false)
+const guideIndex = ref(0)
+const guideRect = ref<GuideRect | null>(null)
+const guideTooltipPos = ref<GuideTooltipPos>({ top: 24, left: 24 })
+const guideSteps = ref<GuideStep[]>([])
+const guideRaf = ref<number | null>(null)
+
+const guideCatalog: GuideStep[] = [
+  {
+    id: 'general',
+    selector: '[data-guide="general"]',
+    title: 'Informations generales',
+    text: 'Commence ici pour definir le contexte de ton work order.',
+  },
+  {
+    id: 'order-name',
+    selector: '[data-guide="order-name"]',
+    title: "Nom de l'ordre",
+    text: 'Donne un nom clair et unique. Ce nom sera visible dans les listes et en detail.',
+  },
+  {
+    id: 'origin',
+    selector: '[data-guide="origin"]',
+    title: 'Point de depart',
+    text: 'Choisis le point de depart principal du work order via la recherche de POI.',
+  },
+  {
+    id: 'ships',
+    selector: '[data-guide="ships"]',
+    title: 'Vaisseaux',
+    text: 'Ajoute les vaisseaux qui participent au transport. Tu peux ajouter une note par vaisseau.',
+  },
+  {
+    id: 'lines',
+    selector: '[data-guide="lines"]',
+    title: 'Lignes de chargement',
+    text: 'Chaque ligne represente une mission de cargaison. Tu peux en empiler plusieurs.',
+  },
+  {
+    id: 'add-line',
+    selector: '[data-guide="add-line"]',
+    title: 'Ajouter une ligne',
+    text: 'Clique ici pour ajouter une nouvelle ligne de chargement dans ton work order.',
+  },
+  {
+    id: 'line-type',
+    selector: '[data-guide="line-type"]',
+    title: 'Type de mission',
+    text: 'Choisis le schema: simple, multi pickup, multi drop, ou multi route.',
+  },
+  {
+    id: 'cargo',
+    selector: '[data-guide="cargo"]',
+    title: 'Champs cargaison',
+    text: 'Renseigne la marchandise, la quantite, puis les pickup/dropoff selon le type choisi.',
+  },
+  {
+    id: 'actions',
+    selector: '[data-guide="actions"]',
+    title: 'Finaliser',
+    text: 'Sauvegarde ton work order, ou sauvegarde puis genere directement l\'itineraire.',
+  },
+]
+
+const activeGuideStep = computed(() => guideSteps.value[guideIndex.value] ?? null)
+
+function refreshGuideRect() {
+  const step = activeGuideStep.value
+  if (!showGuide.value || !step) {
+    guideRect.value = null
+    return
+  }
+  const node = document.querySelector(step.selector) as HTMLElement | null
+  if (!node) {
+    guideRect.value = null
+    return
+  }
+  node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  window.setTimeout(() => {
+    const rect = node.getBoundingClientRect()
+    const pad = 8
+    const spotlight = {
+      top: Math.max(8, rect.top - pad),
+      left: Math.max(8, rect.left - pad),
+      width: rect.width + pad * 2,
+      height: rect.height + pad * 2,
+    }
+    guideRect.value = spotlight
+
+    const tooltipWidth = 360
+    const margin = 16
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const preferBottom = spotlight.top + spotlight.height + 16 + 220 < viewportHeight
+    const top = preferBottom
+      ? Math.min(viewportHeight - 230, spotlight.top + spotlight.height + 12)
+      : Math.max(16, spotlight.top - 220 - 12)
+    const left = Math.max(
+      margin,
+      Math.min(
+        spotlight.left,
+        viewportWidth - tooltipWidth - margin,
+      ),
+    )
+    guideTooltipPos.value = { top, left }
+  }, 120)
+}
+
+function scheduleGuideRectRefresh() {
+  if (!showGuide.value) return
+  if (guideRaf.value != null) cancelAnimationFrame(guideRaf.value)
+  guideRaf.value = requestAnimationFrame(() => {
+    refreshGuideRect()
+  })
+}
+
+function startGuide() {
+  nextTick(() => {
+    guideSteps.value = guideCatalog.filter((s) => Boolean(document.querySelector(s.selector)))
+    if (!guideSteps.value.length) return
+    guideIndex.value = 0
+    showGuide.value = true
+    refreshGuideRect()
+  })
+}
+
+function stopGuide() {
+  showGuide.value = false
+  guideRect.value = null
+}
+
+function handleGuideKeydown(event: KeyboardEvent) {
+  if (!showGuide.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    stopGuide()
+    return
+  }
+  if (event.key === 'ArrowRight' || event.key === 'Enter') {
+    event.preventDefault()
+    guideNext()
+    return
+  }
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    guidePrev()
+  }
+}
+
+function guidePrev() {
+  if (!guideSteps.value.length) return
+  guideIndex.value = Math.max(0, guideIndex.value - 1)
+  refreshGuideRect()
+}
+
+function guideNext() {
+  if (!guideSteps.value.length) return
+  if (guideIndex.value >= guideSteps.value.length - 1) {
+    stopGuide()
+    return
+  }
+  guideIndex.value += 1
+  refreshGuideRect()
+}
+
+function handleGuideEvent() {
+  startGuide()
+}
 
 // ─── Ship models ──────────────────────────────────────────────────────────────
 
@@ -219,6 +411,25 @@ async function loadOrder() {
 onMounted(async () => {
   if (!app.status.authReady) return
   await Promise.all([loadReference(), loadOrder()])
+  window.addEventListener(GUIDE_EVENT, handleGuideEvent)
+  window.addEventListener('resize', scheduleGuideRectRefresh)
+  window.addEventListener('keydown', handleGuideKeydown)
+  if (route.hash === '#guide') startGuide()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(GUIDE_EVENT, handleGuideEvent)
+  window.removeEventListener('resize', scheduleGuideRectRefresh)
+  window.removeEventListener('keydown', handleGuideKeydown)
+  if (guideRaf.value != null) cancelAnimationFrame(guideRaf.value)
+})
+
+watch(() => route.hash, (hash) => {
+  if (hash === '#guide') startGuide()
+})
+
+watch(() => guideIndex.value, () => {
+  scheduleGuideRectRefresh()
 })
 
 // ─── Ships ────────────────────────────────────────────────────────────────────
@@ -624,6 +835,18 @@ async function deleteDelivery() {
           </span>
         </div>
 
+        <button
+          @click="startGuide"
+          type="button"
+          class="shrink-0 flex items-center gap-1 rounded-md border border-accent/25 bg-accent/8 px-2.5 py-1 text-xs font-medium text-accent/80 hover:bg-accent/15 hover:text-accent transition"
+          title="Lancer le guide interactif"
+        >
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.55-1.165 1.83-2 3.272-2 1.934 0 3.5 1.343 3.5 3 0 1.236-.87 2.298-2.104 2.762-.67.252-1.146.85-1.146 1.567V15M12 18h.01"/>
+          </svg>
+          Guide champs
+        </button>
+
         <!-- Delete (only when editing an existing, saved order) -->
         <button
           v-if="savedId"
@@ -650,7 +873,7 @@ async function deleteDelivery() {
       </div>
 
       <!-- ── Form body ───────────────────────────────────────────────────── -->
-      <div v-else class="flex-1 min-h-0 overflow-y-auto space-y-3">
+      <div ref="formScrollRef" @scroll.passive="scheduleGuideRectRefresh" v-else class="flex-1 min-h-0 overflow-y-auto space-y-3">
 
         <!-- Save / action error -->
         <div v-if="saveError" class="rounded-lg border border-rose-400/20 bg-rose-400/5 p-3 text-sm text-rose-300">
@@ -660,11 +883,11 @@ async function deleteDelivery() {
         <!-- ──────────────────────────────────────────────────────────────── -->
         <!-- General info                                                     -->
         <!-- ──────────────────────────────────────────────────────────────── -->
-        <div class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
+        <div data-guide="general" class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
           <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Informations générales</p>
 
           <!-- Name -->
-          <div>
+          <div data-guide="order-name">
             <label class="block text-[11px] font-semibold text-th-muted mb-1">Nom de l'ordre</label>
             <input
               v-model="form.name"
@@ -675,7 +898,7 @@ async function deleteDelivery() {
           </div>
 
           <!-- Origin POI autocomplete -->
-          <div>
+          <div data-guide="origin">
             <label class="block text-[11px] font-semibold text-th-muted mb-1">Point de départ</label>
             <div class="relative">
               <input
@@ -709,7 +932,7 @@ async function deleteDelivery() {
         <!-- ──────────────────────────────────────────────────────────────── -->
         <!-- Ships                                                            -->
         <!-- ──────────────────────────────────────────────────────────────── -->
-        <div class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
+        <div data-guide="ships" class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
           <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Vaisseaux</p>
 
           <!-- Ship search -->
@@ -776,11 +999,12 @@ async function deleteDelivery() {
         <!-- ──────────────────────────────────────────────────────────────── -->
         <!-- Manifest lines                                                   -->
         <!-- ──────────────────────────────────────────────────────────────── -->
-        <div class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
+        <div data-guide="lines" class="rounded-lg border border-accent/20 bg-black/20 p-4 space-y-3">
           <div class="flex items-center justify-between">
             <p class="text-[10px] font-bold uppercase tracking-widest text-th-muted">Lignes de chargement</p>
             <button
               @click="addLine"
+              data-guide="add-line"
               class="flex items-center gap-1 rounded-md border border-accent/20 bg-accent/5 px-2 py-1 text-[11px] font-medium text-accent/70 hover:bg-accent/10 hover:text-accent transition"
             >
               <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -805,7 +1029,7 @@ async function deleteDelivery() {
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-[11px] font-bold text-th-muted">Ligne {{ idx + 1 }}</span>
                   <!-- Type selector -->
-                  <div class="flex items-center rounded border border-th-muted/50 overflow-hidden text-[10px]">
+                  <div :data-guide="idx === 0 ? 'line-type' : undefined" class="flex items-center rounded border border-th-muted/50 overflow-hidden text-[10px]">
                     <button
                       v-for="[val, label] in Object.entries({'mono_route':'A→B','multi_drop':'A→B+C','multi_pickup':'A+B→C','multi_route':'A+B→C+D'})"
                       :key="val"
@@ -906,7 +1130,7 @@ async function deleteDelivery() {
               </div>
 
               <!-- Commodity + Quantity (support multiple cargos per line) -->
-              <div>
+              <div :data-guide="idx === 0 ? 'cargo' : undefined">
                 <label class="block text-[10px] text-th-muted mb-1">Marchandises</label>
 
                 <div class="space-y-2">
@@ -1024,7 +1248,7 @@ async function deleteDelivery() {
         </div>
 
         <!-- ── Action buttons ──────────────────────────────────────────── -->
-        <div class="flex items-center gap-2 pb-2">
+        <div data-guide="actions" class="flex items-center gap-2 pb-2">
 
           <!-- Save -->
           <button
@@ -1059,6 +1283,64 @@ async function deleteDelivery() {
             {{ generating ? 'Génération…' : (saving ? 'Sauvegarde…' : 'Sauvegarder & Générer') }}
           </button>
 
+        </div>
+      </div>
+
+      <div v-if="showGuide" class="fixed inset-0 z-[70]">
+        <div class="absolute inset-0 bg-black/55" />
+
+        <div
+          v-if="guideRect"
+          class="absolute rounded-xl border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] pointer-events-none"
+          :style="{
+            top: `${guideRect.top}px`,
+            left: `${guideRect.left}px`,
+            width: `${guideRect.width}px`,
+            height: `${guideRect.height}px`,
+          }"
+        />
+
+        <div
+          class="absolute w-[360px] rounded-xl border border-accent/30 bg-th-base/95 backdrop-blur-sm shadow-2xl p-4 space-y-3"
+          :style="{
+            top: `${guideTooltipPos.top}px`,
+            left: `${guideTooltipPos.left}px`,
+          }"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[11px] font-bold uppercase tracking-widest text-th-secondary">Guide interactif</p>
+            <button @click="stopGuide" class="text-th-muted hover:text-th-secondary transition text-xs">Fermer</button>
+          </div>
+
+          <div v-if="activeGuideStep">
+            <p class="text-sm font-semibold text-th-primary">{{ activeGuideStep.title }}</p>
+            <p class="text-xs text-th-secondary mt-1 leading-relaxed">{{ activeGuideStep.text }}</p>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[11px] text-th-muted">
+              Etape {{ Math.min(guideIndex + 1, guideSteps.length) }} / {{ guideSteps.length }}
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                @click="guidePrev"
+                :disabled="guideIndex === 0"
+                class="rounded-md border border-th-subtle bg-th-card px-2.5 py-1 text-[11px] font-semibold text-th-secondary hover:text-th-primary transition disabled:opacity-40"
+              >
+                Precedent
+              </button>
+              <button
+                @click="guideNext"
+                class="rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/20 transition"
+              >
+                {{ guideIndex >= guideSteps.length - 1 ? 'Terminer' : 'Suivant' }}
+              </button>
+            </div>
+          </div>
+
+          <p class="text-[10px] text-th-muted">
+            Raccourcis: <span class="font-semibold">←</span> precedent, <span class="font-semibold">→</span> suivant, <span class="font-semibold">Echap</span> fermer
+          </p>
         </div>
       </div>
 

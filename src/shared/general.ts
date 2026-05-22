@@ -460,6 +460,11 @@ export interface MiningLoadoutTurretDef {
   maxSize?: number | null
   minSize?: number | null
   defaultLaser?: any | null
+  defaultModules?: Array<any> | null
+  scraperModules?: Array<any> | null
+  defaultScraperModules?: Array<any> | null
+  defaultComponents?: Array<any> | null
+  defaultComponentId?: number | null
 }
 
 export interface MiningShip {
@@ -470,6 +475,16 @@ export interface MiningShip {
   price?: number | null
   priceCurrency?: string | null
   laserEditable?: boolean
+  isSalvage?: boolean
+  role?: string | null
+  type?: string | null
+  category?: string | null
+  kind?: string | null
+  duty?: string | null
+  gameplay?: string | null
+  allowedDuties?: string | string[] | null
+  tags?: string | string[] | null
+  salvageBuff?: Record<string, unknown> | null
   turrets: MiningLoadoutTurretDef[]
 }
 
@@ -522,7 +537,7 @@ export interface MiningModule {
 }
 
 export interface MiningLoadoutSlot {
-  slotType: 'laser' | 'module'
+  slotType: 'laser' | 'module' | 'scraperModule'
   slotIndex: number
   laserSlotIndex?: number | null
   laserId?: number | null
@@ -535,6 +550,11 @@ export interface MiningLoadout {
   name: string
   shipId: number | null
   isPublic?: boolean
+  isSalvage?: boolean
+  isMining?: boolean
+  shipRole?: string | null
+  shipType?: string | null
+  shipCategory?: string | null
   notes?: string | null
   slots: MiningLoadoutSlot[]
 }
