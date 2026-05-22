@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.2',
+    date: '2026-05-22',
+    changes: [
+      { type: 'improvement', text: 'Ajout du salvage dans le les loadouts, et amélioration liste de courses' },
+      
+    ]
+  },
+  {
     version: '2.1.0',
     date: '2026-05-19',
     changes: [
