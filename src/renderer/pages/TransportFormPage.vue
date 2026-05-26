@@ -360,8 +360,17 @@ async function loadOrder() {
       for (const m of rawManifests) {
         const key = m.missionGroup ?? `${m.pickup ?? 'null'}::${m.dropoff ?? 'null'}`
         const cargo = (m.cargos && m.cargos.length)
-          ? m.cargos.map((c: any) => ({ id: c.id ?? null, commodityId: c.commodityId ?? null, commodityName: c.commodityName ?? '', quantity: c.quantity ?? 1 }))
-          : [{ id: m.id ?? null, commodityId: m.commodityId ?? null, commodityName: m.commodityName ?? '', quantity: m.quantity ?? 1 }]
+          ? m.cargos.map((c: any) => ({
+              id: c.id ?? null,
+              commodityId: c.commodityId ?? null,
+              commodityName: c.commodityName ?? '',
+              quantity: c.quantity ?? 1,
+              pickup: c.pickup ?? null,
+              pickupName: c.pickupName ?? '',
+              dropoff: c.dropoff ?? null,
+              dropoffName: c.dropoffName ?? ''
+            }))
+          : [{ id: m.id ?? null, commodityId: m.commodityId ?? null, commodityName: m.commodityName ?? '', quantity: m.quantity ?? 1, pickup: m.pickup ?? null, pickupName: m.pickupName ?? '', dropoff: m.dropoff ?? null, dropoffName: m.dropoffName ?? '' }]
 
         if (!groups[key]) {
           groups[key] = {
@@ -678,16 +687,37 @@ async function save(): Promise<number | null> {
       const cargos = m.cargos && m.cargos.length
         ? m.cargos
         : [{ _k: 0, id: m.id, commodityId: m.commodityId, commodityName: m.commodityName, quantity: m.quantity ?? 1, pickup: null, pickupName: '', dropoff: null, dropoffName: '' }]
+
       return cargos.map(c => ({
         ...(c.id ? { id: c.id } : {}),
         missionType:  type,
         missionGroup,
         maxBoxSize:   m.maxBoxSize ?? null,
+
+        // Manifest-level pickup / dropoff (mono_route)
         pickup:       (type === 'multi_pickup' || type === 'multi_route') ? null : (m.pickup ?? null),
+        pickupName:   (type === 'multi_pickup' || type === 'multi_route') ? null : (m.pickupName ?? null),
+        pickupPoiId:  (type === 'multi_pickup' || type === 'multi_route') ? null : (m.pickup ?? null),
+        pickupPoiName:(type === 'multi_pickup' || type === 'multi_route') ? null : (m.pickupName ?? null),
+
         dropoff:      (type === 'multi_drop'   || type === 'multi_route') ? null : (m.dropoff ?? null),
-        cargoPickup:  (type === 'multi_pickup' || type === 'multi_route') ? (c.pickup ?? null) : null,
-        cargoDropoff: (type === 'multi_drop'   || type === 'multi_route') ? (c.dropoff ?? null) : null,
+        dropoffName:  (type === 'multi_drop'   || type === 'multi_route') ? null : (m.dropoffName ?? null),
+        dropoffPoiId: (type === 'multi_drop'   || type === 'multi_route') ? null : (m.dropoff ?? null),
+        dropoffPoiName:(type === 'multi_drop'   || type === 'multi_route') ? null : (m.dropoffName ?? null),
+
+        // Cargo-specific pickup / dropoff (multi_pickup / multi_route or multi_drop)
+        cargoPickup:   (type === 'multi_pickup' || type === 'multi_route') ? (c.pickup ?? null) : null,
+        cargoPickupName:(type === 'multi_pickup' || type === 'multi_route') ? (c.pickupName ?? null) : null,
+        cargoPickupPoiId:(type === 'multi_pickup' || type === 'multi_route') ? (c.pickup ?? null) : null,
+        cargoPickupPoiName:(type === 'multi_pickup' || type === 'multi_route') ? (c.pickupName ?? null) : null,
+
+        cargoDropoff:   (type === 'multi_drop'   || type === 'multi_route') ? (c.dropoff ?? null) : null,
+        cargoDropoffName:(type === 'multi_drop'   || type === 'multi_route') ? (c.dropoffName ?? null) : null,
+        cargoDropoffPoiId:(type === 'multi_drop'   || type === 'multi_route') ? (c.dropoff ?? null) : null,
+        cargoDropoffPoiName:(type === 'multi_drop'   || type === 'multi_route') ? (c.dropoffName ?? null) : null,
+
         commodityId:  c.commodityId,
+        commodityName:c.commodityName ?? null,
         quantity:     c.quantity ?? 1,
       }))
     }),
