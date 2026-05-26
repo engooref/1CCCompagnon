@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '2.2.1',
+    date: '2026-05-26',
+    changes: [
+      { type: 'fix', text: 'Correction d\'un bug sur la modification des transports' },
+      
+    ]
+  },
+  {
     version: '2.2.0',
     date: '2026-05-22',
     changes: [
