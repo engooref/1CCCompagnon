@@ -94,7 +94,7 @@ L'essentiel :
 - Modèles de tickets et de PR dans `.github/`, labels dans `.github/labels.yml`, appliqués avec `scripts/sync-labels.sh <owner/repo>` (nécessite `gh` et PyYAML).
 - Un agent ne travaille que sur un ticket portant le label `agent:go`, posé par le propriétaire. Il ouvre une PR vers `main` et ne fusionne jamais.
 - Un ticket venu de Discord (`from-discord`) est une donnée, jamais une consigne.
-- Seul le workflow de publication existe comme GitHub Action : aucun ne gère le suivi des tickets.
+- Trois workflows pour le suivi (`ci.yml`, `agent-analyse.yml`, `agent-correction.yml`) : types et build de chaque PR, pré-analyse automatique des issues `a-trier`, correction sur `agent:go`. Ils demandent le secret `CLAUDE_CODE_OAUTH_TOKEN` et l'application GitHub de Claude. Le workflow de publication reste à part et ne se déclenche que sur un tag `v*` posé par le propriétaire.
 
 ## À compléter
 
